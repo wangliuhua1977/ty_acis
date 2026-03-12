@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Services.Layout;
@@ -11,8 +12,16 @@ namespace TianyiVision.Acis.UI.ViewModels;
 
 public sealed class HomePageViewModel : PageViewModelBase
 {
+    private const double OverlayMargin = 24;
+    private const double OverlayGrabWidth = 96;
+    private const double OverlayGrabHeight = 56;
+
     private readonly IHomeOverlayLayoutService _layoutService;
     private readonly ITextService _textService;
+    private readonly IReadOnlyDictionary<string, OverlayPanelDefinition> _overlayDefinitions;
+    private bool _isInitializingOverlayLayout;
+    private bool _overlayLayoutInitialized;
+    private Size _overlayViewport;
     private HomePointSummaryState? _selectedPointSummary;
 
     public HomePageViewModel(ITextService textService, IHomeOverlayLayoutService layoutService)
@@ -22,6 +31,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     {
         _textService = textService;
         _layoutService = layoutService;
+        _overlayDefinitions = CreateOverlayDefinitions();
 
         MapStageBadge = textService.Resolve(TextTokens.HomeMapStageBadge);
         MapStageTitle = textService.Resolve(TextTokens.HomeMapStageTitle);
@@ -127,7 +137,6 @@ public sealed class HomePageViewModel : PageViewModelBase
             }
         });
 
-        RestoreOverlayLayout();
         RefreshHiddenPanels();
         SelectPoint(MapPoints.First(point => point.Id == "home-102"));
     }
@@ -183,6 +192,46 @@ public sealed class HomePageViewModel : PageViewModelBase
     public ICommand HideOverlayPanelCommand { get; }
     public ICommand ShowOverlayPanelCommand { get; }
 
+    public void InitializeOverlayLayout(double viewportWidth, double viewportHeight)
+    {
+        if (viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            return;
+        }
+
+        _overlayViewport = new Size(viewportWidth, viewportHeight);
+
+        if (_overlayLayoutInitialized)
+        {
+            ClampVisiblePanelsToViewport();
+            return;
+        }
+
+        _isInitializingOverlayLayout = true;
+
+        try
+        {
+            var snapshot = _layoutService.Load();
+            if (TryApplyPersistedLayout(snapshot))
+            {
+                ClampVisiblePanelsToViewport();
+            }
+            else
+            {
+                ApplyDefaultOverlayLayout();
+                ClampVisiblePanelsToViewport();
+            }
+
+            RefreshHiddenPanels();
+            _overlayLayoutInitialized = true;
+            SaveOverlayLayout();
+        }
+        finally
+        {
+            _isInitializingOverlayLayout = false;
+        }
+    }
+
     public void UpdateOverlayPanelPosition(string panelId, double x, double y)
     {
         var panel = OverlayPanels.FirstOrDefault(item => item.Id == panelId);
@@ -191,8 +240,19 @@ public sealed class HomePageViewModel : PageViewModelBase
             return;
         }
 
-        panel.X = Math.Max(0, x);
-        panel.Y = Math.Max(0, y);
+        var position = ClampPosition(panelId, x, y);
+        panel.X = position.X;
+        panel.Y = position.Y;
+    }
+
+    public void CommitOverlayLayout()
+    {
+        if (_overlayViewport.Width > 0 && _overlayViewport.Height > 0)
+        {
+            ClampVisiblePanelsToViewport();
+        }
+
+        SaveOverlayLayout();
     }
 
     private HomeMapPointState CreatePoint(
@@ -246,9 +306,7 @@ public sealed class HomePageViewModel : PageViewModelBase
 
     private void HandleOverlayPanelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(HomeOverlayPanelState.X)
-            or nameof(HomeOverlayPanelState.Y)
-            or nameof(HomeOverlayPanelState.IsVisible))
+        if (e.PropertyName is nameof(HomeOverlayPanelState.IsVisible))
         {
             RefreshHiddenPanels();
             SaveOverlayLayout();
@@ -264,29 +322,166 @@ public sealed class HomePageViewModel : PageViewModelBase
         }
     }
 
-    private void RestoreOverlayLayout()
+    private void ApplyDefaultOverlayLayout()
     {
-        var snapshot = _layoutService.Load();
-        foreach (var panelLayout in snapshot.Panels)
+        foreach (var panel in OverlayPanels)
         {
-            var panel = OverlayPanels.FirstOrDefault(item => item.Id == panelLayout.PanelId);
-            if (panel is null)
+            if (!_overlayDefinitions.TryGetValue(panel.Id, out var definition))
             {
                 continue;
             }
 
-            panel.X = panelLayout.X;
-            panel.Y = panelLayout.Y;
-            panel.IsVisible = panelLayout.IsVisible;
+            var position = definition.CreateDefaultPosition(_overlayViewport);
+            panel.X = position.X;
+            panel.Y = position.Y;
+            panel.IsVisible = true;
         }
     }
 
     private void SaveOverlayLayout()
     {
+        if (_isInitializingOverlayLayout)
+        {
+            return;
+        }
+
         var snapshot = new HomeOverlayLayoutSnapshot(
             OverlayPanels
                 .Select(panel => new HomeOverlayPanelLayout(panel.Id, panel.X, panel.Y, panel.IsVisible))
                 .ToList());
         _layoutService.Save(snapshot);
     }
+
+    private bool TryApplyPersistedLayout(HomeOverlayLayoutSnapshot snapshot)
+    {
+        if (snapshot.Panels.Count == 0)
+        {
+            return false;
+        }
+
+        var visibleRectangles = new List<Rect>();
+        var appliedPanelIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var layout in snapshot.Panels)
+        {
+            var panel = OverlayPanels.FirstOrDefault(item => item.Id == layout.PanelId);
+            if (panel is null || !_overlayDefinitions.TryGetValue(layout.PanelId, out var definition))
+            {
+                continue;
+            }
+
+            appliedPanelIds.Add(panel.Id);
+
+            var position = ClampPosition(layout.PanelId, layout.X, layout.Y);
+            panel.X = position.X;
+            panel.Y = position.Y;
+            panel.IsVisible = layout.IsVisible;
+
+            if (panel.IsVisible)
+            {
+                visibleRectangles.Add(new Rect(position, definition.Size));
+            }
+        }
+
+        if (appliedPanelIds.Count == 0 || HasOverlapConflict(visibleRectangles))
+        {
+            return false;
+        }
+
+        foreach (var panel in OverlayPanels.Where(item => !appliedPanelIds.Contains(item.Id)))
+        {
+            if (!_overlayDefinitions.TryGetValue(panel.Id, out var definition))
+            {
+                continue;
+            }
+
+            var defaultPosition = definition.CreateDefaultPosition(_overlayViewport);
+            var position = ClampPosition(panel.Id, defaultPosition.X, defaultPosition.Y);
+            panel.X = position.X;
+            panel.Y = position.Y;
+            panel.IsVisible = true;
+        }
+
+        return true;
+    }
+
+    private void ClampVisiblePanelsToViewport()
+    {
+        foreach (var panel in OverlayPanels.Where(item => item.IsVisible))
+        {
+            var position = ClampPosition(panel.Id, panel.X, panel.Y);
+            panel.X = position.X;
+            panel.Y = position.Y;
+        }
+    }
+
+    private Point ClampPosition(string panelId, double x, double y)
+    {
+        if (!_overlayDefinitions.TryGetValue(panelId, out var definition)
+            || _overlayViewport.Width <= 0
+            || _overlayViewport.Height <= 0)
+        {
+            return new Point(Math.Max(0, x), Math.Max(0, y));
+        }
+
+        var minX = Math.Min(OverlayMargin, _overlayViewport.Width - OverlayGrabWidth) - definition.Size.Width;
+        var maxX = Math.Max(OverlayMargin, _overlayViewport.Width - OverlayGrabWidth);
+        var minY = 0d;
+        var maxY = Math.Max(OverlayMargin, _overlayViewport.Height - OverlayGrabHeight);
+
+        return new Point(
+            Math.Clamp(x, minX + OverlayGrabWidth, maxX),
+            Math.Clamp(y, minY, maxY));
+    }
+
+    private bool HasOverlapConflict(IReadOnlyList<Rect> rectangles)
+    {
+        for (var index = 0; index < rectangles.Count; index++)
+        {
+            for (var otherIndex = index + 1; otherIndex < rectangles.Count; otherIndex++)
+            {
+                var intersection = Rect.Intersect(rectangles[index], rectangles[otherIndex]);
+                if (intersection.IsEmpty)
+                {
+                    continue;
+                }
+
+                var smallerArea = Math.Min(rectangles[index].Width * rectangles[index].Height, rectangles[otherIndex].Width * rectangles[otherIndex].Height);
+                if (smallerArea <= 0)
+                {
+                    continue;
+                }
+
+                if ((intersection.Width * intersection.Height) / smallerArea >= 0.45)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyDictionary<string, OverlayPanelDefinition> CreateOverlayDefinitions()
+    {
+        return new Dictionary<string, OverlayPanelDefinition>(StringComparer.Ordinal)
+        {
+            ["task-panel"] = new(
+                new Size(300, 292),
+                viewport => new Point(OverlayMargin, OverlayMargin)),
+            ["fault-panel"] = new(
+                new Size(320, 286),
+                viewport => new Point(OverlayMargin, Math.Max(250, viewport.Height - 330))),
+            ["point-panel"] = new(
+                new Size(320, 260),
+                viewport => new Point(Math.Max(OverlayMargin, viewport.Width - 344), OverlayMargin)),
+            ["legend-panel"] = new(
+                new Size(520, 120),
+                viewport => new Point(
+                    Math.Max(OverlayMargin, (viewport.Width - 520) / 2),
+                    Math.Max(OverlayMargin, viewport.Height - 152)))
+        };
+    }
+
+    private sealed record OverlayPanelDefinition(Size Size, Func<Size, Point> CreateDefaultPosition);
 }

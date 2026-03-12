@@ -17,6 +17,16 @@ public partial class HomePageView : UserControl
         InitializeComponent();
     }
 
+    private void HomePageView_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        SyncOverlayLayout();
+    }
+
+    private void HomePageView_OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        SyncOverlayLayout();
+    }
+
     private void OverlayHeader_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement element || element.Tag is not HomeOverlayPanelState panel)
@@ -33,7 +43,11 @@ public partial class HomePageView : UserControl
 
     private void OverlayHeader_OnMouseMove(object sender, MouseEventArgs e)
     {
-        if (_dragPanel is null || _dragStart is null || DataContext is not HomePageViewModel viewModel || sender is not FrameworkElement element || !element.IsMouseCaptured)
+        if (_dragPanel is null
+            || _dragStart is null
+            || DataContext is not HomePageViewModel viewModel
+            || sender is not FrameworkElement element
+            || !element.IsMouseCaptured)
         {
             return;
         }
@@ -52,7 +66,22 @@ public partial class HomePageView : UserControl
             element.ReleaseMouseCapture();
         }
 
+        if (_dragPanel is not null && DataContext is HomePageViewModel viewModel)
+        {
+            viewModel.CommitOverlayLayout();
+        }
+
         _dragStart = null;
         _dragPanel = null;
+    }
+
+    private void SyncOverlayLayout()
+    {
+        if (DataContext is HomePageViewModel viewModel
+            && OverlayCanvas.ActualWidth > 0
+            && OverlayCanvas.ActualHeight > 0)
+        {
+            viewModel.InitializeOverlayLayout(OverlayCanvas.ActualWidth, OverlayCanvas.ActualHeight);
+        }
     }
 }
