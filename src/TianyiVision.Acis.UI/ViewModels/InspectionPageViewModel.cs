@@ -14,6 +14,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _openDispatchWorkspaceCommand;
+    private readonly RelayCommand _openReportsCenterCommand;
     private RelayCommand _openReviewWallCommand = null!;
     private RelayCommand _confirmReviewCompletedCommand = null!;
     private RelayCommand _markSelectedReviewCommand = null!;
@@ -107,6 +108,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ExecuteInspectionText = textService.Resolve(TextTokens.InspectionActionExecute);
         ViewHistoryText = textService.Resolve(TextTokens.InspectionActionHistory);
         OpenDispatchWorkspaceText = textService.Resolve(TextTokens.DispatchActionOpenWorkspace);
+        OpenReportsCenterText = textService.Resolve(TextTokens.ReportsActionOpenCenter);
         InitializeReviewText(textService);
 
         SelectGroupCommand = new RelayCommand(parameter =>
@@ -139,8 +141,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         _executeInspectionCommand = new RelayCommand(_ => SimulateInspectionExecution(), _ => ExecutionState?.IsEnabled == true);
         _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
+        _openReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
         ExecuteInspectionCommand = _executeInspectionCommand;
         OpenDispatchWorkspaceCommand = _openDispatchWorkspaceCommand;
+        OpenReportsCenterCommand = _openReportsCenterCommand;
         ViewHistoryCommand = new RelayCommand(_ =>
         {
             if (ExecutionState is not null)
@@ -222,6 +226,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string ExecuteInspectionText { get; }
     public string ViewHistoryText { get; }
     public string OpenDispatchWorkspaceText { get; }
+    public string OpenReportsCenterText { get; }
 
     public ObservableCollection<InspectionGroupSummaryState> Groups { get; }
 
@@ -284,6 +289,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public ICommand SelectRecentFaultCommand { get; }
     public ICommand ExecuteInspectionCommand { get; }
     public ICommand OpenDispatchWorkspaceCommand { get; }
+    public ICommand OpenReportsCenterCommand { get; }
     public ICommand ViewHistoryCommand { get; }
     public ICommand ToggleGroupCommand { get; }
     public ICommand OpenReviewWallCommand { get; private set; } = null!;

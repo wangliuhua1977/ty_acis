@@ -58,6 +58,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         SelectedPointSummaryLabel = textService.Resolve(TextTokens.HomeSelectedPointSummaryLabel);
         SelectedPointActionLabel = textService.Resolve(TextTokens.HomeSelectedPointActionLabel);
         OpenDispatchWorkspaceText = textService.Resolve(TextTokens.DispatchActionOpenWorkspace);
+        OpenReportsCenterText = textService.Resolve(TextTokens.ReportsActionOpenCenter);
         LegendFaultText = textService.Resolve(TextTokens.HomeMapLegendFault);
         LegendNormalText = textService.Resolve(TextTokens.HomeMapLegendNormal);
         LegendKeyText = textService.Resolve(TextTokens.HomeMapLegendKey);
@@ -141,6 +142,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         });
         ResetOverlayLayoutCommand = new RelayCommand(_ => ResetOverlayLayout());
         OpenDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
+        OpenReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
 
         RefreshHiddenPanels();
         SelectPoint(MapPoints.First(point => point.Id == "home-102"));
@@ -170,6 +172,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string SelectedPointSummaryLabel { get; }
     public string SelectedPointActionLabel { get; }
     public string OpenDispatchWorkspaceText { get; }
+    public string OpenReportsCenterText { get; }
     public string LegendFaultText { get; }
     public string LegendNormalText { get; }
     public string LegendKeyText { get; }
@@ -200,6 +203,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public ICommand ShowOverlayPanelCommand { get; }
     public ICommand ResetOverlayLayoutCommand { get; }
     public ICommand OpenDispatchWorkspaceCommand { get; }
+    public ICommand OpenReportsCenterCommand { get; }
 
     public void InitializeOverlayLayout(double viewportWidth, double viewportHeight)
     {

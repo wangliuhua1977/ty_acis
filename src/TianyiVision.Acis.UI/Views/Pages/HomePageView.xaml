@@ -302,6 +302,10 @@
                                     Style="{StaticResource SecondaryActionButtonStyle}"
                                     Command="{Binding DataContext.OpenDispatchWorkspaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     Content="{Binding DataContext.OpenDispatchWorkspaceText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <Button Margin="0,10,0,0"
+                                    Style="{StaticResource SecondaryActionButtonStyle}"
+                                    Command="{Binding DataContext.OpenReportsCenterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Content="{Binding DataContext.OpenReportsCenterText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

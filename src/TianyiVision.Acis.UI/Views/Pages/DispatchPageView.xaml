@@ -254,6 +254,7 @@
                                 <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding DispatchNowCommand}" Content="{Binding DispatchNowText}" />
                                 <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding MarkRecoveredCommand}" Content="{Binding MarkRecoveredText}" />
                                 <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenResponsibilityEditorCommand}" Content="{Binding EditResponsibilityText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReportsCenterCommand}" Content="{Binding OpenReportsCenterText}" />
                             </WrapPanel>
                         </StackPanel>
 

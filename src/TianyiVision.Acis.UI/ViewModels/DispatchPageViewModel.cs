@@ -27,6 +27,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private readonly RelayCommand _dispatchNowCommand;
     private readonly RelayCommand _markRecoveredCommand;
     private readonly RelayCommand _openResponsibilityEditorCommand;
+    private readonly RelayCommand _openReportsCenterCommand;
     private readonly RelayCommand _saveResponsibilityCommand;
 
     private DispatchFilterState _filterState = null!;
@@ -48,6 +49,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         _dispatchNowCommand = new RelayCommand(_ => SimulateDispatchSelected(), _ => SelectedWorkOrderDetail?.WorkOrderStatus == DispatchWorkOrderStatus.PendingDispatch);
         _markRecoveredCommand = new RelayCommand(_ => SimulateRecoverySelected(), _ => SelectedWorkOrderDetail?.RecoveryStatus == DispatchRecoveryStatus.Unrecovered);
         _openResponsibilityEditorCommand = new RelayCommand(_ => OpenResponsibilityEditor(), _ => SelectedWorkOrderDetail is not null);
+        _openReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
         _saveResponsibilityCommand = new RelayCommand(_ => SaveResponsibilityEditor(), _ => IsResponsibilityEditorOpen && ResponsibilityEditor is not null && SelectedWorkOrderDetail is not null);
 
         SelectQuickFilterCommand = new RelayCommand(parameter =>
@@ -67,6 +69,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         DispatchNowCommand = _dispatchNowCommand;
         MarkRecoveredCommand = _markRecoveredCommand;
         OpenResponsibilityEditorCommand = _openResponsibilityEditorCommand;
+        OpenReportsCenterCommand = _openReportsCenterCommand;
         SaveResponsibilityCommand = _saveResponsibilityCommand;
         CancelResponsibilityCommand = new RelayCommand(_ => CloseResponsibilityEditor());
         NavigateToDispatchCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
@@ -129,6 +132,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     public string DispatchNowText { get; private set; } = string.Empty;
     public string MarkRecoveredText { get; private set; } = string.Empty;
     public string EditResponsibilityText { get; private set; } = string.Empty;
+    public string OpenReportsCenterText { get; private set; } = string.Empty;
     public string SaveResponsibilityText { get; private set; } = string.Empty;
     public string CancelResponsibilityText { get; private set; } = string.Empty;
     public string TimelineTitle { get; private set; } = string.Empty;
@@ -230,6 +234,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     public ICommand DispatchNowCommand { get; }
     public ICommand MarkRecoveredCommand { get; }
     public ICommand OpenResponsibilityEditorCommand { get; }
+    public ICommand OpenReportsCenterCommand { get; }
     public ICommand SaveResponsibilityCommand { get; }
     public ICommand CancelResponsibilityCommand { get; }
     public ICommand NavigateToDispatchCommand { get; }
@@ -288,6 +293,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         DispatchNowText = _textService.Resolve(TextTokens.DispatchActionDispatchNow);
         MarkRecoveredText = _textService.Resolve(TextTokens.DispatchActionMarkRecovered);
         EditResponsibilityText = _textService.Resolve(TextTokens.DispatchActionEditResponsibility);
+        OpenReportsCenterText = _textService.Resolve(TextTokens.ReportsActionOpenCenter);
         SaveResponsibilityText = _textService.Resolve(TextTokens.DispatchActionSaveResponsibility);
         CancelResponsibilityText = _textService.Resolve(TextTokens.DispatchActionCancelResponsibility);
         TimelineTitle = _textService.Resolve(TextTokens.DispatchTimelineTitle);
