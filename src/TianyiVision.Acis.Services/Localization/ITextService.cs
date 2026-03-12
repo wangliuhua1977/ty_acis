@@ -11,4 +11,6 @@ public interface ITextService
     string Resolve(string key, IReadOnlyDictionary<string, string>? variableOverrides = null);
 
     void SetProfile(string profileId);
+
+    void SetProfile(TerminologyProfile profile);
 }

@@ -5,11 +5,11 @@ namespace TianyiVision.Acis.Services.Localization;
 
 public sealed class TextService : ITextService
 {
-    private readonly IReadOnlyList<TerminologyProfile> _profiles;
+    private readonly List<TerminologyProfile> _profiles;
 
     public TextService(ITerminologyCatalogProvider provider)
     {
-        _profiles = provider.GetProfiles();
+        _profiles = provider.GetProfiles().ToList();
         ActiveProfile = _profiles.First();
     }
 
@@ -23,5 +23,20 @@ public sealed class TextService : ITextService
     public void SetProfile(string profileId)
     {
         ActiveProfile = _profiles.FirstOrDefault(profile => profile.Id == profileId) ?? ActiveProfile;
+    }
+
+    public void SetProfile(TerminologyProfile profile)
+    {
+        var existingIndex = _profiles.FindIndex(item => item.Id == profile.Id);
+        if (existingIndex >= 0)
+        {
+            _profiles[existingIndex] = profile;
+        }
+        else
+        {
+            _profiles.Add(profile);
+        }
+
+        ActiveProfile = profile;
     }
 }

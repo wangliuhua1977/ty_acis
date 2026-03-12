@@ -1,64 +1,228 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Input;
+using System.Windows.Media;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Core.Theming;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Theming;
+using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
 
 namespace TianyiVision.Acis.UI.ViewModels;
 
-public sealed class SettingsPageViewModel : PageViewModelBase
+public sealed partial class SettingsPageViewModel : PageViewModelBase
 {
-    public SettingsPageViewModel(ITextService textService, IThemeService themeService)
+    private const string DefaultTerminologyProfileId = "telecom";
+
+    private const string ThemeFieldWindowBackground = "window";
+    private const string ThemeFieldSurfaceBackground = "surface";
+    private const string ThemeFieldPrimaryAccent = "accentPrimary";
+    private const string ThemeFieldSecondaryAccent = "accentSecondary";
+    private const string ThemeFieldEmphasis = "emphasis";
+    private const string ThemeFieldSuccess = "success";
+    private const string ThemeFieldInspection = "inspection";
+    private const string ThemeFieldFault = "fault";
+    private const string ThemeBorderStyleSubtle = "subtle";
+    private const string ThemeBorderStyleStrong = "strong";
+    private const string ThemeMapStyleOcean = "ocean";
+    private const string ThemeMapStyleNight = "night";
+    private const string ThemeMapStyleGlacier = "glacier";
+
+    private readonly Action<ThemeDefinition> _applyThemeToApplication;
+    private readonly Dictionary<string, ThemeEditorFieldState> _themeFields = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TerminologyFieldState> _terminologyFields = new(StringComparer.Ordinal);
+    private readonly ITextService _textService;
+    private readonly IThemeService _themeService;
+
+    private ObservableCollection<PanelPlaceholderState> _placeholderCards = [];
+    private SettingsSectionState? _selectedSection;
+    private ThemeSummaryState? _selectedTheme;
+    private TerminologySchemeSummaryState? _selectedTerminologyScheme;
+    private string _placeholderSectionTitle = string.Empty;
+    private string _placeholderSectionDescription = string.Empty;
+    private int _customThemeCounter = 1;
+    private int _customTerminologyCounter = 1;
+
+    public SettingsPageViewModel(
+        ITextService textService,
+        IThemeService themeService,
+        Action<ThemeDefinition> applyThemeToApplication)
         : base(
             textService.Resolve(TextTokens.SettingsTitle),
             textService.Resolve(TextTokens.SettingsDescription))
     {
-        Cards =
-        [
-            new PanelPlaceholderState(
-                textService.Resolve(TextTokens.SettingsThemeCenterTitle),
-                textService.Resolve(TextTokens.SettingsThemeCenterDescription),
-                "主题令牌已预留"),
-            new PanelPlaceholderState(
-                textService.Resolve(TextTokens.SettingsTerminologyCenterTitle),
-                textService.Resolve(TextTokens.SettingsTerminologyCenterDescription),
-                "术语变量已预留"),
-            new PanelPlaceholderState(
-                textService.Resolve(TextTokens.SettingsConfigTitle),
-                textService.Resolve(TextTokens.SettingsConfigDescription),
-                "本地配置读取"),
-            new PanelPlaceholderState(
-                textService.Resolve(TextTokens.SettingsStructureTitle),
-                textService.Resolve(TextTokens.SettingsStructureDescription),
-                "五层结构就绪")
-        ];
+        _textService = textService;
+        _themeService = themeService;
+        _applyThemeToApplication = applyThemeToApplication;
 
-        ActiveThemeLabel = textService.Resolve(TextTokens.SettingsActiveTheme);
-        ActiveThemeName = themeService.ActiveTheme.DisplayName;
-        ActiveTerminologyLabel = textService.Resolve(TextTokens.SettingsActiveTerminology);
-        ActiveTerminologyName = textService.ActiveProfile.DisplayName;
-        AvailableThemesLabel = textService.Resolve(TextTokens.SettingsAvailableThemes);
-        AvailableTerminologiesLabel = textService.Resolve(TextTokens.SettingsAvailableTerminologies);
+        SelectSectionCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is SettingsSectionState section)
+            {
+                SelectSection(section.Key);
+            }
+        });
 
-        ThemeNames = new ObservableCollection<string>(themeService.GetAvailableThemes().Select(theme => theme.DisplayName));
-        TerminologyNames = new ObservableCollection<string>(textService.GetAvailableProfiles().Select(profile => profile.DisplayName));
+        SelectThemeCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is ThemeSummaryState theme)
+            {
+                SelectTheme(theme.Id);
+            }
+        });
+        ApplyThemeCommand = new RelayCommand(_ => ApplySelectedTheme(), _ => SelectedTheme is not null);
+        CopyThemeCommand = new RelayCommand(_ => CopySelectedTheme(), _ => SelectedTheme is not null);
+        NewCustomThemeCommand = new RelayCommand(_ => CreateCustomThemeFromCurrent());
+        SaveThemeCommand = new RelayCommand(_ => SaveThemeChanges(), _ => SelectedTheme is not null);
+        SaveThemeAsCommand = new RelayCommand(_ => SaveThemeAsNew(), _ => SelectedTheme is not null);
+        RestoreThemeCommand = new RelayCommand(_ => RestoreThemePreset(), _ => SelectedTheme is not null);
+
+        SelectTerminologyCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is TerminologySchemeSummaryState scheme)
+            {
+                SelectTerminologyScheme(scheme.Id);
+            }
+        });
+        ApplyTerminologyCommand = new RelayCommand(_ => ApplySelectedTerminology(), _ => SelectedTerminologyScheme is not null);
+        CopyTerminologyCommand = new RelayCommand(_ => CopySelectedTerminology(), _ => SelectedTerminologyScheme is not null);
+        NewCustomTerminologyCommand = new RelayCommand(_ => CreateCustomTerminologyFromCurrent());
+        SaveTerminologyCommand = new RelayCommand(_ => SaveTerminologyChanges(), _ => SelectedTerminologyScheme is not null);
+        SaveTerminologyAsCommand = new RelayCommand(_ => SaveTerminologyAsNew(), _ => SelectedTerminologyScheme is not null);
+        RestoreTerminologyCommand = new RelayCommand(_ => RestoreDefaultTerminology());
+
+        AppliedState = new SettingsAppliedState(
+            textService.Resolve(TextTokens.SettingsAppliedThemeLabel),
+            textService.Resolve(TextTokens.SettingsAppliedTerminologyLabel))
+        {
+            ActiveThemeName = themeService.ActiveTheme.DisplayName,
+            ActiveTerminologyName = textService.ActiveProfile.DisplayName,
+            StatusText = textService.Resolve(TextTokens.SettingsAppliedStatusHint)
+        };
+
+        SectionItems = CreateSections();
+        ThemeItems = CreateThemes();
+        ThemeEditor = CreateThemeEditor();
+        ThemePreview = new ThemePreviewState();
+        TerminologyItems = CreateTerminologySchemes();
+        TerminologyGroups = CreateTerminologyGroups();
+        TerminologyPreview = new TerminologyPreviewState();
+
+        HookThemeEditor();
+        HookTerminologyEditor();
+
+        SelectTheme(themeService.ActiveTheme.Id);
+        foreach (var item in ThemeItems)
+        {
+            item.IsApplied = item.Id == themeService.ActiveTheme.Id;
+        }
+
+        SelectTerminologyScheme(textService.ActiveProfile.Id);
+        foreach (var item in TerminologyItems)
+        {
+            item.IsApplied = item.Id == textService.ActiveProfile.Id;
+        }
+
+        SelectSection(SettingsSectionKey.ThemeCenter);
     }
 
-    public ObservableCollection<PanelPlaceholderState> Cards { get; }
+    public ObservableCollection<SettingsSectionState> SectionItems { get; }
 
-    public string ActiveThemeLabel { get; }
+    public SettingsAppliedState AppliedState { get; }
 
-    public string ActiveThemeName { get; }
+    public ObservableCollection<PanelPlaceholderState> PlaceholderCards
+    {
+        get => _placeholderCards;
+        private set => SetProperty(ref _placeholderCards, value);
+    }
 
-    public string ActiveTerminologyLabel { get; }
+    public ObservableCollection<ThemeSummaryState> ThemeItems { get; }
 
-    public string ActiveTerminologyName { get; }
+    public ThemeEditorState ThemeEditor { get; }
 
-    public string AvailableThemesLabel { get; }
+    public ThemePreviewState ThemePreview { get; }
 
-    public ObservableCollection<string> ThemeNames { get; }
+    public ObservableCollection<TerminologySchemeSummaryState> TerminologyItems { get; }
 
-    public string AvailableTerminologiesLabel { get; }
+    public ObservableCollection<TerminologyGroupState> TerminologyGroups { get; }
 
-    public ObservableCollection<string> TerminologyNames { get; }
+    public TerminologyPreviewState TerminologyPreview { get; }
+
+    public ICommand SelectSectionCommand { get; }
+
+    public ICommand SelectThemeCommand { get; }
+
+    public ICommand ApplyThemeCommand { get; }
+
+    public ICommand CopyThemeCommand { get; }
+
+    public ICommand NewCustomThemeCommand { get; }
+
+    public ICommand SaveThemeCommand { get; }
+
+    public ICommand SaveThemeAsCommand { get; }
+
+    public ICommand RestoreThemeCommand { get; }
+
+    public ICommand SelectTerminologyCommand { get; }
+
+    public ICommand ApplyTerminologyCommand { get; }
+
+    public ICommand CopyTerminologyCommand { get; }
+
+    public ICommand NewCustomTerminologyCommand { get; }
+
+    public ICommand SaveTerminologyCommand { get; }
+
+    public ICommand SaveTerminologyAsCommand { get; }
+
+    public ICommand RestoreTerminologyCommand { get; }
+
+    public SettingsSectionState? SelectedSection
+    {
+        get => _selectedSection;
+        private set
+        {
+            if (SetProperty(ref _selectedSection, value))
+            {
+                OnPropertyChanged(nameof(IsThemeCenterVisible));
+                OnPropertyChanged(nameof(IsTerminologyCenterVisible));
+                OnPropertyChanged(nameof(IsPlaceholderSectionVisible));
+            }
+        }
+    }
+
+    public ThemeSummaryState? SelectedTheme
+    {
+        get => _selectedTheme;
+        private set => SetProperty(ref _selectedTheme, value);
+    }
+
+    public TerminologySchemeSummaryState? SelectedTerminologyScheme
+    {
+        get => _selectedTerminologyScheme;
+        private set => SetProperty(ref _selectedTerminologyScheme, value);
+    }
+
+    public string PlaceholderSectionTitle
+    {
+        get => _placeholderSectionTitle;
+        private set => SetProperty(ref _placeholderSectionTitle, value);
+    }
+
+    public string PlaceholderSectionDescription
+    {
+        get => _placeholderSectionDescription;
+        private set => SetProperty(ref _placeholderSectionDescription, value);
+    }
+
+    public bool IsThemeCenterVisible => SelectedSection?.Key == SettingsSectionKey.ThemeCenter;
+
+    public bool IsTerminologyCenterVisible => SelectedSection?.Key == SettingsSectionKey.TerminologyCenter;
+
+    public bool IsPlaceholderSectionVisible
+        => SelectedSection is not null
+           && SelectedSection.Key != SettingsSectionKey.ThemeCenter
+           && SelectedSection.Key != SettingsSectionKey.TerminologyCenter;
 }

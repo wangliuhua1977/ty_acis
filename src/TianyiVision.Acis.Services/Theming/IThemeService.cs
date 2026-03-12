@@ -9,4 +9,6 @@ public interface IThemeService
     IReadOnlyList<ThemeDefinition> GetAvailableThemes();
 
     void SetTheme(string themeId);
+
+    void SetTheme(ThemeDefinition theme);
 }

@@ -1,83 +1,561 @@
 <UserControl x:Class="TianyiVision.Acis.UI.Views.Pages.SettingsPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="SettingsSectionButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SettingsListItemButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SettingsEditorTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,8,0,0" />
+        </Style>
+
+        <Style x:Key="SettingsEditorComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Margin" Value="0,8,0,0" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" />
+            <ColumnDefinition Width="20" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <StackPanel Margin="0,0,0,20">
-            <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
-            <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
-        </StackPanel>
+        <Border Grid.Column="0" Style="{StaticResource PrimaryPanelStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-        <Grid Grid.Row="1" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" />
-                <ColumnDefinition Width="1*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Style="{StaticResource PrimaryPanelStyle}">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding ActiveThemeLabel}" />
-                    <TextBlock Margin="0,8,0,0"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource Theme.TextPrimaryBrush}"
-                               Text="{Binding ActiveThemeName}" />
-                    <TextBlock Margin="0,18,0,0" Style="{StaticResource MetricTitleTextStyle}" Text="{Binding AvailableThemesLabel}" />
-                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ThemeNames}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,8"
-                                        Padding="10"
+                    <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
+                    <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+                    <TextBlock Margin="0,22,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding SectionListTitle}" />
+                </StackPanel>
+
+                <ItemsControl Grid.Row="1" Margin="0,18,0,0" ItemsSource="{Binding SectionItems}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource SettingsSectionButtonStyle}" Command="{Binding SelectCommand}">
+                                <StackPanel>
+                                    <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Title}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource PrimaryPanelStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding AppliedStatusTitle}" />
+                            <TextBlock Margin="0,8,0,0"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                       Text="{Binding AppliedState.ActiveThemeName}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding AppliedState.ThemeLabel}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding AppliedState.TerminologyLabel}" />
+                            <TextBlock Margin="0,8,0,0"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                       Text="{Binding AppliedState.ActiveTerminologyName}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding AppliedState.TerminologyLabel}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="2"
+                                Margin="18,0,0,0"
+                                Padding="14"
+                                Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14">
+                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding AppliedState.StatusText}" />
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <StackPanel Visibility="{Binding IsPlaceholderSectionVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Border Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlaceholderSectionTitle}" />
+                            <TextBlock Margin="0,10,0,0"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding PlaceholderSectionDescription}" />
+                        </StackPanel>
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding PlaceholderCards}" ItemTemplate="{StaticResource PanelPlaceholderTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <Grid Visibility="{Binding IsThemeCenterVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="320" />
+                        <ColumnDefinition Width="18" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ThemeListTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ThemeListDescription}" />
+                                <ItemsControl Margin="0,18,0,0" ItemsSource="{Binding ThemeItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                    Command="{Binding DataContext.SelectThemeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left"
+                                                                   FontSize="15"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                   Text="{Binding DisplayName}" />
+                                                        <Border DockPanel.Dock="Right"
+                                                                Padding="8,3"
+                                                                Background="{DynamicResource Theme.AccentSoftBrush}"
+                                                                BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="10">
+                                                            <TextBlock FontSize="11"
+                                                                       Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                       Text="{Binding KindLabel}" />
+                                                        </Border>
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+                                                    <Border Margin="0,10,0,0"
+                                                            Padding="8,4"
+                                                            HorizontalAlignment="Left"
+                                                            Background="{DynamicResource Theme.SelectionBackgroundBrush}"
+                                                            BorderBrush="{DynamicResource Theme.SelectionBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="10"
+                                                            Visibility="{Binding IsApplied, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                        <TextBlock FontSize="11"
+                                                                   Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                   Text="{Binding DataContext.ThemeAppliedTag, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ThemeActionsTitle}" />
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ApplyThemeCommand}" Content="{Binding ThemeApplyText}" />
+                                    <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding CopyThemeCommand}" Content="{Binding ThemeCopyText}" />
+                                    <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding NewCustomThemeCommand}" Content="{Binding ThemeNewText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveThemeCommand}" Content="{Binding ThemeSaveText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveThemeAsCommand}" Content="{Binding ThemeSaveAsText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding RestoreThemeCommand}" Content="{Binding ThemeRestoreText}" />
+                                </WrapPanel>
+                                <Border Margin="0,16,0,0"
+                                        Padding="12"
                                         Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
                                         BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="12">
-                                    <TextBlock Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding}" />
+                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ThemeCenterFeedback}" />
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-            <Border Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource PrimaryPanelStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding ActiveTerminologyLabel}" />
-                    <TextBlock Margin="0,8,0,0"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource Theme.TextPrimaryBrush}"
-                               Text="{Binding ActiveTerminologyName}" />
-                    <TextBlock Margin="0,18,0,0" Style="{StaticResource MetricTitleTextStyle}" Text="{Binding AvailableTerminologiesLabel}" />
-                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding TerminologyNames}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,8"
-                                        Padding="10"
+                    <StackPanel Grid.Column="2">
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ThemePreviewTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ThemePreviewDescription}" />
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2.2*" />
+                                        <ColumnDefinition Width="1*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Height="260"
+                                            Background="{Binding ThemePreview.MapStageColor}"
+                                            BorderBrush="{Binding ThemePreview.BorderColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="18">
+                                        <Grid Margin="12">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="24" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <Border Grid.Row="0" CornerRadius="10" Background="{Binding ThemePreview.TopBarColor}" />
+                                            <Grid Grid.Row="1" Margin="0,12,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Background="{Binding ThemePreview.NavigationColor}"
+                                                        BorderBrush="{Binding ThemePreview.BorderColor}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="14" />
+                                                <Grid Grid.Column="1" Margin="12,0,0,0">
+                                                    <Border Background="{Binding ThemePreview.MapStageColor}"
+                                                            BorderBrush="{Binding ThemePreview.BorderColor}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="14" />
+                                                    <Border Width="180"
+                                                            Height="110"
+                                                            Margin="0,16,16,0"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Background="{Binding ThemePreview.CardColor}"
+                                                            BorderBrush="{Binding ThemePreview.BorderColor}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="14" />
+                                                    <Border Width="120"
+                                                            Height="42"
+                                                            Margin="0,0,16,16"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Bottom"
+                                                            Background="{Binding ThemePreview.ButtonColor}"
+                                                            BorderBrush="{Binding ThemePreview.BorderColor}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="14" />
+                                                </Grid>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                                        <Border Style="{StaticResource MutedPanelStyle}">
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding ThemePreview.ThemeName}" />
+                                                <TextBlock Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewTopBarLabel}" />
+                                                <Border Height="18" Margin="0,6,0,0" Background="{Binding ThemePreview.TopBarColor}" CornerRadius="9" />
+                                                <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewNavigationLabel}" />
+                                                <Border Height="18" Margin="0,6,0,0" Background="{Binding ThemePreview.NavigationColor}" CornerRadius="9" />
+                                                <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewMapLabel}" />
+                                                <Border Height="18" Margin="0,6,0,0" Background="{Binding ThemePreview.MapStageColor}" CornerRadius="9" />
+                                                <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewCardLabel}" />
+                                                <Border Height="18" Margin="0,6,0,0" Background="{Binding ThemePreview.CardColor}" CornerRadius="9" />
+                                                <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewButtonLabel}" />
+                                                <Border Height="18" Margin="0,6,0,0" Background="{Binding ThemePreview.ButtonColor}" CornerRadius="9" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Style="{StaticResource MutedPanelStyle}">
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewStatusLabel}" />
+                                                <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding ThemePreview.StatusChips}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <DockPanel Margin="0,0,0,8">
+                                                                <Border Width="14"
+                                                                        Height="14"
+                                                                        CornerRadius="7"
+                                                                        Background="{Binding ColorValue}"
+                                                                        BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
+                                                                        BorderThickness="1" />
+                                                                <TextBlock Margin="10,0,0,0"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                           Text="{Binding Label}" />
+                                                            </DockPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewCardBorderLabel}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ThemePreview.CardBorderStyleLabel}" />
+                                                <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewMapStyleLabel}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ThemePreview.MapStyleLabel}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ThemeEditorTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ThemeEditorDescription}" />
+                                <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding ThemeEditor.Fields}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,14,14"
+                                                    Padding="14"
+                                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding Label}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+                                                    <Border Height="22" Margin="0,10,0,0" Background="{Binding Value}" CornerRadius="10" />
+                                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewCardBorderLabel}" />
+                                        <ComboBox Style="{StaticResource SettingsEditorComboBoxStyle}"
+                                                  ItemsSource="{Binding ThemeEditor.CardBorderOptions}"
+                                                  SelectedItem="{Binding ThemeEditor.SelectedCardBorderOption}"
+                                                  DisplayMemberPath="Label" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ThemePreviewMapStyleLabel}" />
+                                        <ComboBox Style="{StaticResource SettingsEditorComboBoxStyle}"
+                                                  ItemsSource="{Binding ThemeEditor.MapStyleOptions}"
+                                                  SelectedItem="{Binding ThemeEditor.SelectedMapStyleOption}"
+                                                  DisplayMemberPath="Label" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Visibility="{Binding IsTerminologyCenterVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="320" />
+                        <ColumnDefinition Width="18" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TerminologyListTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TerminologyListDescription}" />
+                                <ItemsControl Margin="0,18,0,0" ItemsSource="{Binding TerminologyItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                    Command="{Binding DataContext.SelectTerminologyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left"
+                                                                   FontSize="15"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                   Text="{Binding DisplayName}" />
+                                                        <Border DockPanel.Dock="Right"
+                                                                Padding="8,3"
+                                                                Background="{DynamicResource Theme.AccentSoftBrush}"
+                                                                BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="10">
+                                                            <TextBlock FontSize="11"
+                                                                       Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                       Text="{Binding KindLabel}" />
+                                                        </Border>
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+                                                    <Border Margin="0,10,0,0"
+                                                            Padding="8,4"
+                                                            HorizontalAlignment="Left"
+                                                            Background="{DynamicResource Theme.SelectionBackgroundBrush}"
+                                                            BorderBrush="{DynamicResource Theme.SelectionBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="10"
+                                                            Visibility="{Binding IsApplied, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                        <TextBlock FontSize="11"
+                                                                   Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                   Text="{Binding DataContext.TerminologyAppliedTag, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TerminologyActionsTitle}" />
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ApplyTerminologyCommand}" Content="{Binding TerminologyApplyText}" />
+                                    <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding CopyTerminologyCommand}" Content="{Binding TerminologyCopyText}" />
+                                    <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding NewCustomTerminologyCommand}" Content="{Binding TerminologyNewText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveTerminologyCommand}" Content="{Binding TerminologySaveText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveTerminologyAsCommand}" Content="{Binding TerminologySaveAsText}" />
+                                    <Button Margin="0,10,10,0" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding RestoreTerminologyCommand}" Content="{Binding TerminologyRestoreText}" />
+                                </WrapPanel>
+                                <Border Margin="0,16,0,0"
+                                        Padding="12"
                                         Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
                                         BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="12">
-                                    <TextBlock Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding}" />
+                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TerminologyCenterFeedback}" />
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-        </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-        <ItemsControl Grid.Row="2" ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource PanelPlaceholderTemplate}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <UniformGrid Columns="2" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-        </ItemsControl>
+                    <StackPanel Grid.Column="2">
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TerminologyPreviewTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TerminologyPreviewDescription}" />
+                                <TextBlock Margin="0,16,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding TerminologyPreview.SchemeName}" />
+                                <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding TerminologyPreview.Groups}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,14,14"
+                                                    Padding="14"
+                                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding Title}" />
+                                                    <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Lines}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <DockPanel Margin="0,0,0,8">
+                                                                    <TextBlock DockPanel.Dock="Left"
+                                                                               Width="120"
+                                                                               Style="{StaticResource FieldLabelTextStyle}"
+                                                                               Text="{Binding Label}" />
+                                                                    <TextBlock Margin="12,0,0,0"
+                                                                               Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                                                               Text="{Binding Value}" />
+                                                                </DockPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TerminologyEditorTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TerminologyEditorDescription}" />
+                                <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding TerminologyGroups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,14"
+                                                    Padding="14"
+                                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="14">
+                                                <StackPanel>
+                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding Title}" />
+                                                    <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Fields}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid Margin="0,0,0,10">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="180" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock VerticalAlignment="Center"
+                                                                               Style="{StaticResource FieldLabelTextStyle}"
+                                                                               Text="{Binding Label}" />
+                                                                    <TextBox Grid.Column="1"
+                                                                             Style="{StaticResource SettingsEditorTextBoxStyle}"
+                                                                             Margin="12,0,0,0"
+                                                                             Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>
