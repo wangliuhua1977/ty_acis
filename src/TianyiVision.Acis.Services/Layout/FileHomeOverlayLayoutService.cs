@@ -1,58 +1,55 @@
-using System.Text.Json;
+using TianyiVision.Acis.Services.Storage;
 
 namespace TianyiVision.Acis.Services.Layout;
 
 public sealed class FileHomeOverlayLayoutService : IHomeOverlayLayoutService
 {
-    private readonly string _filePath;
+    private readonly AcisLocalDataPaths _paths;
+    private readonly JsonFileDocumentStore _documentStore;
+    private readonly string _legacyFilePath;
 
-    public FileHomeOverlayLayoutService()
+    public FileHomeOverlayLayoutService(AcisLocalDataPaths paths, JsonFileDocumentStore documentStore)
     {
-        var directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TianyiVision.Acis");
-        _filePath = Path.Combine(directory, "home-overlay-layout.json");
+        _paths = paths;
+        _documentStore = documentStore;
+        _legacyFilePath = Path.Combine(paths.RootDirectory, "home-overlay-layout.json");
     }
 
     public HomeOverlayLayoutSnapshot Load()
     {
-        if (!File.Exists(_filePath))
+        if (!File.Exists(_paths.HomeOverlayLayoutFile) && File.Exists(_legacyFilePath))
         {
-            return new HomeOverlayLayoutSnapshot([]);
+            TryMigrateLegacyLayout();
         }
 
-        try
-        {
-            using var stream = File.OpenRead(_filePath);
-            return JsonSerializer.Deserialize<HomeOverlayLayoutSnapshot>(stream)
-                ?? new HomeOverlayLayoutSnapshot([]);
-        }
-        catch
-        {
-            return new HomeOverlayLayoutSnapshot([]);
-        }
+        return _documentStore.LoadOrCreate(_paths.HomeOverlayLayoutFile, () => new HomeOverlayLayoutSnapshot([]));
     }
 
     public void Save(HomeOverlayLayoutSnapshot snapshot)
     {
-        var directory = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        using var stream = File.Create(_filePath);
-        JsonSerializer.Serialize(stream, snapshot, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        _documentStore.Save(_paths.HomeOverlayLayoutFile, snapshot);
     }
 
     public void Reset()
     {
-        if (File.Exists(_filePath))
+        _documentStore.DeleteIfExists(_paths.HomeOverlayLayoutFile);
+    }
+
+    private void TryMigrateLegacyLayout()
+    {
+        try
         {
-            File.Delete(_filePath);
+            using var stream = File.OpenRead(_legacyFilePath);
+            var snapshot = System.Text.Json.JsonSerializer.Deserialize<HomeOverlayLayoutSnapshot>(stream);
+            if (snapshot is not null)
+            {
+                _documentStore.Save(_paths.HomeOverlayLayoutFile, snapshot);
+                _documentStore.DeleteIfExists(_legacyFilePath);
+            }
+        }
+        catch
+        {
+            // Ignore legacy migration failure and fall back to the new default document.
         }
     }
 }

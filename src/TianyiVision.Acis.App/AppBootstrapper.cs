@@ -1,9 +1,16 @@
 using System.Windows;
 using TianyiVision.Acis.Infrastructure.Localization;
 using TianyiVision.Acis.Infrastructure.Theming;
+using TianyiVision.Acis.Services.Configuration;
+using TianyiVision.Acis.Services.Demo;
+using TianyiVision.Acis.Services.Dispatch;
+using TianyiVision.Acis.Services.Home;
+using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Layout;
+using TianyiVision.Acis.Services.Reports;
 using TianyiVision.Acis.Services.Settings;
+using TianyiVision.Acis.Services.Storage;
 using TianyiVision.Acis.Services.Theming;
 using TianyiVision.Acis.Services.Time;
 using TianyiVision.Acis.Core.Theming;
@@ -18,18 +25,35 @@ public sealed class AppBootstrapper
     private readonly IClockService _clockService;
     private readonly IAppPreferencesService _appPreferencesService;
     private readonly IHomeOverlayLayoutService _homeOverlayLayoutService;
+    private readonly ILocalConfigurationBootstrapService _localConfigurationBootstrapService;
+    private readonly IHomeDashboardService _homeDashboardService;
+    private readonly IInspectionTaskService _inspectionTaskService;
+    private readonly IDispatchNotificationService _dispatchNotificationService;
+    private readonly IReportDataService _reportDataService;
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
 
     public AppBootstrapper()
     {
+        var paths = new AcisLocalDataPaths();
+        var documentStore = new JsonFileDocumentStore();
+
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
         _clockService = new SystemClockService();
-        _homeOverlayLayoutService = new FileHomeOverlayLayoutService();
-        _appPreferencesService = new FileAppPreferencesService();
+        _homeOverlayLayoutService = new FileHomeOverlayLayoutService(paths, documentStore);
+        _appPreferencesService = new FileAppPreferencesService(paths, documentStore);
+        _localConfigurationBootstrapService = new LocalConfigurationBootstrapService(
+            _appPreferencesService,
+            _homeOverlayLayoutService,
+            new FilePlatformIntegrationSettingsService(paths, documentStore),
+            new FileNotificationSettingsService(paths, documentStore));
+        _homeDashboardService = new DemoHomeDashboardService();
+        _inspectionTaskService = new DemoInspectionTaskService();
+        _dispatchNotificationService = new DemoDispatchNotificationService();
+        _reportDataService = new DemoReportDataService();
 
-        LoadPreferences();
+        LoadLocalConfiguration();
     }
 
     public void ApplyTheme(ResourceDictionary applicationResources)
@@ -65,10 +89,10 @@ public sealed class AppBootstrapper
     {
         var pageFactories = new Dictionary<AppSectionId, Func<PageViewModelBase>>
         {
-            [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService),
-            [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService),
-            [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService),
-            [AppSectionId.Reports] = () => new ReportsPageViewModel(_textService),
+            [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService, _homeDashboardService),
+            [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService, _inspectionTaskService),
+            [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService, _dispatchNotificationService),
+            [AppSectionId.Reports] = () => new ReportsPageViewModel(_textService, _reportDataService),
             [AppSectionId.Settings] = () => new SettingsPageViewModel(
                 _textService,
                 _themeService,
@@ -79,9 +103,9 @@ public sealed class AppBootstrapper
         return new ShellViewModel(_textService, _clockService, pageFactories);
     }
 
-    private void LoadPreferences()
+    private void LoadLocalConfiguration()
     {
-        var snapshot = _appPreferencesService.Load();
+        var snapshot = _localConfigurationBootstrapService.Initialize().Preferences;
 
         foreach (var theme in snapshot.Themes)
         {

@@ -1,58 +1,79 @@
-using System.Text.Json;
+using TianyiVision.Acis.Services.Storage;
 
 namespace TianyiVision.Acis.Services.Settings;
 
 public sealed class FileAppPreferencesService : IAppPreferencesService
 {
-    private readonly string _filePath;
+    private readonly AcisLocalDataPaths _paths;
+    private readonly JsonFileDocumentStore _documentStore;
+    private readonly string _legacyFilePath;
 
-    public FileAppPreferencesService()
+    public FileAppPreferencesService(AcisLocalDataPaths paths, JsonFileDocumentStore documentStore)
     {
-        var directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TianyiVision.Acis");
-        _filePath = Path.Combine(directory, "app-preferences.json");
+        _paths = paths;
+        _documentStore = documentStore;
+        _legacyFilePath = Path.Combine(paths.RootDirectory, "app-preferences.json");
     }
 
     public AppPreferencesSnapshot Load()
     {
-        if (!File.Exists(_filePath))
+        if (!File.Exists(_paths.AppearanceFile) && File.Exists(_legacyFilePath))
         {
-            return new AppPreferencesSnapshot(null, null, [], []);
+            TryMigrateLegacyPreferences();
         }
 
-        try
-        {
-            using var stream = File.OpenRead(_filePath);
-            return JsonSerializer.Deserialize<AppPreferencesSnapshot>(stream)
-                ?? new AppPreferencesSnapshot(null, null, [], []);
-        }
-        catch
-        {
-            return new AppPreferencesSnapshot(null, null, [], []);
-        }
+        var appearance = _documentStore.LoadOrCreate(
+            _paths.AppearanceFile,
+            () => new AppearanceSettingsDocument(null, null));
+        var themeCatalog = _documentStore.LoadOrCreate(
+            _paths.ThemeCatalogFile,
+            () => new ThemeCatalogDocument([]));
+        var terminologyCatalog = _documentStore.LoadOrCreate(
+            _paths.TerminologyCatalogFile,
+            () => new TerminologyCatalogDocument([]));
+
+        return new AppPreferencesSnapshot(
+            appearance.ActiveThemeId,
+            appearance.ActiveTerminologyId,
+            themeCatalog.Themes,
+            terminologyCatalog.Terminologies);
     }
 
     public void Save(AppPreferencesSnapshot snapshot)
     {
-        var directory = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        using var stream = File.Create(_filePath);
-        JsonSerializer.Serialize(stream, snapshot, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
+        _documentStore.Save(
+            _paths.AppearanceFile,
+            new AppearanceSettingsDocument(snapshot.ActiveThemeId, snapshot.ActiveTerminologyId));
+        _documentStore.Save(
+            _paths.ThemeCatalogFile,
+            new ThemeCatalogDocument(snapshot.Themes));
+        _documentStore.Save(
+            _paths.TerminologyCatalogFile,
+            new TerminologyCatalogDocument(snapshot.Terminologies));
     }
 
     public void Reset()
     {
-        if (File.Exists(_filePath))
+        _documentStore.DeleteIfExists(_paths.AppearanceFile);
+        _documentStore.DeleteIfExists(_paths.ThemeCatalogFile);
+        _documentStore.DeleteIfExists(_paths.TerminologyCatalogFile);
+    }
+
+    private void TryMigrateLegacyPreferences()
+    {
+        try
         {
-            File.Delete(_filePath);
+            using var stream = File.OpenRead(_legacyFilePath);
+            var snapshot = System.Text.Json.JsonSerializer.Deserialize<AppPreferencesSnapshot>(stream);
+            if (snapshot is not null)
+            {
+                Save(snapshot);
+                _documentStore.DeleteIfExists(_legacyFilePath);
+            }
+        }
+        catch
+        {
+            // Ignore legacy migration failure and fall back to the new default documents.
         }
     }
 }

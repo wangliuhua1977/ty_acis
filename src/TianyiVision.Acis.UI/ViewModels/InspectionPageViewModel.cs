@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
@@ -28,7 +29,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private InspectionPointState? _selectedPoint;
     private string _toggleGroupActionText = string.Empty;
 
-    public InspectionPageViewModel(ITextService textService)
+    public InspectionPageViewModel(ITextService textService, IInspectionTaskService inspectionTaskService)
         : base(
             textService.Resolve(TextTokens.InspectionTitle),
             textService.Resolve(TextTokens.InspectionDescription))
@@ -155,7 +156,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ToggleGroupCommand = new RelayCommand(_ => ToggleGroupEnabled());
         InitializeReviewCommands();
 
-        _workspaceByGroupId = CreateFakeWorkspaces();
+        _workspaceByGroupId = CreateWorkspaces(inspectionTaskService.GetWorkspace().Data);
         Groups = new ObservableCollection<InspectionGroupSummaryState>(_workspaceByGroupId.Values.Select(workspace => workspace.Group));
         LoadGroup(Groups.First());
     }
@@ -481,69 +482,59 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         };
     }
 
-    private Dictionary<string, GroupWorkspaceState> CreateFakeWorkspaces()
+    private Dictionary<string, GroupWorkspaceState> CreateWorkspaces(InspectionWorkspaceSnapshot snapshot)
     {
-        var reviewMode = _textService.Resolve(TextTokens.InspectionResultModeReview);
-        var directDispatchMode = _textService.Resolve(TextTokens.InspectionResultModeDirectDispatch);
-        var autoDispatch = _textService.Resolve(TextTokens.InspectionDispatchModeAuto);
-        var manualDispatch = _textService.Resolve(TextTokens.InspectionDispatchModeManual);
-        var taskIdle = _textService.Resolve(TextTokens.InspectionTaskStatusIdle);
-
-        return new[]
-        {
-            new GroupWorkspaceState(
-                new InspectionGroupSummaryState("g-telecom-river", "沿江慢直播保障一组", "12 项监看范围 · 上墙复核 · 自动派单", true),
-                new InspectionStrategySummaryState("08:30", "4 次 / 日", "每 4 小时", reviewMode, autoDispatch),
-                CreateExecutionState("2 / 4", taskIdle, "14:30", true),
-                CreateRunSummary("沿江慢直播保障一组", "2026-03-12 09:10"),
-                "2026-03-12 09:46",
-                new ObservableCollection<InspectionPointState>(
-                [
-                    CreatePoint("p-101", "江滩观景台 1 号位", "沿江运营一中心", "沿江维护班组", 90, 150, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, false, "2026-03-11 21:30", true),
-                    CreatePoint("p-102", "轮渡码头北口", "沿江运营一中心", "沿江维护班组", 270, 120, InspectionPointStatus.Fault, InspectionPointStatus.Fault, true, false, false, false, "2026-03-12 08:42", true),
-                    CreatePoint("p-103", "跨江大桥东塔", "桥梁联防中心", "桥梁值守班", 430, 190, InspectionPointStatus.Inspecting, InspectionPointStatus.Normal, true, true, false, true, "2026-03-10 18:12", false),
-                    CreatePoint("p-104", "城市阳台主广场", "文旅联合中心", "文旅夜景保障组", 600, 130, InspectionPointStatus.Pending, InspectionPointStatus.Fault, true, true, true, false, "2026-03-09 20:44", true),
-                    CreatePoint("p-105", "滨江步道南段", "沿江运营二中心", "沿江维护班组", 700, 260, InspectionPointStatus.Pending, InspectionPointStatus.Normal, true, true, false, true, "2026-03-08 16:02", false),
-                    CreatePoint("p-106", "地铁口联防点", "轨交换乘保障组", "轨道联动班", 220, 280, InspectionPointStatus.Silent, InspectionPointStatus.Silent, true, true, false, true, "--", false),
-                    CreatePoint("p-107", "防汛泵站外侧", "防汛保障中心", "防汛应急班", 360, 330, InspectionPointStatus.PausedUntilRecovery, InspectionPointStatus.PausedUntilRecovery, false, false, false, false, "2026-03-12 07:10", true),
-                    CreatePoint("p-108", "江心灯塔监看点", "航道监护中心", "航道维护组", 560, 320, InspectionPointStatus.Fault, InspectionPointStatus.Fault, false, false, false, false, "2026-03-12 06:51", true),
-                    CreatePoint("p-109", "文化展亭西侧", "文旅联合中心", "文旅夜景保障组", 790, 180, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, true, "2026-03-07 11:13", false),
-                    CreatePoint("p-110", "亲水平台北端", "沿江运营二中心", "沿江维护班组", 860, 310, InspectionPointStatus.Pending, InspectionPointStatus.Normal, true, true, false, true, "--", false),
-                    CreatePoint("p-111", "演艺广场东门", "文旅联合中心", "文旅夜景保障组", 980, 150, InspectionPointStatus.Pending, InspectionPointStatus.Fault, true, false, true, false, "--", true),
-                    CreatePoint("p-112", "景观桥步道口", "桥梁联防中心", "桥梁值守班", 1040, 260, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, true, "2026-03-06 13:27", false)
-                ]),
-                new ObservableCollection<RecentFaultSummaryState>(
-                [
-                    new("p-102", "轮渡码头北口", _textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "2026-03-12 08:42"),
-                    new("p-108", "江心灯塔监看点", _textService.Resolve(TextTokens.InspectionFaultTypeOffline), "2026-03-12 06:51"),
-                    new("p-107", "防汛泵站外侧", _textService.Resolve(TextTokens.InspectionFaultTypeOffline), "2026-03-12 07:10")
-                ])),
-            new GroupWorkspaceState(
-                new InspectionGroupSummaryState("g-city-night", "城区夜景值守二组", "10 项监看范围 · 直接派单 · 人工派单", true),
-                new InspectionStrategySummaryState("19:00", "3 次 / 日", "每 3 小时", directDispatchMode, manualDispatch),
-                CreateExecutionState("1 / 3", taskIdle, "22:00", true),
-                CreateRunSummary("城区夜景值守二组", "2026-03-12 19:05"),
-                "2026-03-12 19:37",
-                new ObservableCollection<InspectionPointState>(
-                [
-                    CreatePoint("p-201", "城市中轴灯光秀主屏", "城区值守中心", "夜景值守班", 140, 140, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, true, "2026-03-05 09:20", false),
-                    CreatePoint("p-202", "会展中心南入口", "城区值守中心", "夜景值守班", 280, 210, InspectionPointStatus.Inspecting, InspectionPointStatus.Normal, true, true, false, true, "--", false),
-                    CreatePoint("p-203", "商业街 3 号塔", "商圈联防中心", "商圈维护组", 430, 120, InspectionPointStatus.Pending, InspectionPointStatus.Fault, true, true, true, false, "--", true),
-                    CreatePoint("p-204", "游客集散广场", "文旅联合中心", "文旅夜景保障组", 580, 220, InspectionPointStatus.Fault, InspectionPointStatus.Fault, true, false, false, false, "2026-03-12 18:36", true),
-                    CreatePoint("p-205", "滨湖步道转角", "湖区保障组", "湖区值守班", 720, 160, InspectionPointStatus.Pending, InspectionPointStatus.Normal, true, true, false, true, "--", false),
-                    CreatePoint("p-206", "交通枢纽东平台", "城区值守中心", "交通联动班", 860, 260, InspectionPointStatus.Pending, InspectionPointStatus.Normal, true, true, false, true, "--", false),
-                    CreatePoint("p-207", "东湖观景塔", "湖区保障组", "湖区值守班", 980, 110, InspectionPointStatus.Silent, InspectionPointStatus.Silent, true, true, false, true, "--", false),
-                    CreatePoint("p-208", "主会场外场屏", "商圈联防中心", "商圈维护组", 1030, 280, InspectionPointStatus.PausedUntilRecovery, InspectionPointStatus.PausedUntilRecovery, false, false, false, false, "2026-03-12 17:10", true),
-                    CreatePoint("p-209", "东门宣传屏", "城区值守中心", "夜景值守班", 650, 330, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, true, "2026-03-03 11:20", false),
-                    CreatePoint("p-210", "会展中心北侧广角位", "城区值守中心", "夜景值守班", 380, 330, InspectionPointStatus.Pending, InspectionPointStatus.Fault, true, false, true, false, "--", true)
-                ]),
-                new ObservableCollection<RecentFaultSummaryState>(
-                [
-                    new("p-204", "游客集散广场", _textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "2026-03-12 18:36"),
-                    new("p-208", "主会场外场屏", _textService.Resolve(TextTokens.InspectionFaultTypeOffline), "2026-03-12 17:10")
-                ]))
-        }.ToDictionary(workspace => workspace.Group.Id, workspace => workspace);
+        return snapshot.Groups
+            .Select(workspace => new GroupWorkspaceState(
+                new InspectionGroupSummaryState(
+                    workspace.Group.Id,
+                    workspace.Group.Name,
+                    workspace.Group.Summary,
+                    workspace.Group.IsEnabled),
+                new InspectionStrategySummaryState(
+                    workspace.Strategy.FirstRunTime,
+                    workspace.Strategy.DailyExecutionCount,
+                    workspace.Strategy.Interval,
+                    workspace.Strategy.ResultMode,
+                    workspace.Strategy.DispatchMode),
+                CreateExecutionState(workspace.Execution),
+                CreateRunSummary(workspace.RunSummary),
+                workspace.TaskFinishedAt,
+                new ObservableCollection<InspectionPointState>(workspace.Points.Select(CreatePoint)),
+                new ObservableCollection<RecentFaultSummaryState>(workspace.RecentFaults.Select(CreateRecentFault))))
+            .ToDictionary(workspace => workspace.Group.Id, workspace => workspace);
     }
+
+    private InspectionTaskExecutionState CreateExecutionState(InspectionExecutionModel execution)
+    {
+        return new InspectionTaskExecutionState
+        {
+            ExecutedToday = execution.ExecutedToday,
+            CurrentTaskStatus = execution.CurrentTaskStatus,
+            NextRunTime = execution.NextRunTime,
+            CurrentProgressText = "0 / 0",
+            CurrentProgressValue = 0,
+            SimulationNote = execution.SimulationNote,
+            IsEnabled = execution.IsEnabled
+        };
+    }
+
+    private InspectionRunSummaryState CreateRunSummary(InspectionRunSummaryModel runSummary)
+    {
+        return new InspectionRunSummaryState
+        {
+            GroupName = runSummary.GroupName,
+            StartedAt = runSummary.StartedAt,
+            TotalPoints = "0",
+            InspectedPoints = "0",
+            NormalCount = "0",
+            FaultCount = "0",
+            CurrentPointName = "--"
+        };
+    }
+
+    private RecentFaultSummaryState CreateRecentFault(InspectionRecentFaultModel recentFault)
+        => new(recentFault.PointId, recentFault.PointName, recentFault.FaultType, recentFault.LatestFaultTime);
 
     private InspectionTaskExecutionState CreateExecutionState(string executedToday, string taskStatus, string nextRunTime, bool isEnabled)
     {
@@ -571,6 +562,25 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             FaultCount = "0",
             CurrentPointName = "--"
         };
+    }
+
+    private InspectionPointState CreatePoint(InspectionPointModel point)
+    {
+        return CreatePoint(
+            point.Id,
+            point.Name,
+            point.UnitName,
+            point.CurrentHandlingUnit,
+            point.X,
+            point.Y,
+            MapPointStatus(point.Status),
+            MapPointStatus(point.CompletionStatus),
+            point.IsOnline,
+            point.IsPlayable,
+            point.IsImageAbnormal,
+            point.IsPreviewAvailable,
+            point.LastFaultTime,
+            point.EntersDispatchPool);
     }
 
     private InspectionPointState CreatePoint(
@@ -611,6 +621,20 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             isPreviewAvailable)
         {
             IsCurrent = status == InspectionPointStatus.Inspecting
+        };
+    }
+
+    private static InspectionPointStatus MapPointStatus(InspectionPointStatusModel status)
+    {
+        return status switch
+        {
+            InspectionPointStatusModel.Pending => InspectionPointStatus.Pending,
+            InspectionPointStatusModel.Inspecting => InspectionPointStatus.Inspecting,
+            InspectionPointStatusModel.Normal => InspectionPointStatus.Normal,
+            InspectionPointStatusModel.Fault => InspectionPointStatus.Fault,
+            InspectionPointStatusModel.Silent => InspectionPointStatus.Silent,
+            InspectionPointStatusModel.PausedUntilRecovery => InspectionPointStatus.PausedUntilRecovery,
+            _ => InspectionPointStatus.Pending
         };
     }
 

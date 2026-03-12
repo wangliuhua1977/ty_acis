@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Home;
 using TianyiVision.Acis.Services.Layout;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
@@ -25,7 +26,10 @@ public sealed class HomePageViewModel : PageViewModelBase
     private Size _overlayViewport;
     private HomePointSummaryState? _selectedPointSummary;
 
-    public HomePageViewModel(ITextService textService, IHomeOverlayLayoutService layoutService)
+    public HomePageViewModel(
+        ITextService textService,
+        IHomeOverlayLayoutService layoutService,
+        IHomeDashboardService homeDashboardService)
         : base(
             textService.Resolve(TextTokens.HomeTitle),
             textService.Resolve(TextTokens.HomeDescription))
@@ -64,10 +68,12 @@ public sealed class HomePageViewModel : PageViewModelBase
         LegendKeyText = textService.Resolve(TextTokens.HomeMapLegendKey);
         LegendInspectingText = textService.Resolve(TextTokens.HomeMapLegendInspecting);
 
-        CurrentGroupSummary = "沿江慢直播保障一组";
-        ExecutionProgress = "8 / 12";
-        PendingReviewSummary = "2 个待复核任务，优先关注沿江保障组与夜景值守组。";
-        PendingDispatchSummary = "5 条待派单故障，当前以播放失败和离线类为主。";
+        var dashboard = homeDashboardService.GetDashboard().Data;
+
+        CurrentGroupSummary = dashboard.CurrentGroupSummary;
+        ExecutionProgress = dashboard.ExecutionProgress;
+        PendingReviewSummary = dashboard.PendingReviewSummary;
+        PendingDispatchSummary = dashboard.PendingDispatchSummary;
 
         OverlayPanels =
         [
@@ -88,25 +94,13 @@ public sealed class HomePageViewModel : PageViewModelBase
             panel.PropertyChanged += HandleOverlayPanelChanged;
         }
 
-        MapPoints =
-        [
-            CreatePoint("home-101", "江滩观景台 1 号位", "沿江运营一中心", HomeMapPointKind.Normal, 140, 210, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前画面和在线状态稳定，适合首页作为正常态示例。", "--", false),
-            CreatePoint("home-102", "轮渡码头北口", "沿江运营一中心", HomeMapPointKind.Fault, 320, 150, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "当前以播放失败为主，后续应在业务页承接协议切换与重试过程。", "2026-03-12 08:42", true),
-            CreatePoint("home-103", "跨江大桥东塔", "桥梁联防中心", HomeMapPointKind.Inspecting, 530, 250, textService.Resolve(TextTokens.InspectionStatusInspecting), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前点位处于巡检中，用于展示首页态势联动骨架。", "--", false),
-            CreatePoint("home-104", "城市阳台主广场", "文旅联合中心", HomeMapPointKind.Key, 790, 130, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeImageAbnormal), "当前属于重点区域点位，首页优先保留其可视化态势。", "2026-03-12 07:54", true),
-            CreatePoint("home-105", "防汛泵站外侧", "防汛保障中心", HomeMapPointKind.Fault, 450, 390, textService.Resolve(TextTokens.InspectionStatusPausedUntilRecovery), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "点位当前离线且处于恢复前暂停巡检状态。", "2026-03-12 07:10", true),
-            CreatePoint("home-106", "江心灯塔监看点", "航道监护中心", HomeMapPointKind.Fault, 700, 420, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "该点位在首页维持高亮告警，用于强调地图主舞台的故障态势。", "2026-03-12 06:51", true),
-            CreatePoint("home-107", "文化展亭西侧", "文旅联合中心", HomeMapPointKind.Key, 980, 230, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "重点区域点位，当前状态正常。", "--", false),
-            CreatePoint("home-108", "景观桥步道口", "桥梁联防中心", HomeMapPointKind.Normal, 1120, 360, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "桥梁点位当前可稳定显示，用于首页整体态势铺陈。", "--", false)
-        ];
-
-        RecentFaults =
-        [
-            new HomeRecentFaultState("home-102", "轮渡码头北口", textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "2026-03-12 08:42"),
-            new HomeRecentFaultState("home-105", "防汛泵站外侧", textService.Resolve(TextTokens.InspectionFaultTypeOffline), "2026-03-12 07:10"),
-            new HomeRecentFaultState("home-106", "江心灯塔监看点", textService.Resolve(TextTokens.InspectionFaultTypeOffline), "2026-03-12 06:51"),
-            new HomeRecentFaultState("home-104", "城市阳台主广场", textService.Resolve(TextTokens.InspectionFaultTypeImageAbnormal), "2026-03-12 07:54")
-        ];
+        MapPoints = new ObservableCollection<HomeMapPointState>(dashboard.MapPoints.Select(CreatePoint));
+        RecentFaults = new ObservableCollection<HomeRecentFaultState>(
+            dashboard.RecentFaults.Select(item => new HomeRecentFaultState(
+                item.PointId,
+                item.PointName,
+                item.FaultType,
+                item.LatestFaultTime)));
 
         SelectMapPointCommand = new RelayCommand(parameter =>
         {
@@ -145,7 +139,8 @@ public sealed class HomePageViewModel : PageViewModelBase
         OpenReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
 
         RefreshHiddenPanels();
-        SelectPoint(MapPoints.First(point => point.Id == "home-102"));
+        var initialPointId = dashboard.RecentFaults.FirstOrDefault()?.PointId ?? MapPoints.First().Id;
+        SelectPoint(MapPoints.First(point => point.Id == initialPointId));
     }
 
     public string MapStageBadge { get; }
@@ -265,32 +260,32 @@ public sealed class HomePageViewModel : PageViewModelBase
         SaveOverlayLayout();
     }
 
-    private HomeMapPointState CreatePoint(
-        string id,
-        string name,
-        string unitName,
-        HomeMapPointKind kind,
-        double x,
-        double y,
-        string statusText,
-        string faultType,
-        string summary,
-        string latestFaultTime,
-        bool isInRecentFaultList)
+    private HomeMapPointState CreatePoint(HomeMapPointModel point)
     {
         return new HomeMapPointState(
-            id,
-            name,
-            unitName,
-            kind,
-            x,
-            y,
-            statusText,
-            faultType,
-            summary,
+            point.Id,
+            point.Name,
+            point.UnitName,
+            MapPointKind(point.Kind),
+            point.X,
+            point.Y,
+            point.StatusText,
+            point.FaultType,
+            point.Summary,
             _textService.Resolve(TextTokens.HomeSelectedPointActionHint),
-            latestFaultTime,
-            isInRecentFaultList);
+            point.LatestFaultTime,
+            point.IsInRecentFaultList);
+    }
+
+    private static HomeMapPointKind MapPointKind(HomeMapPointKindModel kind)
+    {
+        return kind switch
+        {
+            HomeMapPointKindModel.Fault => HomeMapPointKind.Fault,
+            HomeMapPointKindModel.Inspecting => HomeMapPointKind.Inspecting,
+            HomeMapPointKindModel.Key => HomeMapPointKind.Key,
+            _ => HomeMapPointKind.Normal
+        };
     }
 
     private void SelectPoint(HomeMapPointState point)

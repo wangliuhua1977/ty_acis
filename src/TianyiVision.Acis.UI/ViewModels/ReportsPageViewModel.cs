@@ -2,7 +2,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Localization;
+using TianyiVision.Acis.Services.Reports;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
 
@@ -33,7 +35,7 @@ public sealed class ReportsPageViewModel : PageViewModelBase
     private string _workspaceFeedback = string.Empty;
     private string _currentRowCountText = string.Empty;
 
-    public ReportsPageViewModel(ITextService textService)
+    public ReportsPageViewModel(ITextService textService, IReportDataService reportDataService)
         : base(
             textService.Resolve(TextTokens.ReportsTitle),
             textService.Resolve(TextTokens.ReportsDescription))
@@ -41,11 +43,12 @@ public sealed class ReportsPageViewModel : PageViewModelBase
         _textService = textService;
         InitializeText();
 
-        _allInspectionRows = CreateInspectionExecutionRows();
-        _allFaultRows = CreateFaultStatisticsRows();
-        _allDispatchRows = CreateDispatchDisposalRows();
-        _allResponsibilityRows = CreateResponsibilityRows();
-        _allOutstandingRows = CreateOutstandingRows();
+        var workspace = reportDataService.GetWorkspace(new ReportQueryDto(TimeTodayKey, null, null, null, null)).Data;
+        _allInspectionRows = CreateInspectionExecutionRows(workspace.InspectionExecutionRows);
+        _allFaultRows = CreateFaultStatisticsRows(workspace.FaultStatisticsRows);
+        _allDispatchRows = CreateDispatchDisposalRows(workspace.DispatchDisposalRows);
+        _allResponsibilityRows = CreateResponsibilityRows(workspace.ResponsibilityOwnershipRows);
+        _allOutstandingRows = CreateOutstandingRows(workspace.OutstandingFaultRows);
 
         FilterState = CreateFilterState();
         MetricCards =
@@ -759,6 +762,71 @@ public sealed class ReportsPageViewModel : PageViewModelBase
 
     private bool MatchesFaultOption(string value)
         => MatchesOption(FilterState.SelectedFaultTypeOption, value);
+
+    private static List<InspectionExecutionReportRowState> CreateInspectionExecutionRows(IReadOnlyList<InspectionExecutionReportModel> rows)
+        => rows.Select(row => new InspectionExecutionReportRowState(
+            row.ReportDate,
+            row.ReportDate.ToString("yyyy-MM-dd"),
+            row.InspectionGroupName,
+            row.CurrentHandlingUnit,
+            row.FaultType,
+            row.DailyTaskRuns,
+            row.TotalPoints,
+            row.NormalPoints,
+            row.FaultPoints,
+            row.CompletionRateText)).ToList();
+
+    private static List<FaultStatisticsReportRowState> CreateFaultStatisticsRows(IReadOnlyList<FaultStatisticsReportModel> rows)
+        => rows.Select(row => new FaultStatisticsReportRowState(
+            row.ReportDate,
+            row.ReportDate.ToString("yyyy-MM-dd"),
+            row.InspectionGroupName,
+            row.CurrentHandlingUnit,
+            row.FaultType,
+            row.FaultTotal,
+            row.OfflineFaults,
+            row.PlaybackFailedFaults,
+            row.ImageAbnormalFaults,
+            row.NewFaults,
+            row.RepeatedFaults)).ToList();
+
+    private static List<DispatchDisposalReportRowState> CreateDispatchDisposalRows(IReadOnlyList<DispatchDisposalReportModel> rows)
+        => rows.Select(row => new DispatchDisposalReportRowState(
+            row.ReportDate,
+            row.ReportDate.ToString("yyyy-MM-dd"),
+            row.InspectionGroupName,
+            row.CurrentHandlingUnit,
+            row.FaultType,
+            row.PendingDispatchCount,
+            row.DispatchedCount,
+            row.RecoveredCount,
+            row.UnrecoveredCount,
+            row.AutomaticDispatchCount,
+            row.ManualDispatchCount)).ToList();
+
+    private static List<ResponsibilityOwnershipReportRowState> CreateResponsibilityRows(IReadOnlyList<ResponsibilityOwnershipReportModel> rows)
+        => rows.Select(row => new ResponsibilityOwnershipReportRowState(
+            row.InspectionGroupName,
+            row.CurrentHandlingUnit,
+            row.MaintainerName,
+            row.SupervisorName,
+            row.FaultType,
+            row.FaultCount,
+            row.RecoveredCount,
+            row.UnrecoveredCount)).ToList();
+
+    private static List<OutstandingFaultReportRowState> CreateOutstandingRows(IReadOnlyList<OutstandingFaultReportModel> rows)
+        => rows.Select(row => new OutstandingFaultReportRowState(
+            row.ReportDate,
+            row.InspectionGroupName,
+            row.PointName,
+            row.CurrentHandlingUnit,
+            row.MaintainerName,
+            row.SupervisorName,
+            row.FaultType,
+            row.FirstFaultTime,
+            row.LatestFaultTime,
+            row.CurrentStatus)).ToList();
 
     private List<InspectionExecutionReportRowState> CreateInspectionExecutionRows()
     {

@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Dispatch;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
@@ -22,6 +24,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private const string QuickFilterRepeated = "repeated";
     private const string AllOptionKey = "all";
 
+    private readonly IDispatchNotificationService _dispatchNotificationService;
     private readonly ITextService _textService;
     private readonly List<DispatchWorkOrderDetailState> _allWorkOrders;
     private readonly RelayCommand _dispatchNowCommand;
@@ -38,11 +41,12 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private DispatchResponsibilityState? _responsibilityEditor;
     private string _workspaceFeedback = string.Empty;
 
-    public DispatchPageViewModel(ITextService textService)
+    public DispatchPageViewModel(ITextService textService, IDispatchNotificationService dispatchNotificationService)
         : base(
             textService.Resolve(TextTokens.DispatchTitle),
             textService.Resolve(TextTokens.DispatchDescription))
     {
+        _dispatchNotificationService = dispatchNotificationService;
         _textService = textService;
         InitializeText();
 
@@ -74,7 +78,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         CancelResponsibilityCommand = new RelayCommand(_ => CloseResponsibilityEditor());
         NavigateToDispatchCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
 
-        _allWorkOrders = CreateFakeWorkOrders();
+        _allWorkOrders = CreateWorkOrders(dispatchNotificationService.GetWorkOrders().Data);
         FilterState = CreateFilterState();
         WorkspaceFeedback = MergeDescription;
         ApplyFilters();
@@ -468,18 +472,20 @@ public sealed class DispatchPageViewModel : PageViewModelBase
             return;
         }
 
-        var sentAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        var notificationResponse = _dispatchNotificationService.SendFaultNotification(CreateNotificationRequest(SelectedWorkOrderDetail));
+        var sentAt = notificationResponse.Data.SentAt;
+        var statusText = notificationResponse.Data.StatusText;
         SelectedWorkOrderDetail.WorkOrderStatus = DispatchWorkOrderStatus.Dispatched;
         SelectedWorkOrderDetail.WorkOrderStatusText = _textService.Resolve(TextTokens.DispatchWorkOrderDispatched);
         SelectedWorkOrderDetail.NotificationRecord.FaultNotificationSentAt = sentAt;
-        SelectedWorkOrderDetail.NotificationRecord.FaultNotificationStatus = _textService.Resolve(TextTokens.DispatchNotificationSimulated);
+        SelectedWorkOrderDetail.NotificationRecord.FaultNotificationStatus = statusText;
         SelectedWorkOrderDetail.NotificationRecord.TimelineEntries.Insert(
             0,
             new DispatchNotificationEntryState(
                 _textService.Resolve(TextTokens.DispatchNotificationFaultTitle),
                 sentAt,
-                _textService.Resolve(TextTokens.DispatchNotificationSimulated),
-                $"{SelectedWorkOrderDetail.Responsibility.CurrentHandlingUnit} / {SelectedWorkOrderDetail.Responsibility.MaintainerName}"));
+                statusText,
+                notificationResponse.Data.TimelineActor));
 
         WorkspaceFeedback = string.Format(
             _textService.Resolve(TextTokens.DispatchDispatchFeedbackPattern),
@@ -495,18 +501,20 @@ public sealed class DispatchPageViewModel : PageViewModelBase
             return;
         }
 
-        var sentAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        var notificationResponse = _dispatchNotificationService.SendRecoveryNotification(CreateNotificationRequest(SelectedWorkOrderDetail));
+        var sentAt = notificationResponse.Data.SentAt;
+        var statusText = notificationResponse.Data.StatusText;
         SelectedWorkOrderDetail.RecoveryStatus = DispatchRecoveryStatus.Recovered;
         SelectedWorkOrderDetail.RecoveryStatusText = _textService.Resolve(TextTokens.DispatchRecoveryRecovered);
         SelectedWorkOrderDetail.NotificationRecord.RecoveryNotificationSentAt = sentAt;
-        SelectedWorkOrderDetail.NotificationRecord.RecoveryNotificationStatus = _textService.Resolve(TextTokens.DispatchNotificationSimulated);
+        SelectedWorkOrderDetail.NotificationRecord.RecoveryNotificationStatus = statusText;
         SelectedWorkOrderDetail.NotificationRecord.TimelineEntries.Insert(
             0,
             new DispatchNotificationEntryState(
                 _textService.Resolve(TextTokens.DispatchNotificationRecoveryTitle),
                 sentAt,
-                _textService.Resolve(TextTokens.DispatchNotificationSimulated),
-                $"{SelectedWorkOrderDetail.Responsibility.CurrentHandlingUnit} / {SelectedWorkOrderDetail.Responsibility.MaintainerName}"));
+                statusText,
+                notificationResponse.Data.TimelineActor));
 
         WorkspaceFeedback = string.Format(
             _textService.Resolve(TextTokens.DispatchRecoveryFeedbackPattern),
@@ -553,132 +561,71 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         ResponsibilityEditor = null;
     }
 
-    private List<DispatchWorkOrderDetailState> CreateFakeWorkOrders()
+    private DispatchNotificationRequestDto CreateNotificationRequest(DispatchWorkOrderDetailState workOrder)
     {
-        return
-        [
-            CreateWorkOrder(
-                "dispatch-001",
-                "point-102",
-                "轮渡码头北口",
-                _textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed),
-                "沿江慢直播保障一组",
-                "沿江片区 / 轮渡码头北口",
-                "故障截图占位 A",
-                "播放失败告警快照",
-                "设备在线但视频播放失败，本轮已按重复故障合并处理。",
-                _textService.Resolve(TextTokens.InspectionConclusionFault),
-                entersDispatchPool: true,
-                isTodayNew: true,
-                DispatchMethod.Manual,
-                DispatchWorkOrderStatus.PendingDispatch,
-                DispatchRecoveryStatus.Unrecovered,
-                new DispatchResponsibilityState("沿江运维一中心", "张磊", "13800000001", "李强", "13900000001"),
-                firstFaultTime: "2026-03-12 07:08",
-                latestFaultTime: "2026-03-12 08:42",
-                repeatCount: 3,
-                faultNotificationSentAt: "--",
-                faultNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending),
-                recoveryNotificationSentAt: "--",
-                recoveryNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending)),
-            CreateWorkOrder(
-                "dispatch-002",
-                "point-105",
-                "防洪泵站外侧",
-                _textService.Resolve(TextTokens.InspectionFaultTypeOffline),
-                "沿江慢直播保障一组",
-                "泵站外圈 / 西北角",
-                "故障截图占位 B",
-                "离线告警快照",
-                "点位离线且恢复前暂停巡检，已模拟自动派单。",
-                _textService.Resolve(TextTokens.InspectionConclusionFault),
-                entersDispatchPool: true,
-                isTodayNew: true,
-                DispatchMethod.Automatic,
-                DispatchWorkOrderStatus.Dispatched,
-                DispatchRecoveryStatus.Unrecovered,
-                new DispatchResponsibilityState("防汛保障中心", "周岚", "13800000012", "王征", "13900000012"),
-                firstFaultTime: "2026-03-12 06:12",
-                latestFaultTime: "2026-03-12 07:10",
-                repeatCount: 2,
-                faultNotificationSentAt: "2026-03-12 07:12",
-                faultNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationSimulated),
-                recoveryNotificationSentAt: "--",
-                recoveryNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending)),
-            CreateWorkOrder(
-                "dispatch-003",
-                "point-106",
-                "江心灯塔监看点",
-                _textService.Resolve(TextTokens.InspectionFaultTypeOffline),
-                "夜景值守组",
-                "江心灯塔 / 东南水域",
-                "故障截图占位 C",
-                "夜景离线快照",
-                "夜间值守点位离线，当前仍在未恢复阶段。",
-                _textService.Resolve(TextTokens.InspectionConclusionFault),
-                entersDispatchPool: true,
-                isTodayNew: false,
-                DispatchMethod.Automatic,
-                DispatchWorkOrderStatus.Dispatched,
-                DispatchRecoveryStatus.Unrecovered,
-                new DispatchResponsibilityState("航道监护中心", "陈野", "13800000023", "高航", "13900000023"),
-                firstFaultTime: "2026-03-11 22:40",
-                latestFaultTime: "2026-03-12 06:51",
-                repeatCount: 4,
-                faultNotificationSentAt: "2026-03-11 22:42",
-                faultNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationSimulated),
-                recoveryNotificationSentAt: "--",
-                recoveryNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending)),
-            CreateWorkOrder(
-                "dispatch-004",
-                "point-104",
-                "城市阳台主广场",
-                _textService.Resolve(TextTokens.InspectionFaultTypeImageAbnormal),
-                "文旅值守组",
-                "城市阳台 / 主广场上空",
-                "故障截图占位 D",
-                "画面异常快照",
-                "重点点位画面异常，已进入人工派单跟踪。",
-                _textService.Resolve(TextTokens.InspectionConclusionFault),
-                entersDispatchPool: true,
-                isTodayNew: true,
-                DispatchMethod.Manual,
-                DispatchWorkOrderStatus.Dispatched,
-                DispatchRecoveryStatus.Recovered,
-                new DispatchResponsibilityState("文旅联合中心", "林悦", "13800000034", "宋晨", "13900000034"),
-                firstFaultTime: "2026-03-12 07:28",
-                latestFaultTime: "2026-03-12 07:54",
-                repeatCount: 1,
-                faultNotificationSentAt: "2026-03-12 07:56",
-                faultNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationSimulated),
-                recoveryNotificationSentAt: "2026-03-12 09:10",
-                recoveryNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationSimulated)),
-            CreateWorkOrder(
-                "dispatch-005",
-                "point-109",
-                "滨江步道南入口",
-                _textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed),
-                "沿江慢直播保障二组",
-                "滨江步道 / 南入口立杆",
-                "故障截图占位 E",
-                "南入口播放失败快照",
-                "新进入派单池的人工派单工单，等待管理员确认发送。",
-                _textService.Resolve(TextTokens.InspectionConclusionFault),
-                entersDispatchPool: true,
-                isTodayNew: true,
-                DispatchMethod.Manual,
-                DispatchWorkOrderStatus.PendingDispatch,
-                DispatchRecoveryStatus.Unrecovered,
-                new DispatchResponsibilityState("沿江运维二中心", "赵宁", "13800000045", "韩征", "13900000045"),
-                firstFaultTime: "2026-03-12 10:16",
-                latestFaultTime: "2026-03-12 10:16",
-                repeatCount: 1,
-                faultNotificationSentAt: "--",
-                faultNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending),
-                recoveryNotificationSentAt: "--",
-                recoveryNotificationStatus: _textService.Resolve(TextTokens.DispatchNotificationPending))
-        ];
+        return new DispatchNotificationRequestDto(
+            workOrder.Responsibility.CurrentHandlingUnit,
+            workOrder.Responsibility.MaintainerName,
+            workOrder.Responsibility.MaintainerPhone,
+            workOrder.Responsibility.SupervisorName,
+            workOrder.Responsibility.SupervisorPhone,
+            workOrder.PointName,
+            workOrder.FaultType,
+            ParseFaultTime(workOrder.RepeatFault.LatestFaultTime),
+            workOrder.ScreenshotTitle);
     }
+
+    private List<DispatchWorkOrderDetailState> CreateWorkOrders(IReadOnlyList<DispatchWorkOrderModel> workOrders)
+        => workOrders.Select(CreateWorkOrder).ToList();
+
+    private DispatchWorkOrderDetailState CreateWorkOrder(DispatchWorkOrderModel workOrder)
+    {
+        return CreateWorkOrder(
+            workOrder.WorkOrderId,
+            workOrder.PointId,
+            workOrder.PointName,
+            workOrder.FaultType,
+            workOrder.InspectionGroupName,
+            workOrder.MapLocationPlaceholder,
+            workOrder.ScreenshotTitle,
+            workOrder.ScreenshotSubtitle,
+            workOrder.FaultSummary,
+            workOrder.LatestInspectionConclusion,
+            workOrder.EntersDispatchPool,
+            workOrder.IsTodayNew,
+            MapDispatchMethod(workOrder.DispatchMethod),
+            MapWorkOrderStatus(workOrder.WorkOrderStatus),
+            MapRecoveryStatus(workOrder.RecoveryStatus),
+            new DispatchResponsibilityState(
+                workOrder.Responsibility.CurrentHandlingUnit,
+                workOrder.Responsibility.MaintainerName,
+                workOrder.Responsibility.MaintainerPhone,
+                workOrder.Responsibility.SupervisorName,
+                workOrder.Responsibility.SupervisorPhone),
+            workOrder.RepeatFault.FirstFaultTime,
+            workOrder.RepeatFault.LatestFaultTime,
+            workOrder.RepeatFault.RepeatCount,
+            workOrder.NotificationRecord.FaultNotificationSentAt,
+            workOrder.NotificationRecord.FaultNotificationStatus,
+            workOrder.NotificationRecord.RecoveryNotificationSentAt,
+            workOrder.NotificationRecord.RecoveryNotificationStatus);
+    }
+
+    private static DateTime ParseFaultTime(string value)
+        => DateTime.TryParse(value, out var parsed) ? parsed : DateTime.Now;
+
+    private static DispatchMethod MapDispatchMethod(DispatchMethodModel method)
+        => method == DispatchMethodModel.Automatic ? DispatchMethod.Automatic : DispatchMethod.Manual;
+
+    private static DispatchWorkOrderStatus MapWorkOrderStatus(DispatchWorkOrderStatusModel status)
+        => status == DispatchWorkOrderStatusModel.PendingDispatch
+            ? DispatchWorkOrderStatus.PendingDispatch
+            : DispatchWorkOrderStatus.Dispatched;
+
+    private static DispatchRecoveryStatus MapRecoveryStatus(DispatchRecoveryStatusModel status)
+        => status == DispatchRecoveryStatusModel.Unrecovered
+            ? DispatchRecoveryStatus.Unrecovered
+            : DispatchRecoveryStatus.Recovered;
 
     private DispatchWorkOrderDetailState CreateWorkOrder(
         string workOrderId,
