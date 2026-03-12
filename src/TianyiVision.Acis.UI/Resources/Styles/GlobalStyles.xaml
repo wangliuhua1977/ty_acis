@@ -1,0 +1,110 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:state="clr-namespace:TianyiVision.Acis.UI.States">
+    <Style TargetType="Window">
+        <Setter Property="Background" Value="{DynamicResource Theme.WindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+    </Style>
+
+    <Style x:Key="PageTitleTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="PageDescriptionTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="PrimaryPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Theme.PanelBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="18" />
+        <Setter Property="Margin" Value="0,0,0,14" />
+    </Style>
+
+    <Style x:Key="MutedPanelStyle" TargetType="Border" BasedOn="{StaticResource PrimaryPanelStyle}">
+        <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
+    </Style>
+
+    <Style x:Key="MetricValueTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="MetricTitleTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style x:Key="AccentTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.AccentSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="NavButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="RootBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="14"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RootBorder" Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                            <Setter TargetName="RootBorder" Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderStrongBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <DataTemplate x:Key="MetricCardTemplate" DataType="{x:Type state:MetricCardState}">
+        <Border Style="{StaticResource PrimaryPanelStyle}" Margin="0,0,14,14">
+            <StackPanel>
+                <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding Title}" />
+                <TextBlock Margin="0,10,0,6" Style="{StaticResource MetricValueTextStyle}" Text="{Binding Value}" />
+                <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="PanelPlaceholderTemplate" DataType="{x:Type state:PanelPlaceholderState}">
+        <Border Style="{StaticResource PrimaryPanelStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource AccentTextStyle}" Text="{Binding Accent}" />
+                <TextBlock Margin="0,10,0,6"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                           Text="{Binding Title}" />
+                <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+</ResourceDictionary>

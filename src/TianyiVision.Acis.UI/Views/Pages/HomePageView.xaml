@@ -1,0 +1,41 @@
+<UserControl x:Class="TianyiVision.Acis.UI.Views.Pages.HomePageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
+            <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
+        </StackPanel>
+
+        <ItemsControl Grid.Row="1" Margin="0,22,0,14" ItemsSource="{Binding Metrics}" ItemTemplate="{StaticResource MetricCardTemplate}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="4" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*" />
+                <ColumnDefinition Width="1.4*" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <ContentControl Content="{Binding TrendPanel}" ContentTemplate="{StaticResource PanelPlaceholderTemplate}" />
+            <ContentControl Grid.Column="1"
+                            Margin="14,0"
+                            Content="{Binding MapSummaryPanel}"
+                            ContentTemplate="{StaticResource PanelPlaceholderTemplate}" />
+            <ContentControl Grid.Column="2"
+                            Content="{Binding FocusListPanel}"
+                            ContentTemplate="{StaticResource PanelPlaceholderTemplate}" />
+        </Grid>
+    </Grid>
+</UserControl>
