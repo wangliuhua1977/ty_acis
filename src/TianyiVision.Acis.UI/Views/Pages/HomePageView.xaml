@@ -33,7 +33,7 @@
             <Setter Property="MinWidth" Value="108" />
             <Setter Property="Opacity" Value="0.84" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsVisible}" Value="True">
+                <DataTrigger Binding="{Binding CommandParameter.IsVisible, RelativeSource={RelativeSource Self}}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Theme.AccentSoftBrush}" />
                     <Setter Property="BorderBrush" Value="{DynamicResource Theme.AccentBrush}" />
                     <Setter Property="Opacity" Value="1" />
@@ -177,34 +177,40 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <ItemsControl HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Panel.ZIndex="25" ItemsSource="{Binding OverlayPanels}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <WrapPanel />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type state:HomeOverlayPanelState}">
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding DataContext.ShowOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Panel.ZIndex="25" Style="{StaticResource OverlayPanelStyle}" Padding="12">
+            <StackPanel>
+                <WrapPanel>
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding TaskPanel}">
                         <StackPanel Orientation="Horizontal">
-                            <Ellipse x:Name="StateDot" Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding Title}" />
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding TaskPanelTitle}" />
                         </StackPanel>
                     </Button>
-                    <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding IsVisible}" Value="True">
-                            <Setter TargetName="StateDot" Property="Fill" Value="{DynamicResource Theme.SuccessBrush}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsVisible}" Value="False">
-                            <Setter TargetName="StateDot" Property="Fill" Value="{DynamicResource Theme.WarningBrush}" />
-                        </DataTrigger>
-                    </DataTemplate.Triggers>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding FaultPanel}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding FaultPanelTitle}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding PointPanel}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding PointPanelTitle}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding LegendPanel}">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding LegendPanelTitle}" />
+                        </StackPanel>
+                    </Button>
+                </WrapPanel>
+                <Button Margin="0,8,0,0" Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ResetOverlayLayoutCommand}" Content="{Binding ResetOverlayLayoutText}" />
+            </StackPanel>
+        </Border>
 
         <Canvas x:Name="OverlayCanvas" Background="Transparent" Panel.ZIndex="30">
-            <Border x:Name="TaskPanelBorder" Width="300" Panel.ZIndex="30" Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}" DataContext="{Binding TaskPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="TaskPanelBorder" Width="300" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding TaskPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top">
                         <Grid Margin="0,0,0,10">
@@ -230,7 +236,7 @@
                 </DockPanel>
             </Border>
 
-            <Border x:Name="FaultPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}" DataContext="{Binding FaultPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="FaultPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding FaultPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -264,7 +270,7 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="PointPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}" DataContext="{Binding PointPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="PointPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding PointPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -297,7 +303,7 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="LegendPanelBorder" Width="520" Panel.ZIndex="30" Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}" DataContext="{Binding LegendPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="LegendPanelBorder" Width="520" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding LegendPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>

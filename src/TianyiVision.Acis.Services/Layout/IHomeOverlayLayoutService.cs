@@ -5,4 +5,6 @@ public interface IHomeOverlayLayoutService
     HomeOverlayLayoutSnapshot Load();
 
     void Save(HomeOverlayLayoutSnapshot snapshot);
+
+    void Reset();
 }

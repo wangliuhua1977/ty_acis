@@ -45,6 +45,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         PointPanelDescription = textService.Resolve(TextTokens.HomePointPanelDescription);
         LegendPanelTitle = textService.Resolve(TextTokens.HomeLegendPanelTitle);
         PanelRestoreHint = textService.Resolve(TextTokens.HomePanelRestoreHint);
+        ResetOverlayLayoutText = textService.Resolve(TextTokens.HomeResetOverlayLayoutAction);
         MapSelectionHint = textService.Resolve(TextTokens.HomeMapSelectionHint);
         CurrentGroupLabel = textService.Resolve(TextTokens.HomeCurrentGroupLabel);
         ExecutionProgressLabel = textService.Resolve(TextTokens.HomeExecutionProgressLabel);
@@ -136,6 +137,7 @@ public sealed class HomePageViewModel : PageViewModelBase
                 ShowOverlayPanel(panel);
             }
         });
+        ResetOverlayLayoutCommand = new RelayCommand(_ => ResetOverlayLayout());
 
         RefreshHiddenPanels();
         SelectPoint(MapPoints.First(point => point.Id == "home-102"));
@@ -153,6 +155,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string PointPanelDescription { get; }
     public string LegendPanelTitle { get; }
     public string PanelRestoreHint { get; }
+    public string ResetOverlayLayoutText { get; }
     public string MapSelectionHint { get; }
     public string CurrentGroupLabel { get; }
     public string ExecutionProgressLabel { get; }
@@ -191,6 +194,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public ICommand SelectRecentFaultCommand { get; }
     public ICommand HideOverlayPanelCommand { get; }
     public ICommand ShowOverlayPanelCommand { get; }
+    public ICommand ResetOverlayLayoutCommand { get; }
 
     public void InitializeOverlayLayout(double viewportWidth, double viewportHeight)
     {
@@ -216,7 +220,6 @@ public sealed class HomePageViewModel : PageViewModelBase
 
             RefreshHiddenPanels();
             _overlayLayoutInitialized = true;
-            SaveOverlayLayout();
         }
         finally
         {
@@ -332,11 +335,28 @@ public sealed class HomePageViewModel : PageViewModelBase
         EnsureOverlayPanelPosition(panel);
         panel.IsVisible = true;
         panel.HasPersistedLayout = true;
+        SaveOverlayLayout();
+    }
+
+    private void ResetOverlayLayout()
+    {
+        _layoutService.Reset();
+
+        foreach (var panel in OverlayPanels)
+        {
+            panel.HasPersistedLayout = false;
+            panel.IsVisible = true;
+            ApplyDefaultPosition(panel);
+        }
+
+        RefreshHiddenPanels();
     }
 
     private void ApplyOverlayLayout(HomeOverlayLayoutSnapshot snapshot)
     {
         var layouts = snapshot.Panels.ToDictionary(panel => panel.PanelId, StringComparer.Ordinal);
+        var hasAnyVisiblePanel = layouts.Values.Any(panel => panel.IsVisible);
+        var useDefaultLayout = layouts.Count == 0 || !hasAnyVisiblePanel;
 
         foreach (var panel in OverlayPanels)
         {
@@ -350,7 +370,7 @@ public sealed class HomePageViewModel : PageViewModelBase
             panel.DefaultY = defaultPosition.Y;
             panel.IsDragEnabled = true;
 
-            if (layouts.TryGetValue(panel.Id, out var layout))
+            if (!useDefaultLayout && layouts.TryGetValue(panel.Id, out var layout))
             {
                 panel.HasPersistedLayout = true;
                 panel.IsVisible = layout.IsVisible;
@@ -364,6 +384,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         }
 
         CorrectOverlappingPanels();
+        EnsureAtLeastOneVisiblePanel();
     }
 
     private void SaveOverlayLayout()
@@ -426,6 +447,20 @@ public sealed class HomePageViewModel : PageViewModelBase
             var position = ClampPosition(panel.Id, panel.X, panel.Y);
             panel.X = position.X;
             panel.Y = position.Y;
+        }
+    }
+
+    private void EnsureAtLeastOneVisiblePanel()
+    {
+        if (OverlayPanels.Any(panel => panel.IsVisible))
+        {
+            return;
+        }
+
+        foreach (var panel in OverlayPanels)
+        {
+            panel.IsVisible = true;
+            ApplyDefaultPosition(panel);
         }
     }
 

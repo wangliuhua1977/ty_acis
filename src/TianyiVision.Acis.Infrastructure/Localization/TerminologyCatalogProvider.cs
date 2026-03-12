@@ -118,6 +118,7 @@ public sealed class TerminologyCatalogProvider : ITerminologyCatalogProvider
             [TextTokens.HomePointPanelDescription] = "仅做当前点位轻摘要，不替代完整业务面板。",
             [TextTokens.HomeLegendPanelTitle] = "图例",
             [TextTokens.HomePanelRestoreHint] = "已关闭面板可在地图右上角恢复。",
+            [TextTokens.HomeResetOverlayLayoutAction] = "重置首页面板布局",
             [TextTokens.HomeMapSelectionHint] = "点击地图点位后，右侧摘要和左下故障项将同步刷新。",
             [TextTokens.InspectionTitle] = "AI{inspection_term}",
             [TextTokens.InspectionDescription] = "遵循基线的三栏式工作区，当前页仅用假数据模拟任务区、中台态势和右侧详情联动。",

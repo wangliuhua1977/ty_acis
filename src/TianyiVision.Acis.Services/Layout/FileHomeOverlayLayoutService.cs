@@ -47,4 +47,12 @@ public sealed class FileHomeOverlayLayoutService : IHomeOverlayLayoutService
             WriteIndented = true
         });
     }
+
+    public void Reset()
+    {
+        if (File.Exists(_filePath))
+        {
+            File.Delete(_filePath);
+        }
+    }
 }

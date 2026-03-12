@@ -66,6 +66,7 @@ public static class TextTokens
     public const string HomePointPanelDescription = "home.pointPanelDescription";
     public const string HomeLegendPanelTitle = "home.legendPanelTitle";
     public const string HomePanelRestoreHint = "home.panelRestoreHint";
+    public const string HomeResetOverlayLayoutAction = "home.resetOverlayLayoutAction";
     public const string HomeMapSelectionHint = "home.mapSelectionHint";
 
     public const string InspectionTitle = "inspection.title";
