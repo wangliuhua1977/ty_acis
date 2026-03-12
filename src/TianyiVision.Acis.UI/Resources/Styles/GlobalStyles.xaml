@@ -1,6 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:state="clr-namespace:TianyiVision.Acis.UI.States">
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
     <Style TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource Theme.WindowBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
@@ -47,6 +49,72 @@
         <Setter Property="Foreground" Value="{DynamicResource Theme.AccentSecondaryBrush}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="SectionTitleTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="SectionLabelTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="FieldLabelTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <Style x:Key="FieldValueTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="PrimaryActionButtonStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
+        <Setter Property="Background" Value="{DynamicResource Theme.AccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.AccentSecondaryBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="Margin" Value="0,0,10,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="RootBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="14"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RootBorder" Property="Opacity" Value="0.92" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="RootBorder" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SecondaryActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryActionButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+    </Style>
+
+    <Style x:Key="DangerActionButtonStyle" TargetType="Button" BasedOn="{StaticResource PrimaryActionButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
     </Style>
 
     <Style x:Key="NavButtonStyle" TargetType="Button">

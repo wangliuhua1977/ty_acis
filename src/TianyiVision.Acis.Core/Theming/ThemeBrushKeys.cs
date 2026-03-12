@@ -15,11 +15,16 @@ public static class ThemeBrushKeys
     public const string AccentSoftBrush = "Theme.AccentSoftBrush";
     public const string AccentSecondaryBrush = "Theme.AccentSecondaryBrush";
     public const string SuccessBrush = "Theme.SuccessBrush";
+    public const string SuccessSoftBrush = "Theme.SuccessSoftBrush";
     public const string WarningBrush = "Theme.WarningBrush";
+    public const string WarningSoftBrush = "Theme.WarningSoftBrush";
     public const string DangerBrush = "Theme.DangerBrush";
+    public const string DangerSoftBrush = "Theme.DangerSoftBrush";
     public const string InspectionActiveBrush = "Theme.InspectionActiveBrush";
+    public const string InspectionActiveSoftBrush = "Theme.InspectionActiveSoftBrush";
     public const string FaultBlinkBrush = "Theme.FaultBlinkBrush";
     public const string WorkbenchBackgroundBrush = "Theme.WorkbenchBackgroundBrush";
+    public const string MapGridOverlayBrush = "Theme.MapGridOverlayBrush";
     public const string SelectionBackgroundBrush = "Theme.SelectionBackgroundBrush";
     public const string SelectionBorderBrush = "Theme.SelectionBorderBrush";
 }
