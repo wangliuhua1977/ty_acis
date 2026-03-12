@@ -126,14 +126,14 @@ public sealed class HomePageViewModel : PageViewModelBase
         {
             if (parameter is HomeOverlayPanelState panel)
             {
-                panel.IsVisible = false;
+                HideOverlayPanel(panel);
             }
         });
         ShowOverlayPanelCommand = new RelayCommand(parameter =>
         {
             if (parameter is HomeOverlayPanelState panel)
             {
-                panel.IsVisible = true;
+                ShowOverlayPanel(panel);
             }
         });
 
@@ -212,15 +212,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         try
         {
             var snapshot = _layoutService.Load();
-            if (TryApplyPersistedLayout(snapshot))
-            {
-                ClampVisiblePanelsToViewport();
-            }
-            else
-            {
-                ApplyDefaultOverlayLayout();
-                ClampVisiblePanelsToViewport();
-            }
+            ApplyOverlayLayout(snapshot);
 
             RefreshHiddenPanels();
             _overlayLayoutInitialized = true;
@@ -243,6 +235,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         var position = ClampPosition(panelId, x, y);
         panel.X = position.X;
         panel.Y = position.Y;
+        panel.IsUsingDefaultPositionFallback = false;
     }
 
     public void CommitOverlayLayout()
@@ -250,6 +243,11 @@ public sealed class HomePageViewModel : PageViewModelBase
         if (_overlayViewport.Width > 0 && _overlayViewport.Height > 0)
         {
             ClampVisiblePanelsToViewport();
+        }
+
+        foreach (var panel in OverlayPanels)
+        {
+            panel.HasPersistedLayout = true;
         }
 
         SaveOverlayLayout();
@@ -322,8 +320,24 @@ public sealed class HomePageViewModel : PageViewModelBase
         }
     }
 
-    private void ApplyDefaultOverlayLayout()
+    private void HideOverlayPanel(HomeOverlayPanelState panel)
     {
+        panel.IsVisible = false;
+        panel.HasPersistedLayout = true;
+        panel.IsUsingDefaultPositionFallback = false;
+    }
+
+    private void ShowOverlayPanel(HomeOverlayPanelState panel)
+    {
+        EnsureOverlayPanelPosition(panel);
+        panel.IsVisible = true;
+        panel.HasPersistedLayout = true;
+    }
+
+    private void ApplyOverlayLayout(HomeOverlayLayoutSnapshot snapshot)
+    {
+        var layouts = snapshot.Panels.ToDictionary(panel => panel.PanelId, StringComparer.Ordinal);
+
         foreach (var panel in OverlayPanels)
         {
             if (!_overlayDefinitions.TryGetValue(panel.Id, out var definition))
@@ -331,11 +345,25 @@ public sealed class HomePageViewModel : PageViewModelBase
                 continue;
             }
 
-            var position = definition.CreateDefaultPosition(_overlayViewport);
-            panel.X = position.X;
-            panel.Y = position.Y;
+            var defaultPosition = definition.CreateDefaultPosition(_overlayViewport);
+            panel.DefaultX = defaultPosition.X;
+            panel.DefaultY = defaultPosition.Y;
+            panel.IsDragEnabled = true;
+
+            if (layouts.TryGetValue(panel.Id, out var layout))
+            {
+                panel.HasPersistedLayout = true;
+                panel.IsVisible = layout.IsVisible;
+                ApplyPanelPosition(panel, layout.X, layout.Y, useDefaultFallback: false);
+                continue;
+            }
+
+            panel.HasPersistedLayout = false;
             panel.IsVisible = true;
+            ApplyDefaultPosition(panel);
         }
+
+        CorrectOverlappingPanels();
     }
 
     private void SaveOverlayLayout()
@@ -352,57 +380,43 @@ public sealed class HomePageViewModel : PageViewModelBase
         _layoutService.Save(snapshot);
     }
 
-    private bool TryApplyPersistedLayout(HomeOverlayLayoutSnapshot snapshot)
+    private void ApplyDefaultPosition(HomeOverlayPanelState panel)
     {
-        if (snapshot.Panels.Count == 0)
+        var position = ClampPosition(panel.Id, panel.DefaultX, panel.DefaultY);
+        panel.X = position.X;
+        panel.Y = position.Y;
+        panel.IsUsingDefaultPositionFallback = true;
+    }
+
+    private void ApplyPanelPosition(HomeOverlayPanelState panel, double x, double y, bool useDefaultFallback)
+    {
+        if (useDefaultFallback)
         {
-            return false;
+            ApplyDefaultPosition(panel);
+            return;
         }
 
-        var visibleRectangles = new List<Rect>();
-        var appliedPanelIds = new HashSet<string>(StringComparer.Ordinal);
+        var position = ClampPosition(panel.Id, x, y);
+        panel.X = position.X;
+        panel.Y = position.Y;
+        panel.IsUsingDefaultPositionFallback = false;
+    }
 
-        foreach (var layout in snapshot.Panels)
+    private void EnsureOverlayPanelPosition(HomeOverlayPanelState panel)
+    {
+        if (!panel.HasPersistedLayout)
         {
-            var panel = OverlayPanels.FirstOrDefault(item => item.Id == layout.PanelId);
-            if (panel is null || !_overlayDefinitions.TryGetValue(layout.PanelId, out var definition))
-            {
-                continue;
-            }
-
-            appliedPanelIds.Add(panel.Id);
-
-            var position = ClampPosition(layout.PanelId, layout.X, layout.Y);
-            panel.X = position.X;
-            panel.Y = position.Y;
-            panel.IsVisible = layout.IsVisible;
-
-            if (panel.IsVisible)
-            {
-                visibleRectangles.Add(new Rect(position, definition.Size));
-            }
+            ApplyDefaultPosition(panel);
+            return;
         }
 
-        if (appliedPanelIds.Count == 0 || HasOverlapConflict(visibleRectangles))
+        if (!IsPositionWithinViewport(panel.Id, panel.X, panel.Y))
         {
-            return false;
+            ApplyDefaultPosition(panel);
+            return;
         }
 
-        foreach (var panel in OverlayPanels.Where(item => !appliedPanelIds.Contains(item.Id)))
-        {
-            if (!_overlayDefinitions.TryGetValue(panel.Id, out var definition))
-            {
-                continue;
-            }
-
-            var defaultPosition = definition.CreateDefaultPosition(_overlayViewport);
-            var position = ClampPosition(panel.Id, defaultPosition.X, defaultPosition.Y);
-            panel.X = position.X;
-            panel.Y = position.Y;
-            panel.IsVisible = true;
-        }
-
-        return true;
+        ApplyPanelPosition(panel, panel.X, panel.Y, useDefaultFallback: false);
     }
 
     private void ClampVisiblePanelsToViewport()
@@ -412,6 +426,39 @@ public sealed class HomePageViewModel : PageViewModelBase
             var position = ClampPosition(panel.Id, panel.X, panel.Y);
             panel.X = position.X;
             panel.Y = position.Y;
+        }
+    }
+
+    private void CorrectOverlappingPanels()
+    {
+        var visiblePanels = OverlayPanels.Where(panel => panel.IsVisible).ToList();
+        for (var index = 0; index < visiblePanels.Count; index++)
+        {
+            for (var otherIndex = index + 1; otherIndex < visiblePanels.Count; otherIndex++)
+            {
+                if (!TryGetPanelRect(visiblePanels[index], out var firstRect)
+                    || !TryGetPanelRect(visiblePanels[otherIndex], out var secondRect))
+                {
+                    continue;
+                }
+
+                var intersection = Rect.Intersect(firstRect, secondRect);
+                if (intersection.IsEmpty)
+                {
+                    continue;
+                }
+
+                var smallerArea = Math.Min(firstRect.Width * firstRect.Height, secondRect.Width * secondRect.Height);
+                if (smallerArea <= 0)
+                {
+                    continue;
+                }
+
+                if ((intersection.Width * intersection.Height) / smallerArea >= 0.45)
+                {
+                    ApplyDefaultPosition(visiblePanels[otherIndex]);
+                }
+            }
         }
     }
 
@@ -434,32 +481,33 @@ public sealed class HomePageViewModel : PageViewModelBase
             Math.Clamp(y, minY, maxY));
     }
 
-    private bool HasOverlapConflict(IReadOnlyList<Rect> rectangles)
+    private bool IsPositionWithinViewport(string panelId, double x, double y)
     {
-        for (var index = 0; index < rectangles.Count; index++)
+        if (!_overlayDefinitions.TryGetValue(panelId, out var definition)
+            || _overlayViewport.Width <= 0
+            || _overlayViewport.Height <= 0)
         {
-            for (var otherIndex = index + 1; otherIndex < rectangles.Count; otherIndex++)
-            {
-                var intersection = Rect.Intersect(rectangles[index], rectangles[otherIndex]);
-                if (intersection.IsEmpty)
-                {
-                    continue;
-                }
-
-                var smallerArea = Math.Min(rectangles[index].Width * rectangles[index].Height, rectangles[otherIndex].Width * rectangles[otherIndex].Height);
-                if (smallerArea <= 0)
-                {
-                    continue;
-                }
-
-                if ((intersection.Width * intersection.Height) / smallerArea >= 0.45)
-                {
-                    return true;
-                }
-            }
+            return false;
         }
 
-        return false;
+        var allowedRect = new Rect(
+            -definition.Size.Width + OverlayGrabWidth,
+            0,
+            _overlayViewport.Width + definition.Size.Width - OverlayGrabWidth,
+            _overlayViewport.Height);
+        return allowedRect.Contains(new Point(x, y));
+    }
+
+    private bool TryGetPanelRect(HomeOverlayPanelState panel, out Rect rect)
+    {
+        rect = Rect.Empty;
+        if (!_overlayDefinitions.TryGetValue(panel.Id, out var definition))
+        {
+            return false;
+        }
+
+        rect = new Rect(new Point(panel.X, panel.Y), definition.Size);
+        return true;
     }
 
     private static IReadOnlyDictionary<string, OverlayPanelDefinition> CreateOverlayDefinitions()
