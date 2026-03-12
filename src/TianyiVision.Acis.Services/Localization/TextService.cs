@@ -7,6 +7,8 @@ public sealed class TextService : ITextService
 {
     private readonly List<TerminologyProfile> _profiles;
 
+    public event EventHandler? ProfileChanged;
+
     public TextService(ITerminologyCatalogProvider provider)
     {
         _profiles = provider.GetProfiles().ToList();
@@ -22,7 +24,14 @@ public sealed class TextService : ITextService
 
     public void SetProfile(string profileId)
     {
-        ActiveProfile = _profiles.FirstOrDefault(profile => profile.Id == profileId) ?? ActiveProfile;
+        var nextProfile = _profiles.FirstOrDefault(profile => profile.Id == profileId);
+        if (nextProfile is null || nextProfile.Id == ActiveProfile.Id)
+        {
+            return;
+        }
+
+        ActiveProfile = nextProfile;
+        ProfileChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetProfile(TerminologyProfile profile)
@@ -37,6 +46,13 @@ public sealed class TextService : ITextService
             _profiles.Add(profile);
         }
 
+        var hasChanged = ActiveProfile.Id != profile.Id
+            || !ReferenceEquals(ActiveProfile, profile);
         ActiveProfile = profile;
+
+        if (hasChanged)
+        {
+            ProfileChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

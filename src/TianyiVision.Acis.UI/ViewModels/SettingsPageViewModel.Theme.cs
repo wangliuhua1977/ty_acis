@@ -15,13 +15,14 @@ public sealed partial class SettingsPageViewModel
 
         foreach (var theme in _themeService.GetAvailableThemes())
         {
-            var borderKey = theme.Id switch
+            var stored = FindThemePreference(theme.Id);
+            var borderKey = stored?.CardBorderStyleKey ?? theme.Id switch
             {
                 "polar-night-fusion" => ThemeBorderStyleStrong,
                 _ => ThemeBorderStyleSubtle
             };
 
-            var mapStyleKey = theme.Id switch
+            var mapStyleKey = stored?.MapStyleKey ?? theme.Id switch
             {
                 "polar-night-fusion" => ThemeMapStyleNight,
                 "glacier-silver-gold" => ThemeMapStyleGlacier,
@@ -32,10 +33,14 @@ public sealed partial class SettingsPageViewModel
                 theme.Id,
                 theme.DisplayName,
                 theme.Description,
-                _textService.Resolve(TextTokens.SettingsThemePresetTag),
-                true,
+                theme.IsPresetThemeId()
+                    ? _textService.Resolve(TextTokens.SettingsThemePresetTag)
+                    : _textService.Resolve(TextTokens.SettingsThemeCustomTag),
+                theme.IsPresetThemeId(),
                 CloneThemeDefinition(theme, theme.Id, theme.DisplayName, theme.Description),
-                CloneThemeDefinition(theme, theme.Id, theme.DisplayName, theme.Description),
+                theme.IsPresetThemeId()
+                    ? CloneThemeDefinition(theme, theme.Id, theme.DisplayName, theme.Description)
+                    : null,
                 borderKey,
                 borderKey,
                 mapStyleKey,
@@ -117,6 +122,11 @@ public sealed partial class SettingsPageViewModel
         {
             item.IsSelected = item.Key == key;
         }
+
+        OnPropertyChanged(nameof(IsInspectionGroupsVisible));
+        OnPropertyChanged(nameof(IsPointsVisible));
+        OnPropertyChanged(nameof(IsResponsibilityVisible));
+        OnPropertyChanged(nameof(IsVideoStrategyVisible));
 
         if (IsPlaceholderSectionVisible)
         {
@@ -202,6 +212,7 @@ public sealed partial class SettingsPageViewModel
 
         _themeService.SetTheme(appliedDefinition);
         _applyThemeToApplication(appliedDefinition);
+        PersistPreferences(activeThemeId: appliedDefinition.Id);
 
         foreach (var item in ThemeItems)
         {
@@ -228,6 +239,7 @@ public sealed partial class SettingsPageViewModel
         ThemeItems.Add(copiedTheme);
         _customThemeCounter++;
         SelectTheme(copiedTheme.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsThemeCopyFeedbackPattern), copiedTheme.DisplayName);
     }
 
@@ -243,6 +255,7 @@ public sealed partial class SettingsPageViewModel
         ThemeItems.Add(customTheme);
         _customThemeCounter++;
         SelectTheme(customTheme.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsThemeNewFeedbackPattern), customTheme.DisplayName);
     }
 
@@ -256,6 +269,7 @@ public sealed partial class SettingsPageViewModel
         SelectedTheme.SavedDefinition = BuildThemeDefinition(SelectedTheme);
         SelectedTheme.CardBorderStyleKey = ThemeEditor.SelectedCardBorderOption?.Key ?? ThemeBorderStyleSubtle;
         SelectedTheme.MapStyleKey = ThemeEditor.SelectedMapStyleOption?.Key ?? ThemeMapStyleOcean;
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsThemeSaveFeedbackPattern), SelectedTheme.DisplayName);
     }
 
@@ -276,6 +290,7 @@ public sealed partial class SettingsPageViewModel
         ThemeItems.Add(newTheme);
         _customThemeCounter++;
         SelectTheme(newTheme.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsThemeSaveAsFeedbackPattern), newTheme.DisplayName);
     }
 
@@ -295,6 +310,7 @@ public sealed partial class SettingsPageViewModel
 
         LoadThemeEditor(SelectedTheme);
         UpdateThemePreview();
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsThemeRestoreFeedbackPattern), SelectedTheme.DisplayName);
     }
 
@@ -360,4 +376,10 @@ public sealed partial class SettingsPageViewModel
     {
         return new ThemeDefinition(id, name, description, new Dictionary<string, string>(source.Colors, StringComparer.Ordinal));
     }
+}
+
+file static class ThemePresetExtensions
+{
+    public static bool IsPresetThemeId(this ThemeDefinition theme)
+        => theme.Id is "deep-ocean-blue" or "polar-night-fusion" or "glacier-silver-gold";
 }

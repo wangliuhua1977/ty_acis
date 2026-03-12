@@ -4,6 +4,8 @@ namespace TianyiVision.Acis.Services.Localization;
 
 public interface ITextService
 {
+    event EventHandler? ProfileChanged;
+
     TerminologyProfile ActiveProfile { get; }
 
     IReadOnlyList<TerminologyProfile> GetAvailableProfiles();

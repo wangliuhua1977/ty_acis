@@ -56,7 +56,7 @@
                                    Text="{Binding ApplicationName}" />
                         <TextBlock Margin="0,10,0,0"
                                    Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="首页已切换为地图主舞台，其他页面继续按基线迭代完善。" />
+                                   Text="{Binding SidebarDescription}" />
                     </StackPanel>
 
                     <ItemsControl Grid.Row="1" Margin="0,26,0,0" ItemsSource="{Binding NavigationItems}">

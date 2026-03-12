@@ -145,6 +145,238 @@
                     </ItemsControl>
                 </StackPanel>
 
+                <Grid Visibility="{Binding IsInspectionGroupsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="360" />
+                        <ColumnDefinition Width="18" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <Border Style="{StaticResource PrimaryPanelStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding InspectionGroupsPageTitle}" />
+                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding InspectionGroupsPageDescription}" />
+                                <TextBlock Margin="0,16,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding ConfigListTitle}" />
+                                <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding InspectionGroupConfigs}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                    Command="{Binding DataContext.SelectInspectionGroupConfigCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Name}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ResultMode}" />
+                                                    <DockPanel Margin="0,10,0,0">
+                                                        <TextBlock DockPanel.Dock="Left" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding FirstRunTime}" />
+                                                        <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding EnabledStatus}" />
+                                                    </DockPanel>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <Border Grid.Column="2" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ConfigDetailsTitle}" />
+                            <WrapPanel Margin="0,16,0,0">
+                                <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionNewText}" Content="{Binding ConfigActionNewText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionEditText}" Content="{Binding ConfigActionEditText}" />
+                            </WrapPanel>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupNameLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.Name}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupFirstRunLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.FirstRunTime}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupDailyRunsLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.DailyRuns}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupIntervalLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.Interval}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupResultModeLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.ResultMode}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupDispatchModeLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.DispatchMode}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding InspectionGroupEnabledLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedInspectionGroupConfig.EnabledStatus}" />
+                                </StackPanel>
+                            </Grid>
+                            <Border Margin="0,18,0,0" Style="{StaticResource MutedPanelStyle}">
+                                <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ConfigWorkspaceFeedback}" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid Visibility="{Binding IsPointsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="360" />
+                        <ColumnDefinition Width="18" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PointsPageTitle}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PointsPageDescription}" />
+                            <TextBlock Margin="0,16,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding ConfigListTitle}" />
+                            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding ManagedPointConfigs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                Command="{Binding DataContext.SelectManagedPointConfigCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Name}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Unit}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ConfigDetailsTitle}" />
+                            <WrapPanel Margin="0,16,0,0">
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionEditText}" Content="{Binding ConfigActionEditText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionSimulateText}" Content="{Binding ConfigActionSimulateText}" />
+                            </WrapPanel>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointNameLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.Name}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointUnitLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.Unit}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointControlStrategyLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.ControlStrategy}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointInspectionItemsLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.InspectionItems}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointSilentLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.SilentStatus}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PointPausedLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedManagedPointConfig.PausedStatus}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid Visibility="{Binding IsResponsibilityVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="360" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ResponsibilityPageTitle}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ResponsibilityPageDescription}" />
+                            <TextBlock Margin="0,16,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding ConfigListTitle}" />
+                            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding ResponsibilityMappingConfigs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                Command="{Binding DataContext.SelectResponsibilityMappingConfigCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Unit}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Maintainer}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ConfigDetailsTitle}" />
+                            <WrapPanel Margin="0,16,0,0">
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionEditText}" Content="{Binding ConfigActionEditText}" />
+                            </WrapPanel>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityUnitLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.Unit}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityPointCountLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.PointCount}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityMaintainerLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.Maintainer}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityMaintainerPhoneLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.MaintainerPhone}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilitySupervisorLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.Supervisor}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilitySupervisorPhoneLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedResponsibilityMappingConfig.SupervisorPhone}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid Visibility="{Binding IsVideoStrategyVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="360" /><ColumnDefinition Width="18" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding VideoStrategyPageTitle}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding VideoStrategyPageDescription}" />
+                            <TextBlock Margin="0,16,0,0" Style="{StaticResource AccentTextStyle}" Text="{Binding ConfigListTitle}" />
+                            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding VideoProtocolStrategyConfigs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource SettingsListItemButtonStyle}"
+                                                Command="{Binding DataContext.SelectVideoProtocolStrategyConfigCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Unit}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreferredProtocol}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource PrimaryPanelStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ConfigDetailsTitle}" />
+                            <WrapPanel Margin="0,16,0,0">
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding TriggerConfigPlaceholderActionCommand}" CommandParameter="{Binding ConfigActionEditText}" Content="{Binding ConfigActionEditText}" />
+                            </WrapPanel>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoUnitLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.Unit}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoPreferredProtocolLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.PreferredProtocol}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoManagementModeLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.ManagementMode}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoAverageLoadTimeLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.AverageLoadTime}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoSuccessRateLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.SuccessRate}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding VideoLatestVerifiedLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedVideoProtocolStrategyConfig.LatestVerifiedAt}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
                 <Grid Visibility="{Binding IsThemeCenterVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="320" />

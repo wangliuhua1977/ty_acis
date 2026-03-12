@@ -13,14 +13,19 @@ public sealed partial class SettingsPageViewModel
 
         foreach (var profile in _textService.GetAvailableProfiles())
         {
+            var stored = FindTerminologyPreference(profile.Id);
             items.Add(new TerminologySchemeSummaryState(
                 profile.Id,
                 profile.DisplayName,
-                DescribeTerminologyProfile(profile.Id),
-                _textService.Resolve(TextTokens.SettingsTerminologyPresetTag),
-                true,
+                stored?.Description ?? DescribeTerminologyProfile(profile.Id),
+                profile.Id is "telecom" or "security" or "tourism"
+                    ? _textService.Resolve(TextTokens.SettingsTerminologyPresetTag)
+                    : _textService.Resolve(TextTokens.SettingsTerminologyCustomTag),
+                profile.Id is "telecom" or "security" or "tourism",
                 CloneProfile(profile, profile.Id, profile.DisplayName),
-                CloneProfile(profile, profile.Id, profile.DisplayName)));
+                profile.Id is "telecom" or "security" or "tourism"
+                    ? CloneProfile(profile, profile.Id, profile.DisplayName)
+                    : null));
         }
 
         _customTerminologyCounter = items.Count + 1;
@@ -171,6 +176,7 @@ public sealed partial class SettingsPageViewModel
         var profile = BuildTerminologyProfile(SelectedTerminologyScheme);
         SelectedTerminologyScheme.SavedProfile = profile;
         _textService.SetProfile(profile);
+        PersistPreferences(activeTerminologyId: profile.Id);
 
         foreach (var item in TerminologyItems)
         {
@@ -202,6 +208,7 @@ public sealed partial class SettingsPageViewModel
         TerminologyItems.Add(copied);
         _customTerminologyCounter++;
         SelectTerminologyScheme(copied.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsTerminologyCopyFeedbackPattern), copied.DisplayName);
     }
 
@@ -220,6 +227,7 @@ public sealed partial class SettingsPageViewModel
         TerminologyItems.Add(custom);
         _customTerminologyCounter++;
         SelectTerminologyScheme(custom.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsTerminologyNewFeedbackPattern), custom.DisplayName);
     }
 
@@ -231,6 +239,7 @@ public sealed partial class SettingsPageViewModel
         }
 
         SelectedTerminologyScheme.SavedProfile = BuildTerminologyProfile(SelectedTerminologyScheme);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsTerminologySaveFeedbackPattern), SelectedTerminologyScheme.DisplayName);
     }
 
@@ -255,6 +264,7 @@ public sealed partial class SettingsPageViewModel
         TerminologyItems.Add(custom);
         _customTerminologyCounter++;
         SelectTerminologyScheme(custom.Id);
+        PersistPreferences();
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsTerminologySaveAsFeedbackPattern), custom.DisplayName);
     }
 
@@ -267,6 +277,7 @@ public sealed partial class SettingsPageViewModel
         }
 
         SelectTerminologyScheme(defaultScheme.Id);
+        PersistPreferences(activeTerminologyId: defaultScheme.Id);
         AppliedState.StatusText = string.Format(_textService.Resolve(TextTokens.SettingsTerminologyRestoreFeedbackPattern), defaultScheme.DisplayName);
     }
 

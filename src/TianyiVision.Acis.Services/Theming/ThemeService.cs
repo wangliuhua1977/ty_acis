@@ -7,6 +7,8 @@ public sealed class ThemeService : IThemeService
 {
     private readonly List<ThemeDefinition> _themes;
 
+    public event EventHandler? ThemeChanged;
+
     public ThemeService(IThemeCatalogProvider provider)
     {
         _themes = provider.GetThemes().ToList();
@@ -19,7 +21,14 @@ public sealed class ThemeService : IThemeService
 
     public void SetTheme(string themeId)
     {
-        ActiveTheme = _themes.FirstOrDefault(theme => theme.Id == themeId) ?? ActiveTheme;
+        var nextTheme = _themes.FirstOrDefault(theme => theme.Id == themeId);
+        if (nextTheme is null || nextTheme.Id == ActiveTheme.Id)
+        {
+            return;
+        }
+
+        ActiveTheme = nextTheme;
+        ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetTheme(ThemeDefinition theme)
@@ -34,6 +43,13 @@ public sealed class ThemeService : IThemeService
             _themes.Add(theme);
         }
 
+        var hasChanged = ActiveTheme.Id != theme.Id
+            || !ReferenceEquals(ActiveTheme, theme);
         ActiveTheme = theme;
+
+        if (hasChanged)
+        {
+            ThemeChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

@@ -5,6 +5,7 @@ using System.Windows.Media;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Core.Theming;
 using TianyiVision.Acis.Services.Localization;
+using TianyiVision.Acis.Services.Settings;
 using TianyiVision.Acis.Services.Theming;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
@@ -30,10 +31,12 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
     private const string ThemeMapStyleGlacier = "glacier";
 
     private readonly Action<ThemeDefinition> _applyThemeToApplication;
+    private readonly IAppPreferencesService _appPreferencesService;
     private readonly Dictionary<string, ThemeEditorFieldState> _themeFields = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TerminologyFieldState> _terminologyFields = new(StringComparer.Ordinal);
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
+    private readonly AppPreferencesSnapshot _preferencesSnapshot;
 
     private ObservableCollection<PanelPlaceholderState> _placeholderCards = [];
     private SettingsSectionState? _selectedSection;
@@ -47,6 +50,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
     public SettingsPageViewModel(
         ITextService textService,
         IThemeService themeService,
+        IAppPreferencesService appPreferencesService,
         Action<ThemeDefinition> applyThemeToApplication)
         : base(
             textService.Resolve(TextTokens.SettingsTitle),
@@ -54,7 +58,9 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
     {
         _textService = textService;
         _themeService = themeService;
+        _appPreferencesService = appPreferencesService;
         _applyThemeToApplication = applyThemeToApplication;
+        _preferencesSnapshot = appPreferencesService.Load();
 
         SelectSectionCommand = new RelayCommand(parameter =>
         {
@@ -108,6 +114,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         TerminologyItems = CreateTerminologySchemes();
         TerminologyGroups = CreateTerminologyGroups();
         TerminologyPreview = new TerminologyPreviewState();
+        InitializeConfigSelections();
 
         HookThemeEditor();
         HookTerminologyEditor();
@@ -221,8 +228,10 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
 
     public bool IsTerminologyCenterVisible => SelectedSection?.Key == SettingsSectionKey.TerminologyCenter;
 
-    public bool IsPlaceholderSectionVisible
-        => SelectedSection is not null
-           && SelectedSection.Key != SettingsSectionKey.ThemeCenter
-           && SelectedSection.Key != SettingsSectionKey.TerminologyCenter;
+    public bool IsPlaceholderSectionVisible => false;
+
+    public SettingsSectionKey SelectedSectionKey => SelectedSection?.Key ?? SettingsSectionKey.ThemeCenter;
+
+    public void ActivateSection(SettingsSectionKey key)
+        => SelectSection(key);
 }

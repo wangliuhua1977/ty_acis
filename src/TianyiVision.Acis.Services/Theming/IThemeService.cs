@@ -4,6 +4,8 @@ namespace TianyiVision.Acis.Services.Theming;
 
 public interface IThemeService
 {
+    event EventHandler? ThemeChanged;
+
     ThemeDefinition ActiveTheme { get; }
 
     IReadOnlyList<ThemeDefinition> GetAvailableThemes();

@@ -14,37 +14,28 @@ public sealed class ShellViewModel : ViewModelBase
 {
     private readonly IClockService _clockService;
     private readonly DispatcherTimer _clockTimer;
+    private readonly Dictionary<AppSectionId, Func<PageViewModelBase>> _pageFactories;
     private readonly Dictionary<AppSectionId, PageViewModelBase> _pageViewModels;
     private readonly ITextService _textService;
+    private string _applicationName = string.Empty;
+    private string _currentTimeLabel = string.Empty;
+    private string _currentUserLabel = string.Empty;
+    private string _currentUserValue = string.Empty;
+    private string _sidebarDescription = string.Empty;
     private string _currentTimeText = string.Empty;
-    private PageViewModelBase _currentPageViewModel;
+    private PageViewModelBase _currentPageViewModel = null!;
     private string _headerStatusFeedback = string.Empty;
+    private AppSectionId _currentSection = AppSectionId.Home;
 
     public ShellViewModel(
         ITextService textService,
         IClockService clockService,
-        HomePageViewModel homePage,
-        InspectionPageViewModel inspectionPage,
-        DispatchPageViewModel dispatchPage,
-        ReportsPageViewModel reportsPage,
-        SettingsPageViewModel settingsPage)
+        Dictionary<AppSectionId, Func<PageViewModelBase>> pageFactories)
     {
         _textService = textService;
         _clockService = clockService;
-        _pageViewModels = new Dictionary<AppSectionId, PageViewModelBase>
-        {
-            [AppSectionId.Home] = homePage,
-            [AppSectionId.Inspection] = inspectionPage,
-            [AppSectionId.Dispatch] = dispatchPage,
-            [AppSectionId.Reports] = reportsPage,
-            [AppSectionId.Settings] = settingsPage
-        };
-
-        ApplicationName = textService.Resolve(TextTokens.ApplicationName);
-        CurrentUserLabel = textService.Resolve(TextTokens.ShellCurrentUserLabel);
-        CurrentUserValue = textService.Resolve(TextTokens.ShellCurrentUserValue);
-        CurrentTimeLabel = textService.Resolve(TextTokens.ShellCurrentTimeLabel);
-        HeaderStatusFeedback = textService.Resolve(TextTokens.ShellHeaderFeedbackIdle);
+        _pageFactories = pageFactories;
+        _pageViewModels = [];
 
         SelectHeaderMetricCommand = new RelayCommand(parameter =>
         {
@@ -53,32 +44,11 @@ public sealed class ShellViewModel : ViewModelBase
                 SelectHeaderMetric(metric);
             }
         });
+        HeaderMetrics = [];
+        NavigationItems = [];
 
-        HeaderMetrics =
-        [
-            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderInspectionTasks), "18"),
-            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderFaults), "7"),
-            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderOutstanding), "4"),
-            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderPendingReview), "2"),
-            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderPendingDispatch), "5")
-        ];
-
-        NavigationItems =
-        [
-            CreateNavigationItem(AppSectionId.Home, textService.Resolve(TextTokens.NavigationHome), "01"),
-            CreateNavigationItem(AppSectionId.Inspection, textService.Resolve(TextTokens.NavigationInspection), "02"),
-            CreateNavigationItem(AppSectionId.Dispatch, textService.Resolve(TextTokens.NavigationDispatch), "03"),
-            CreateNavigationItem(AppSectionId.Reports, textService.Resolve(TextTokens.NavigationReports), "04"),
-            CreateNavigationItem(AppSectionId.Settings, textService.Resolve(TextTokens.NavigationSettings), "05")
-        ];
-
-        foreach (var pageViewModel in _pageViewModels.Values)
-        {
-            pageViewModel.NavigateToSection = Navigate;
-        }
-
-        _currentPageViewModel = homePage;
-        UpdateSelection(AppSectionId.Home);
+        RefreshShellText();
+        RebuildPages(AppSectionId.Home, null);
         UpdateCurrentTime();
         SelectHeaderMetric(HeaderMetrics.First());
 
@@ -88,19 +58,43 @@ public sealed class ShellViewModel : ViewModelBase
         };
         _clockTimer.Tick += (_, _) => UpdateCurrentTime();
         _clockTimer.Start();
+
+        _textService.ProfileChanged += HandleProfileChanged;
     }
 
-    public string ApplicationName { get; }
+    public string ApplicationName
+    {
+        get => _applicationName;
+        private set => SetProperty(ref _applicationName, value);
+    }
 
-    public string CurrentUserLabel { get; }
+    public string CurrentUserLabel
+    {
+        get => _currentUserLabel;
+        private set => SetProperty(ref _currentUserLabel, value);
+    }
 
-    public string CurrentUserValue { get; }
+    public string CurrentUserValue
+    {
+        get => _currentUserValue;
+        private set => SetProperty(ref _currentUserValue, value);
+    }
 
-    public string CurrentTimeLabel { get; }
+    public string CurrentTimeLabel
+    {
+        get => _currentTimeLabel;
+        private set => SetProperty(ref _currentTimeLabel, value);
+    }
 
-    public ObservableCollection<ShellStatusMetricState> HeaderMetrics { get; }
+    public string SidebarDescription
+    {
+        get => _sidebarDescription;
+        private set => SetProperty(ref _sidebarDescription, value);
+    }
 
-    public ObservableCollection<NavigationItemState> NavigationItems { get; }
+    public ObservableCollection<ShellStatusMetricState> HeaderMetrics { get; private set; }
+
+    public ObservableCollection<NavigationItemState> NavigationItems { get; private set; }
 
     public ICommand SelectHeaderMetricCommand { get; }
 
@@ -133,6 +127,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     private void Navigate(AppSectionId sectionId)
     {
+        _currentSection = sectionId;
         CurrentPageViewModel = _pageViewModels[sectionId];
         UpdateSelection(sectionId);
     }
@@ -162,5 +157,71 @@ public sealed class ShellViewModel : ViewModelBase
         HeaderStatusFeedback = string.Format(
             _textService.Resolve(TextTokens.ShellHeaderFeedbackPattern),
             metric.Title);
+    }
+
+    private void HandleProfileChanged(object? sender, EventArgs e)
+    {
+        var currentHeaderIndex = HeaderMetrics.IndexOf(HeaderMetrics.FirstOrDefault(item => item.IsSelected) ?? HeaderMetrics.First());
+        var settingsSection = (CurrentPageViewModel as SettingsPageViewModel)?.SelectedSectionKey;
+
+        RefreshShellText();
+        RebuildPages(_currentSection, settingsSection);
+
+        if (HeaderMetrics.Count > 0)
+        {
+            var safeIndex = Math.Clamp(currentHeaderIndex, 0, HeaderMetrics.Count - 1);
+            SelectHeaderMetric(HeaderMetrics[safeIndex]);
+        }
+    }
+
+    private void RefreshShellText()
+    {
+        ApplicationName = _textService.Resolve(TextTokens.ApplicationName);
+        CurrentUserLabel = _textService.Resolve(TextTokens.ShellCurrentUserLabel);
+        CurrentUserValue = _textService.Resolve(TextTokens.ShellCurrentUserValue);
+        CurrentTimeLabel = _textService.Resolve(TextTokens.ShellCurrentTimeLabel);
+        SidebarDescription = _textService.Resolve(TextTokens.ShellSidebarDescription);
+        HeaderStatusFeedback = _textService.Resolve(TextTokens.ShellHeaderFeedbackIdle);
+
+        HeaderMetrics = new ObservableCollection<ShellStatusMetricState>
+        {
+            new(_textService.Resolve(TextTokens.ShellHeaderInspectionTasks), "18"),
+            new(_textService.Resolve(TextTokens.ShellHeaderFaults), "7"),
+            new(_textService.Resolve(TextTokens.ShellHeaderOutstanding), "4"),
+            new(_textService.Resolve(TextTokens.ShellHeaderPendingReview), "2"),
+            new(_textService.Resolve(TextTokens.ShellHeaderPendingDispatch), "5")
+        };
+        OnPropertyChanged(nameof(HeaderMetrics));
+
+        NavigationItems = new ObservableCollection<NavigationItemState>
+        {
+            CreateNavigationItem(AppSectionId.Home, _textService.Resolve(TextTokens.NavigationHome), "01"),
+            CreateNavigationItem(AppSectionId.Inspection, _textService.Resolve(TextTokens.NavigationInspection), "02"),
+            CreateNavigationItem(AppSectionId.Dispatch, _textService.Resolve(TextTokens.NavigationDispatch), "03"),
+            CreateNavigationItem(AppSectionId.Reports, _textService.Resolve(TextTokens.NavigationReports), "04"),
+            CreateNavigationItem(AppSectionId.Settings, _textService.Resolve(TextTokens.NavigationSettings), "05")
+        };
+        OnPropertyChanged(nameof(NavigationItems));
+    }
+
+    private void RebuildPages(AppSectionId activeSection, SettingsSectionKey? settingsSection)
+    {
+        _pageViewModels.Clear();
+
+        foreach (var pair in _pageFactories)
+        {
+            var page = pair.Value();
+            page.NavigateToSection = Navigate;
+            _pageViewModels[pair.Key] = page;
+        }
+
+        if (settingsSection.HasValue
+            && _pageViewModels[AppSectionId.Settings] is SettingsPageViewModel settingsPage)
+        {
+            settingsPage.ActivateSection(settingsSection.Value);
+        }
+
+        CurrentPageViewModel = _pageViewModels[activeSection];
+        UpdateSelection(activeSection);
     }
 }
