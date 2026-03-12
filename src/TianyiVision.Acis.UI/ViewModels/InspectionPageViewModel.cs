@@ -12,6 +12,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly ITextService _textService;
     private readonly Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
     private readonly RelayCommand _executeInspectionCommand;
+    private RelayCommand _openReviewWallCommand = null!;
+    private RelayCommand _confirmReviewCompletedCommand = null!;
+    private RelayCommand _markSelectedReviewCommand = null!;
     private InspectionGroupSummaryState? _selectedGroup;
     private InspectionStrategySummaryState? _strategySummary;
     private InspectionTaskExecutionState? _executionState;
@@ -101,6 +104,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         ExecuteInspectionText = textService.Resolve(TextTokens.InspectionActionExecute);
         ViewHistoryText = textService.Resolve(TextTokens.InspectionActionHistory);
+        InitializeReviewText(textService);
 
         SelectGroupCommand = new RelayCommand(parameter =>
         {
@@ -140,6 +144,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             }
         });
         ToggleGroupCommand = new RelayCommand(_ => ToggleGroupEnabled());
+        InitializeReviewCommands();
 
         _workspaceByGroupId = CreateFakeWorkspaces();
         Groups = new ObservableCollection<InspectionGroupSummaryState>(_workspaceByGroupId.Values.Select(workspace => workspace.Group));
@@ -274,6 +279,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public ICommand ExecuteInspectionCommand { get; }
     public ICommand ViewHistoryCommand { get; }
     public ICommand ToggleGroupCommand { get; }
+    public ICommand OpenReviewWallCommand { get; private set; } = null!;
+    public ICommand ReturnToInspectionWorkspaceCommand { get; private set; } = null!;
+    public ICommand ConfirmReviewCompletedCommand { get; private set; } = null!;
+    public ICommand SelectReviewCardCommand { get; private set; } = null!;
+    public ICommand MarkSelectedReviewCommand { get; private set; } = null!;
+    public ICommand SelectReviewQuickFilterCommand { get; private set; } = null!;
 
     private void LoadGroup(InspectionGroupSummaryState group)
     {
@@ -307,6 +318,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         RefreshSummary(workspace);
+        LoadReviewState(workspace, refreshFromPoints: false);
     }
 
     private void SelectPoint(InspectionPointState point)
@@ -365,6 +377,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         RefreshSummary(workspace);
+        RefreshReviewStateAfterSimulation(workspace);
     }
 
     private void ToggleGroupEnabled()
@@ -470,6 +483,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 new InspectionStrategySummaryState("08:30", "4 次 / 日", "每 4 小时", reviewMode, autoDispatch),
                 CreateExecutionState("2 / 4", taskIdle, "14:30", true),
                 CreateRunSummary("沿江慢直播保障一组", "2026-03-12 09:10"),
+                "2026-03-12 09:46",
                 new ObservableCollection<InspectionPointState>(
                 [
                     CreatePoint("p-101", "江滩观景台 1 号位", "沿江运营一中心", "沿江维护班组", 90, 150, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, false, "2026-03-11 21:30", true),
@@ -496,6 +510,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 new InspectionStrategySummaryState("19:00", "3 次 / 日", "每 3 小时", directDispatchMode, manualDispatch),
                 CreateExecutionState("1 / 3", taskIdle, "22:00", true),
                 CreateRunSummary("城区夜景值守二组", "2026-03-12 19:05"),
+                "2026-03-12 19:37",
                 new ObservableCollection<InspectionPointState>(
                 [
                     CreatePoint("p-201", "城市中轴灯光秀主屏", "城区值守中心", "夜景值守班", 140, 140, InspectionPointStatus.Normal, InspectionPointStatus.Normal, true, true, false, true, "2026-03-05 09:20", false),
@@ -670,6 +685,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             InspectionStrategySummaryState strategySummary,
             InspectionTaskExecutionState executionState,
             InspectionRunSummaryState runSummary,
+            string taskFinishedAt,
             ObservableCollection<InspectionPointState> points,
             ObservableCollection<RecentFaultSummaryState> recentFaults)
         {
@@ -677,6 +693,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             StrategySummary = strategySummary;
             ExecutionState = executionState;
             RunSummary = runSummary;
+            TaskFinishedAt = taskFinishedAt;
             Points = points;
             RecentFaults = recentFaults;
         }
@@ -685,7 +702,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         public InspectionStrategySummaryState StrategySummary { get; }
         public InspectionTaskExecutionState ExecutionState { get; }
         public InspectionRunSummaryState RunSummary { get; }
+        public string TaskFinishedAt { get; }
         public ObservableCollection<InspectionPointState> Points { get; }
         public ObservableCollection<RecentFaultSummaryState> RecentFaults { get; }
+        public InspectionReviewTaskSummaryState? ReviewSummary { get; set; }
+        public ObservableCollection<InspectionReviewCardState>? ReviewCards { get; set; }
+        public InspectionReviewFilterState? ReviewFilter { get; set; }
     }
 }
