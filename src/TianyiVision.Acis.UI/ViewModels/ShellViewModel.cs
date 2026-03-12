@@ -72,6 +72,11 @@ public sealed class ShellViewModel : ViewModelBase
             CreateNavigationItem(AppSectionId.Settings, textService.Resolve(TextTokens.NavigationSettings), "05")
         ];
 
+        foreach (var pageViewModel in _pageViewModels.Values)
+        {
+            pageViewModel.NavigateToSection = Navigate;
+        }
+
         _currentPageViewModel = homePage;
         UpdateSelection(AppSectionId.Home);
         UpdateCurrentTime();

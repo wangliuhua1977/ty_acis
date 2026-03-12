@@ -46,6 +46,7 @@ public sealed partial class InspectionPageViewModel
     public string ReviewDetailReviewStatusLabel { get; private set; } = string.Empty;
     public string ReviewDetailScreenshotLabel { get; private set; } = string.Empty;
     public string ReviewDetailReviewNoteLabel { get; private set; } = string.Empty;
+    public string OpenDispatchFromReviewText { get; private set; } = string.Empty;
 
     public bool IsReviewWallVisible
     {
@@ -124,6 +125,7 @@ public sealed partial class InspectionPageViewModel
         ReviewDetailReviewStatusLabel = textService.Resolve(TextTokens.InspectionReviewDetailReviewStatusLabel);
         ReviewDetailScreenshotLabel = textService.Resolve(TextTokens.InspectionReviewDetailScreenshotLabel);
         ReviewDetailReviewNoteLabel = textService.Resolve(TextTokens.InspectionReviewDetailReviewNoteLabel);
+        OpenDispatchFromReviewText = textService.Resolve(TextTokens.DispatchActionOpenFromReview);
     }
 
     private void InitializeReviewCommands()

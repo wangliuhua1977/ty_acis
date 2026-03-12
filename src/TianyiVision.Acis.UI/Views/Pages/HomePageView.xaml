@@ -298,6 +298,10 @@
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.SelectedPointActionLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                             <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.ActionHint, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <Button Margin="0,12,0,0"
+                                    Style="{StaticResource SecondaryActionButtonStyle}"
+                                    Command="{Binding DataContext.OpenDispatchWorkspaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Content="{Binding DataContext.OpenDispatchWorkspaceText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

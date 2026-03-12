@@ -146,6 +146,7 @@
 
                     <StackPanel Grid.Column="1">
                         <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ConfirmReviewCompletedCommand}" Content="{Binding ReviewConfirmTaskText}" />
+                        <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenDispatchWorkspaceCommand}" Content="{Binding OpenDispatchFromReviewText}" />
                         <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ReturnToInspectionWorkspaceCommand}" Content="{Binding ReviewBackToInspectionText}" />
                         <Border Margin="0,12,0,0" Style="{StaticResource MutedPanelStyle}">
                             <StackPanel>

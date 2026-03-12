@@ -247,6 +247,7 @@
                             <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ExecuteInspectionCommand}" Content="{Binding ExecuteInspectionText}" />
                             <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ViewHistoryCommand}" Content="{Binding ViewHistoryText}" />
                             <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReviewWallCommand}" Content="{Binding OpenReviewWallText}" />
+                            <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenDispatchWorkspaceCommand}" Content="{Binding OpenDispatchWorkspaceText}" />
                             <Button Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ToggleGroupCommand}" Content="{Binding ToggleGroupActionText}" />
                         </WrapPanel>
                     </Border>

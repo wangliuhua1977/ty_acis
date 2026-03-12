@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Services.Layout;
 using TianyiVision.Acis.Services.Localization;
@@ -56,6 +57,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         SelectedPointFaultTypeLabel = textService.Resolve(TextTokens.HomeSelectedPointFaultTypeLabel);
         SelectedPointSummaryLabel = textService.Resolve(TextTokens.HomeSelectedPointSummaryLabel);
         SelectedPointActionLabel = textService.Resolve(TextTokens.HomeSelectedPointActionLabel);
+        OpenDispatchWorkspaceText = textService.Resolve(TextTokens.DispatchActionOpenWorkspace);
         LegendFaultText = textService.Resolve(TextTokens.HomeMapLegendFault);
         LegendNormalText = textService.Resolve(TextTokens.HomeMapLegendNormal);
         LegendKeyText = textService.Resolve(TextTokens.HomeMapLegendKey);
@@ -138,6 +140,7 @@ public sealed class HomePageViewModel : PageViewModelBase
             }
         });
         ResetOverlayLayoutCommand = new RelayCommand(_ => ResetOverlayLayout());
+        OpenDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
 
         RefreshHiddenPanels();
         SelectPoint(MapPoints.First(point => point.Id == "home-102"));
@@ -166,6 +169,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string SelectedPointFaultTypeLabel { get; }
     public string SelectedPointSummaryLabel { get; }
     public string SelectedPointActionLabel { get; }
+    public string OpenDispatchWorkspaceText { get; }
     public string LegendFaultText { get; }
     public string LegendNormalText { get; }
     public string LegendKeyText { get; }
@@ -195,6 +199,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public ICommand HideOverlayPanelCommand { get; }
     public ICommand ShowOverlayPanelCommand { get; }
     public ICommand ResetOverlayLayoutCommand { get; }
+    public ICommand OpenDispatchWorkspaceCommand { get; }
 
     public void InitializeOverlayLayout(double viewportWidth, double viewportHeight)
     {

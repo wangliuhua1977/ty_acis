@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
@@ -12,6 +13,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly ITextService _textService;
     private readonly Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
     private readonly RelayCommand _executeInspectionCommand;
+    private readonly RelayCommand _openDispatchWorkspaceCommand;
     private RelayCommand _openReviewWallCommand = null!;
     private RelayCommand _confirmReviewCompletedCommand = null!;
     private RelayCommand _markSelectedReviewCommand = null!;
@@ -104,6 +106,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         ExecuteInspectionText = textService.Resolve(TextTokens.InspectionActionExecute);
         ViewHistoryText = textService.Resolve(TextTokens.InspectionActionHistory);
+        OpenDispatchWorkspaceText = textService.Resolve(TextTokens.DispatchActionOpenWorkspace);
         InitializeReviewText(textService);
 
         SelectGroupCommand = new RelayCommand(parameter =>
@@ -135,7 +138,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         });
 
         _executeInspectionCommand = new RelayCommand(_ => SimulateInspectionExecution(), _ => ExecutionState?.IsEnabled == true);
+        _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
         ExecuteInspectionCommand = _executeInspectionCommand;
+        OpenDispatchWorkspaceCommand = _openDispatchWorkspaceCommand;
         ViewHistoryCommand = new RelayCommand(_ =>
         {
             if (ExecutionState is not null)
@@ -216,6 +221,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string LastConclusionLabel { get; }
     public string ExecuteInspectionText { get; }
     public string ViewHistoryText { get; }
+    public string OpenDispatchWorkspaceText { get; }
 
     public ObservableCollection<InspectionGroupSummaryState> Groups { get; }
 
@@ -277,6 +283,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
     public ICommand ExecuteInspectionCommand { get; }
+    public ICommand OpenDispatchWorkspaceCommand { get; }
     public ICommand ViewHistoryCommand { get; }
     public ICommand ToggleGroupCommand { get; }
     public ICommand OpenReviewWallCommand { get; private set; } = null!;
