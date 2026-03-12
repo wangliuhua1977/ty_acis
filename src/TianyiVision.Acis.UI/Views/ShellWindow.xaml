@@ -10,6 +10,19 @@
         MinHeight="720"
         Title="{Binding ApplicationName}"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="ShellStatusMetricButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
     <Border Margin="16"
             Background="{DynamicResource Theme.ShellGradientBrush}"
             BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
@@ -43,7 +56,7 @@
                                    Text="{Binding ApplicationName}" />
                         <TextBlock Margin="0,10,0,0"
                                    Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="首轮工程骨架，后续沿基线逐步接入 AI 巡检、派单和报表能力。" />
+                                   Text="首页已切换为地图主舞台，其他页面继续按基线迭代完善。" />
                     </StackPanel>
 
                     <ItemsControl Grid.Row="1" Margin="0,26,0,0" ItemsSource="{Binding NavigationItems}">
@@ -105,72 +118,51 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource PrimaryPanelStyle}" Margin="0,0,0,16">
+                <Border Margin="0,0,0,10"
+                        Padding="10"
+                        Background="{DynamicResource Theme.PanelBackgroundBrush}"
+                        BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="16">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="300" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="260" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Width="280"
-                                Padding="14"
-                                Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="16">
-                            <TextBlock VerticalAlignment="Center"
-                                       Style="{StaticResource PageDescriptionTextStyle}"
-                                       Text="{Binding SearchPlaceholder}" />
-                        </Border>
-
-                        <ItemsControl Grid.Column="1" ItemsSource="{Binding HeaderMetrics}">
+                        <ItemsControl ItemsSource="{Binding HeaderMetrics}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <UniformGrid Rows="1" Columns="4" />
+                                    <UniformGrid Rows="1" Columns="5" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="12,0,0,0"
-                                            Padding="14"
-                                            Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                            BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="16">
-                                        <StackPanel>
-                                            <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding Title}" />
-                                            <TextBlock Margin="0,8,0,6" FontSize="24" FontWeight="SemiBold" Text="{Binding Value}" />
-                                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
-                                        </StackPanel>
-                                    </Border>
+                                    <Button Style="{StaticResource ShellStatusMetricButtonStyle}"
+                                            Command="{Binding DataContext.SelectHeaderMetricCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}">
+                                        <DockPanel>
+                                            <TextBlock DockPanel.Dock="Left" Style="{StaticResource MetricTitleTextStyle}" Text="{Binding Title}" />
+                                            <TextBlock DockPanel.Dock="Right" FontSize="18" FontWeight="SemiBold" Text="{Binding Value}" />
+                                        </DockPanel>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <StackPanel Grid.Column="2" Margin="18,0,0,0" Orientation="Horizontal">
-                            <Border Margin="0,0,10,0"
-                                    Padding="14,10"
-                                    Background="{DynamicResource Theme.AccentSoftBrush}"
-                                    BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="14">
-                                <TextBlock Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding ThemeEntry}" />
-                            </Border>
-                            <Border Padding="14,10"
-                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="14">
-                                <TextBlock Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding SettingsEntry}" />
-                            </Border>
-                        </StackPanel>
+                        <Border Grid.Column="1"
+                                Margin="12,0,0,0"
+                                Padding="10,8"
+                                Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12">
+                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding HeaderStatusFeedback}" />
+                        </Border>
                     </Grid>
                 </Border>
 
-                <Border Grid.Row="1" Style="{StaticResource PrimaryPanelStyle}" Padding="20">
-                    <ContentControl Content="{Binding CurrentPageViewModel}" />
-                </Border>
+                <ContentControl Grid.Row="1" Content="{Binding CurrentPageViewModel}" />
             </Grid>
         </Grid>
     </Border>

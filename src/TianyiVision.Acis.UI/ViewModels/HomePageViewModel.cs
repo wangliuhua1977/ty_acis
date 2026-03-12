@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Layout;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
@@ -9,34 +11,36 @@ namespace TianyiVision.Acis.UI.ViewModels;
 
 public sealed class HomePageViewModel : PageViewModelBase
 {
+    private readonly IHomeOverlayLayoutService _layoutService;
     private readonly ITextService _textService;
-    private readonly RelayCommand _selectStatusMetricCommand;
     private HomePointSummaryState? _selectedPointSummary;
-    private string _statusFeedback = string.Empty;
 
-    public HomePageViewModel(ITextService textService)
+    public HomePageViewModel(ITextService textService, IHomeOverlayLayoutService layoutService)
         : base(
             textService.Resolve(TextTokens.HomeTitle),
             textService.Resolve(TextTokens.HomeDescription))
     {
         _textService = textService;
+        _layoutService = layoutService;
 
-        StatusBarDescription = textService.Resolve(TextTokens.HomeStatusBarDescription);
         MapStageBadge = textService.Resolve(TextTokens.HomeMapStageBadge);
         MapStageTitle = textService.Resolve(TextTokens.HomeMapStageTitle);
         MapStageDescription = textService.Resolve(TextTokens.HomeMapStageDescription);
         MapStageHint = textService.Resolve(TextTokens.HomeMapStageHint);
-        LeftSummaryTitle = textService.Resolve(TextTokens.HomeLeftSummaryTitle);
-        LeftSummaryDescription = textService.Resolve(TextTokens.HomeLeftSummaryDescription);
+        TaskPanelTitle = textService.Resolve(TextTokens.HomeTaskPanelTitle);
+        TaskPanelDescription = textService.Resolve(TextTokens.HomeTaskPanelDescription);
+        FaultPanelTitle = textService.Resolve(TextTokens.HomeFaultPanelTitle);
+        FaultPanelDescription = textService.Resolve(TextTokens.HomeFaultPanelDescription);
+        PointPanelTitle = textService.Resolve(TextTokens.HomePointPanelTitle);
+        PointPanelDescription = textService.Resolve(TextTokens.HomePointPanelDescription);
+        LegendPanelTitle = textService.Resolve(TextTokens.HomeLegendPanelTitle);
+        PanelRestoreHint = textService.Resolve(TextTokens.HomePanelRestoreHint);
+        MapSelectionHint = textService.Resolve(TextTokens.HomeMapSelectionHint);
         CurrentGroupLabel = textService.Resolve(TextTokens.HomeCurrentGroupLabel);
         ExecutionProgressLabel = textService.Resolve(TextTokens.HomeExecutionProgressLabel);
         PendingReviewLabel = textService.Resolve(TextTokens.HomePendingReviewLabel);
         PendingDispatchLabel = textService.Resolve(TextTokens.HomePendingDispatchLabel);
-        RecentFaultsTitle = textService.Resolve(TextTokens.HomeRecentFaultsTitle);
-        RecentFaultsDescription = textService.Resolve(TextTokens.HomeRecentFaultsDescription);
         RecentFaultTimeLabel = textService.Resolve(TextTokens.HomeRecentFaultTimeLabel);
-        RightSummaryTitle = textService.Resolve(TextTokens.HomeRightSummaryTitle);
-        RightSummaryDescription = textService.Resolve(TextTokens.HomeRightSummaryDescription);
         SelectedPointStatusLabel = textService.Resolve(TextTokens.HomeSelectedPointStatusLabel);
         SelectedPointFaultTypeLabel = textService.Resolve(TextTokens.HomeSelectedPointFaultTypeLabel);
         SelectedPointSummaryLabel = textService.Resolve(TextTokens.HomeSelectedPointSummaryLabel);
@@ -45,40 +49,41 @@ public sealed class HomePageViewModel : PageViewModelBase
         LegendNormalText = textService.Resolve(TextTokens.HomeMapLegendNormal);
         LegendKeyText = textService.Resolve(TextTokens.HomeMapLegendKey);
         LegendInspectingText = textService.Resolve(TextTokens.HomeMapLegendInspecting);
+
         CurrentGroupSummary = "沿江慢直播保障一组";
         ExecutionProgress = "8 / 12";
         PendingReviewSummary = "2 个待复核任务，优先关注沿江保障组与夜景值守组。";
         PendingDispatchSummary = "5 条待派单故障，当前以播放失败和离线类为主。";
-        StatusFeedback = textService.Resolve(TextTokens.HomeStatusFeedbackIdle);
 
-        _selectStatusMetricCommand = new RelayCommand(parameter =>
-        {
-            if (parameter is HomeStatusMetricState metric)
-            {
-                SelectStatusMetric(metric);
-            }
-        });
-        SelectStatusMetricCommand = _selectStatusMetricCommand;
-
-        StatusMetrics =
+        OverlayPanels =
         [
-            new HomeStatusMetricState(textService.Resolve(TextTokens.HomeMetricTasks), "18", "点击后预留进入 AI 智能巡检页"),
-            new HomeStatusMetricState(textService.Resolve(TextTokens.HomeMetricFaults), "7", "点击后预留进入故障派单处理页"),
-            new HomeStatusMetricState(textService.Resolve(TextTokens.HomeMetricOutstanding), "4", "点击后预留聚焦未恢复故障"),
-            new HomeStatusMetricState(textService.Resolve(TextTokens.HomeMetricPendingReview), "2", "点击后预留进入复核墙"),
-            new HomeStatusMetricState(textService.Resolve(TextTokens.HomeMetricPendingDispatch), "5", "点击后预留进入待派单列表")
+            new HomeOverlayPanelState("task-panel", TaskPanelTitle, 24, 24),
+            new HomeOverlayPanelState("fault-panel", FaultPanelTitle, 24, 430),
+            new HomeOverlayPanelState("point-panel", PointPanelTitle, 1080, 54),
+            new HomeOverlayPanelState("legend-panel", LegendPanelTitle, 360, 730)
         ];
+
+        TaskPanel = OverlayPanels.First(panel => panel.Id == "task-panel");
+        FaultPanel = OverlayPanels.First(panel => panel.Id == "fault-panel");
+        PointPanel = OverlayPanels.First(panel => panel.Id == "point-panel");
+        LegendPanel = OverlayPanels.First(panel => panel.Id == "legend-panel");
+        HiddenPanels = [];
+
+        foreach (var panel in OverlayPanels)
+        {
+            panel.PropertyChanged += HandleOverlayPanelChanged;
+        }
 
         MapPoints =
         [
-            CreatePoint("home-101", "江滩观景台 1 号位", "沿江运营一中心", HomeMapPointKind.Normal, 110, 190, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前画面和在线状态稳定，适合首页作为正常态示例。", "--", false),
-            CreatePoint("home-102", "轮渡码头北口", "沿江运营一中心", HomeMapPointKind.Fault, 260, 130, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "当前以播放失败为主，后续应在业务页承接协议切换与重试过程。", "2026-03-12 08:42", true),
-            CreatePoint("home-103", "跨江大桥东塔", "桥梁联防中心", HomeMapPointKind.Inspecting, 430, 220, textService.Resolve(TextTokens.InspectionStatusInspecting), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前点位处于巡检中，用于展示首页态势联动骨架。", "--", false),
-            CreatePoint("home-104", "城市阳台主广场", "文旅联合中心", HomeMapPointKind.Key, 650, 120, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeImageAbnormal), "当前属于重点区域点位，首页优先保留其可视化态势。", "2026-03-12 07:54", true),
-            CreatePoint("home-105", "防汛泵站外侧", "防汛保障中心", HomeMapPointKind.Fault, 340, 320, textService.Resolve(TextTokens.InspectionStatusPausedUntilRecovery), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "点位当前离线且处于恢复前暂停巡检状态。", "2026-03-12 07:10", true),
-            CreatePoint("home-106", "江心灯塔监看点", "航道监护中心", HomeMapPointKind.Fault, 560, 350, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "该点位在首页维持高亮告警，用于强调地图主舞台的故障态势。", "2026-03-12 06:51", true),
-            CreatePoint("home-107", "文化展亭西侧", "文旅联合中心", HomeMapPointKind.Key, 820, 200, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "重点区域点位，当前状态正常。", "--", false),
-            CreatePoint("home-108", "景观桥步道口", "桥梁联防中心", HomeMapPointKind.Normal, 980, 300, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "桥梁点位当前可稳定显示，用于首页整体态势铺陈。", "--", false)
+            CreatePoint("home-101", "江滩观景台 1 号位", "沿江运营一中心", HomeMapPointKind.Normal, 140, 210, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前画面和在线状态稳定，适合首页作为正常态示例。", "--", false),
+            CreatePoint("home-102", "轮渡码头北口", "沿江运营一中心", HomeMapPointKind.Fault, 320, 150, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed), "当前以播放失败为主，后续应在业务页承接协议切换与重试过程。", "2026-03-12 08:42", true),
+            CreatePoint("home-103", "跨江大桥东塔", "桥梁联防中心", HomeMapPointKind.Inspecting, 530, 250, textService.Resolve(TextTokens.InspectionStatusInspecting), textService.Resolve(TextTokens.InspectionFaultTypeNone), "当前点位处于巡检中，用于展示首页态势联动骨架。", "--", false),
+            CreatePoint("home-104", "城市阳台主广场", "文旅联合中心", HomeMapPointKind.Key, 790, 130, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeImageAbnormal), "当前属于重点区域点位，首页优先保留其可视化态势。", "2026-03-12 07:54", true),
+            CreatePoint("home-105", "防汛泵站外侧", "防汛保障中心", HomeMapPointKind.Fault, 450, 390, textService.Resolve(TextTokens.InspectionStatusPausedUntilRecovery), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "点位当前离线且处于恢复前暂停巡检状态。", "2026-03-12 07:10", true),
+            CreatePoint("home-106", "江心灯塔监看点", "航道监护中心", HomeMapPointKind.Fault, 700, 420, textService.Resolve(TextTokens.InspectionStatusFault), textService.Resolve(TextTokens.InspectionFaultTypeOffline), "该点位在首页维持高亮告警，用于强调地图主舞台的故障态势。", "2026-03-12 06:51", true),
+            CreatePoint("home-107", "文化展亭西侧", "文旅联合中心", HomeMapPointKind.Key, 980, 230, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "重点区域点位，当前状态正常。", "--", false),
+            CreatePoint("home-108", "景观桥步道口", "桥梁联防中心", HomeMapPointKind.Normal, 1120, 360, textService.Resolve(TextTokens.InspectionStatusNormal), textService.Resolve(TextTokens.InspectionFaultTypeNone), "桥梁点位当前可稳定显示，用于首页整体态势铺陈。", "--", false)
         ];
 
         RecentFaults =
@@ -107,27 +112,44 @@ public sealed class HomePageViewModel : PageViewModelBase
                 }
             }
         });
+        HideOverlayPanelCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is HomeOverlayPanelState panel)
+            {
+                panel.IsVisible = false;
+            }
+        });
+        ShowOverlayPanelCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is HomeOverlayPanelState panel)
+            {
+                panel.IsVisible = true;
+            }
+        });
 
-        SelectStatusMetric(StatusMetrics.First());
+        RestoreOverlayLayout();
+        RefreshHiddenPanels();
         SelectPoint(MapPoints.First(point => point.Id == "home-102"));
     }
 
-    public string StatusBarDescription { get; }
     public string MapStageBadge { get; }
     public string MapStageTitle { get; }
     public string MapStageDescription { get; }
     public string MapStageHint { get; }
-    public string LeftSummaryTitle { get; }
-    public string LeftSummaryDescription { get; }
+    public string TaskPanelTitle { get; }
+    public string TaskPanelDescription { get; }
+    public string FaultPanelTitle { get; }
+    public string FaultPanelDescription { get; }
+    public string PointPanelTitle { get; }
+    public string PointPanelDescription { get; }
+    public string LegendPanelTitle { get; }
+    public string PanelRestoreHint { get; }
+    public string MapSelectionHint { get; }
     public string CurrentGroupLabel { get; }
     public string ExecutionProgressLabel { get; }
     public string PendingReviewLabel { get; }
     public string PendingDispatchLabel { get; }
-    public string RecentFaultsTitle { get; }
-    public string RecentFaultsDescription { get; }
     public string RecentFaultTimeLabel { get; }
-    public string RightSummaryTitle { get; }
-    public string RightSummaryDescription { get; }
     public string SelectedPointStatusLabel { get; }
     public string SelectedPointFaultTypeLabel { get; }
     public string SelectedPointSummaryLabel { get; }
@@ -141,9 +163,14 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string PendingReviewSummary { get; }
     public string PendingDispatchSummary { get; }
 
-    public ObservableCollection<HomeStatusMetricState> StatusMetrics { get; }
+    public ObservableCollection<HomeOverlayPanelState> OverlayPanels { get; }
+    public ObservableCollection<HomeOverlayPanelState> HiddenPanels { get; }
     public ObservableCollection<HomeMapPointState> MapPoints { get; }
     public ObservableCollection<HomeRecentFaultState> RecentFaults { get; }
+    public HomeOverlayPanelState TaskPanel { get; }
+    public HomeOverlayPanelState FaultPanel { get; }
+    public HomeOverlayPanelState PointPanel { get; }
+    public HomeOverlayPanelState LegendPanel { get; }
 
     public HomePointSummaryState? SelectedPointSummary
     {
@@ -151,15 +178,22 @@ public sealed class HomePageViewModel : PageViewModelBase
         private set => SetProperty(ref _selectedPointSummary, value);
     }
 
-    public string StatusFeedback
-    {
-        get => _statusFeedback;
-        private set => SetProperty(ref _statusFeedback, value);
-    }
-
-    public ICommand SelectStatusMetricCommand { get; }
     public ICommand SelectMapPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
+    public ICommand HideOverlayPanelCommand { get; }
+    public ICommand ShowOverlayPanelCommand { get; }
+
+    public void UpdateOverlayPanelPosition(string panelId, double x, double y)
+    {
+        var panel = OverlayPanels.FirstOrDefault(item => item.Id == panelId);
+        if (panel is null)
+        {
+            return;
+        }
+
+        panel.X = Math.Max(0, x);
+        panel.Y = Math.Max(0, y);
+    }
 
     private HomeMapPointState CreatePoint(
         string id,
@@ -189,18 +223,6 @@ public sealed class HomePageViewModel : PageViewModelBase
             isInRecentFaultList);
     }
 
-    private void SelectStatusMetric(HomeStatusMetricState metric)
-    {
-        foreach (var item in StatusMetrics)
-        {
-            item.IsSelected = item == metric;
-        }
-
-        StatusFeedback = string.Format(
-            _textService.Resolve(TextTokens.HomeStatusFeedbackPattern),
-            metric.Title);
-    }
-
     private void SelectPoint(HomeMapPointState point)
     {
         foreach (var item in MapPoints)
@@ -220,5 +242,51 @@ public sealed class HomePageViewModel : PageViewModelBase
             point.FaultType,
             point.Summary,
             point.ActionHint);
+    }
+
+    private void HandleOverlayPanelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(HomeOverlayPanelState.X)
+            or nameof(HomeOverlayPanelState.Y)
+            or nameof(HomeOverlayPanelState.IsVisible))
+        {
+            RefreshHiddenPanels();
+            SaveOverlayLayout();
+        }
+    }
+
+    private void RefreshHiddenPanels()
+    {
+        HiddenPanels.Clear();
+        foreach (var panel in OverlayPanels.Where(item => !item.IsVisible))
+        {
+            HiddenPanels.Add(panel);
+        }
+    }
+
+    private void RestoreOverlayLayout()
+    {
+        var snapshot = _layoutService.Load();
+        foreach (var panelLayout in snapshot.Panels)
+        {
+            var panel = OverlayPanels.FirstOrDefault(item => item.Id == panelLayout.PanelId);
+            if (panel is null)
+            {
+                continue;
+            }
+
+            panel.X = panelLayout.X;
+            panel.Y = panelLayout.Y;
+            panel.IsVisible = panelLayout.IsVisible;
+        }
+    }
+
+    private void SaveOverlayLayout()
+    {
+        var snapshot = new HomeOverlayLayoutSnapshot(
+            OverlayPanels
+                .Select(panel => new HomeOverlayPanelLayout(panel.Id, panel.X, panel.Y, panel.IsVisible))
+                .ToList());
+        _layoutService.Save(snapshot);
     }
 }

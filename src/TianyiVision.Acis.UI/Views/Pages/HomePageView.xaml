@@ -3,25 +3,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:state="clr-namespace:TianyiVision.Acis.UI.States">
     <UserControl.Resources>
-        <Style x:Key="HomeStatusMetricButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
-            <Setter Property="Margin" Value="0,0,10,0" />
-            <Setter Property="Padding" Value="12,10" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
-                </DataTrigger>
-            </Style.Triggers>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+        <Style x:Key="OverlayPanelStyle" TargetType="Border">
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource Theme.PanelBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+            <Setter Property="Opacity" Value="0.94" />
         </Style>
 
-        <Style x:Key="HomeSectionCardStyle" TargetType="Border" BasedOn="{StaticResource PrimaryPanelStyle}">
-            <Setter Property="Padding" Value="16" />
-            <Setter Property="Margin" Value="0,0,0,14" />
-        </Style>
-
-        <Style x:Key="HomeFaultButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
-            <Setter Property="Margin" Value="0,0,0,10" />
+        <Style x:Key="OverlayFaultButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
@@ -31,58 +25,31 @@
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="RestoreOverlayButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="10,8" />
+        </Style>
+
         <Style x:Key="HomeMapPointButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="92" />
-            <Setter Property="Height" Value="92" />
+            <Setter Property="Width" Value="96" />
+            <Setter Property="Height" Value="96" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Grid Width="92" Height="92" RenderTransformOrigin="0.5,0.5">
+                        <Grid Width="96" Height="96" RenderTransformOrigin="0.5,0.5">
                             <Grid.RenderTransform>
                                 <ScaleTransform />
                             </Grid.RenderTransform>
-                            <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{DynamicResource Theme.InspectionActiveSoftBrush}" Opacity="0" />
-                            <Ellipse x:Name="FaultRing" Width="76" Height="76" Fill="{DynamicResource Theme.DangerSoftBrush}" Opacity="0" />
-                            <Border x:Name="CoreBorder"
-                                    Width="50"
-                                    Height="50"
-                                    CornerRadius="25"
-                                    Background="{DynamicResource Theme.AccentSoftBrush}"
-                                    BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
-                                    BorderThickness="1"
-                                    VerticalAlignment="Top"
-                                    HorizontalAlignment="Center">
-                                <TextBlock HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Margin="8"
-                                           FontSize="10"
-                                           FontWeight="SemiBold"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           Text="{Binding Name}" />
+                            <Ellipse x:Name="PulseRing" Width="74" Height="74" Fill="{DynamicResource Theme.InspectionActiveSoftBrush}" Opacity="0" />
+                            <Ellipse x:Name="FaultRing" Width="80" Height="80" Fill="{DynamicResource Theme.DangerSoftBrush}" Opacity="0" />
+                            <Border x:Name="CoreBorder" Width="52" Height="52" CornerRadius="26" Background="{DynamicResource Theme.AccentSoftBrush}" BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}" BorderThickness="1" VerticalAlignment="Top" HorizontalAlignment="Center">
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8" FontSize="10" FontWeight="SemiBold" Text="{Binding Name}" TextAlignment="Center" TextWrapping="Wrap" />
                             </Border>
-                            <Border x:Name="SelectionTag"
-                                    Width="16"
-                                    Height="16"
-                                    CornerRadius="8"
-                                    Background="{DynamicResource Theme.AccentBrush}"
-                                    BorderBrush="{DynamicResource Theme.TextPrimaryBrush}"
-                                    BorderThickness="1"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Top"
-                                    Margin="0,10,10,0"
-                                    Visibility="Collapsed" />
-                            <TextBlock Margin="0,62,0,0"
-                                       Width="90"
-                                       HorizontalAlignment="Center"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource Theme.TextPrimaryBrush}"
-                                       Text="{Binding Name}"
-                                       TextAlignment="Center"
-                                       TextWrapping="Wrap" />
+                            <Border x:Name="SelectionTag" Width="16" Height="16" CornerRadius="8" Background="{DynamicResource Theme.AccentBrush}" BorderBrush="{DynamicResource Theme.TextPrimaryBrush}" BorderThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0" Visibility="Collapsed" />
+                            <TextBlock Margin="0,64,0,0" Width="94" HorizontalAlignment="Center" FontSize="11" Text="{Binding Name}" TextAlignment="Center" TextWrapping="Wrap" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <DataTrigger Binding="{Binding Kind}" Value="{x:Static state:HomeMapPointKind.Normal}">
@@ -113,17 +80,13 @@
                                     <BeginStoryboard>
                                         <Storyboard RepeatBehavior="Forever">
                                             <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity" From="0.25" To="0.8" Duration="0:0:0.8" AutoReverse="True" />
-                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.05" Duration="0:0:0.8" AutoReverse="True" />
-                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="1.05" Duration="0:0:0.8" AutoReverse="True" />
                                         </Storyboard>
                                     </BeginStoryboard>
                                 </DataTrigger.EnterActions>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="CoreBorder" Property="BorderThickness" Value="2" />
                                 <Setter TargetName="SelectionTag" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="CoreBorder" Property="Width" Value="54" />
-                                <Setter TargetName="CoreBorder" Property="Height" Value="54" />
+                                <Setter TargetName="CoreBorder" Property="BorderThickness" Value="2" />
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -132,238 +95,183 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Grid x:Name="RootMapStage" ClipToBounds="True" Background="{DynamicResource Theme.WorkbenchBackgroundBrush}">
+        <Canvas>
+            <Line X1="20" Y1="90" X2="1260" Y2="90" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="20" Y1="220" X2="1260" Y2="220" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="20" Y1="350" X2="1260" Y2="350" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="20" Y1="480" X2="1260" Y2="480" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="20" Y1="610" X2="1260" Y2="610" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="110" Y1="20" X2="110" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="310" Y1="20" X2="310" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="510" Y1="20" X2="510" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="710" Y1="20" X2="710" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="910" Y1="20" X2="910" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Line X1="1110" Y1="20" X2="1110" Y2="780" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+            <Path Stroke="{DynamicResource Theme.AccentSecondaryBrush}" StrokeThickness="3" Opacity="0.40" Data="M 60,540 C 240,320 430,400 610,230 S 930,150 1160,300 1210,460 1240,420" />
+            <Path Stroke="{DynamicResource Theme.PanelBorderStrongBrush}" StrokeThickness="3" Opacity="0.32" Data="M 80,180 C 260,360 360,390 560,470 720,530 950,470 1180,210" />
+            <Path Stroke="{DynamicResource Theme.AccentBrush}" StrokeThickness="4" Opacity="0.20" Data="M 180,70 C 310,90 490,110 660,120 870,132 1010,128 1200,90" />
+        </Canvas>
 
-        <StackPanel Margin="0,0,0,14">
-            <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
-            <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
-        </StackPanel>
+        <ItemsControl ItemsSource="{Binding MapPoints}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Canvas />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                    <Setter Property="Canvas.Left" Value="{Binding X}" />
+                    <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                </Style>
+            </ItemsControl.ItemContainerStyle>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type state:HomeMapPointState}">
+                    <Button Style="{StaticResource HomeMapPointButtonStyle}" Command="{Binding DataContext.SelectMapPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" ToolTip="{Binding Name}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
-        <Border Grid.Row="1" Style="{StaticResource HomeSectionCardStyle}" Padding="14" Margin="0,0,0,16">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="280" />
-                </Grid.ColumnDefinitions>
+        <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,18,0,0" Padding="14,10" Background="{DynamicResource Theme.PanelBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="16" Opacity="0.92">
+            <StackPanel>
+                <TextBlock HorizontalAlignment="Center" Style="{StaticResource AccentTextStyle}" Text="{Binding MapStageBadge}" />
+                <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" Style="{StaticResource SectionTitleTextStyle}" Text="{Binding MapStageTitle}" />
+                <TextBlock Margin="0,8,0,0" Width="420" HorizontalAlignment="Center" TextAlignment="Center" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding MapStageDescription}" />
+            </StackPanel>
+        </Border>
 
-                <ItemsControl ItemsSource="{Binding StatusMetrics}">
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Padding="12,10" Background="{DynamicResource Theme.PanelBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="14" Opacity="0.9">
+            <StackPanel>
+                <TextBlock Width="220" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PanelRestoreHint}" />
+                <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding HiddenPanels}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Rows="1" Columns="5" />
+                            <WrapPanel />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type state:HomeStatusMetricState}">
-                            <Button Style="{StaticResource HomeStatusMetricButtonStyle}"
-                                    Command="{Binding DataContext.SelectStatusMetricCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    CommandParameter="{Binding}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding Title}" />
-                                    <TextBlock Margin="0,8,0,0" FontSize="22" FontWeight="SemiBold" Text="{Binding Value}" />
-                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Hint}" />
-                                </StackPanel>
-                            </Button>
+                        <DataTemplate DataType="{x:Type state:HomeOverlayPanelState}">
+                            <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding DataContext.ShowOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="{Binding Title}" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-
-                <Border Grid.Column="1" Margin="16,0,0,0" Background="{DynamicResource Theme.PanelMutedBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource MetricTitleTextStyle}" Text="{Binding StatusBarDescription}" />
-                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding StatusFeedback}" />
-                    </StackPanel>
-                </Border>
-            </Grid>
+            </StackPanel>
         </Border>
 
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.15*" />
-                <ColumnDefinition Width="4.9*" />
-                <ColumnDefinition Width="1.15*" />
-            </Grid.ColumnDefinitions>
-
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="0,0,16,0">
-                    <Border Style="{StaticResource HomeSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding LeftSummaryTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding LeftSummaryDescription}" />
-                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding CurrentGroupLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentGroupSummary}" />
-                            <TextBlock Margin="0,16,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ExecutionProgressLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionProgress}" />
-                            <ProgressBar Margin="0,12,0,0" Height="8" Maximum="12" Value="8" />
-                            <TextBlock Margin="0,16,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PendingReviewLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PendingReviewSummary}" />
-                            <TextBlock Margin="0,16,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PendingDispatchLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PendingDispatchSummary}" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource HomeSectionCardStyle}" Margin="0">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding RecentFaultsTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding RecentFaultsDescription}" />
-                            <ItemsControl ItemsSource="{Binding RecentFaults}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type state:HomeRecentFaultState}">
-                                        <Button Style="{StaticResource HomeFaultButtonStyle}"
-                                                Command="{Binding DataContext.SelectRecentFaultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding FaultType}" />
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.RecentFaultTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding LatestFaultTime}" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-
-            <Border Grid.Column="1" Style="{StaticResource PrimaryPanelStyle}" Padding="14" Margin="0,0,16,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <DockPanel>
-                        <StackPanel DockPanel.Dock="Left">
-                            <TextBlock Style="{StaticResource AccentTextStyle}" Text="{Binding MapStageBadge}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource SectionTitleTextStyle}" Text="{Binding MapStageTitle}" />
-                            <TextBlock Margin="0,8,0,0" Width="420" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding MapStageDescription}" />
-                        </StackPanel>
-                        <Border DockPanel.Dock="Right"
-                                HorizontalAlignment="Right"
-                                Padding="12,8"
-                                Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="12">
-                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding MapStageHint}" Width="260" />
-                        </Border>
-                    </DockPanel>
-
-                    <Border Grid.Row="1"
-                            Margin="0,16,0,14"
-                            Background="{DynamicResource Theme.WorkbenchBackgroundBrush}"
-                            BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
-                            BorderThickness="1"
-                            CornerRadius="24"
-                            Padding="12">
-                        <Grid ClipToBounds="True">
-                            <Canvas>
-                                <Line X1="40" Y1="80" X2="1180" Y2="80" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="40" Y1="190" X2="1180" Y2="190" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="40" Y1="300" X2="1180" Y2="300" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="40" Y1="410" X2="1180" Y2="410" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="120" Y1="20" X2="120" Y2="470" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="320" Y1="20" X2="320" Y2="470" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="520" Y1="20" X2="520" Y2="470" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="720" Y1="20" X2="720" Y2="470" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Line X1="920" Y1="20" X2="920" Y2="470" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                <Path Stroke="{DynamicResource Theme.AccentSecondaryBrush}" StrokeThickness="2" Opacity="0.45" Data="M 70,340 C 220,210 360,260 520,170 S 820,150 980,240 1090,300 1160,280" />
-                                <Path Stroke="{DynamicResource Theme.PanelBorderStrongBrush}" StrokeThickness="2" Opacity="0.40" Data="M 110,140 C 250,290 380,300 560,360 720,410 940,360 1110,180" />
-                                <Path Stroke="{DynamicResource Theme.AccentBrush}" StrokeThickness="3" Opacity="0.35" Data="M 200,80 C 310,110 420,120 560,130 690,145 870,160 1060,110" />
-                            </Canvas>
-
-                            <ItemsControl ItemsSource="{Binding MapPoints}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <Canvas />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemContainerStyle>
-                                    <Style TargetType="ContentPresenter">
-                                        <Setter Property="Canvas.Left" Value="{Binding X}" />
-                                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
-                                    </Style>
-                                </ItemsControl.ItemContainerStyle>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type state:HomeMapPointState}">
-                                        <Button Style="{StaticResource HomeMapPointButtonStyle}"
-                                                Command="{Binding DataContext.SelectMapPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip="{Binding Name}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+        <Canvas x:Name="OverlayCanvas" Background="Transparent">
+            <Border Width="300" Canvas.Left="{Binding TaskPanel.X}" Canvas.Top="{Binding TaskPanel.Y}" DataContext="{Binding TaskPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top">
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="Transparent" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.TaskPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.TaskPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                </StackPanel>
+                            </Border>
+                            <Button Grid.Column="1" Width="28" Height="28" Margin="12,0,0,0" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
                         </Grid>
-                    </Border>
-
-                    <WrapPanel Grid.Row="2">
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendFaultText}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendNormalText}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendKeyText}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendInspectingText}" /></Border>
-                    </WrapPanel>
-                </Grid>
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.CurrentGroupLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.CurrentGroupSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.ExecutionProgressLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.ExecutionProgress, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <ProgressBar Margin="0,10,0,0" Height="8" Maximum="12" Value="8" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.PendingReviewLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PendingReviewSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.PendingDispatchLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PendingDispatchSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
-            <Border Grid.Column="2" Style="{StaticResource HomeSectionCardStyle}" Margin="0">
+            <Border Width="320" Canvas.Left="{Binding FaultPanel.X}" Canvas.Top="{Binding FaultPanel.Y}" DataContext="{Binding FaultPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding RightSummaryTitle}" />
-                    <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding RightSummaryDescription}" />
-
-                    <Border Height="160"
-                            Background="{DynamicResource Theme.InspectionActiveSoftBrush}"
-                            BorderBrush="{DynamicResource Theme.InspectionActiveBrush}"
-                            BorderThickness="1"
-                            CornerRadius="18"
-                            Padding="16">
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                            <TextBlock Style="{StaticResource AccentTextStyle}" Text="{Binding SelectedPointSummary.StatusText}" />
-                            <TextBlock Margin="0,16,0,0" FontSize="22" FontWeight="SemiBold" Text="{Binding SelectedPointSummary.PointName}" TextAlignment="Center" />
-                            <TextBlock Margin="0,12,0,0" Width="220" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointSummary.UnitName}" TextAlignment="Center" />
-                        </StackPanel>
-                    </Border>
-
-                    <Grid Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="96" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SelectedPointStatusLabel}" />
-                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointSummary.StatusText}" />
-                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SelectedPointFaultTypeLabel}" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointSummary.FaultType}" />
-                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SelectedPointSummaryLabel}" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointSummary.Summary}" />
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="Transparent" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.FaultPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.FaultPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="1" Width="28" Height="28" Margin="12,0,0,0" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
                     </Grid>
+                    <ItemsControl ItemsSource="{Binding DataContext.RecentFaults, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type state:HomeRecentFaultState}">
+                                <Button Style="{StaticResource OverlayFaultButtonStyle}" Command="{Binding DataContext.SelectRecentFaultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
+                                            <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding FaultType}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.RecentFaultTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                            <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding LatestFaultTime}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
-                    <Border Margin="0,18,0,0" Style="{StaticResource MutedPanelStyle}" Padding="14">
+            <Border Width="320" Canvas.Left="{Binding PointPanel.X}" Canvas.Top="{Binding PointPanel.Y}" DataContext="{Binding PointPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="Transparent" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.PointPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PointPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="1" Width="28" Height="28" Margin="12,0,0,0" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                    </Grid>
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding DataContext.SelectedPointSummary.PointName, RelativeSource={RelativeSource AncestorType=UserControl}}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.UnitName, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="94" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointStatusLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.SelectedPointSummary.StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointFaultTypeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.SelectedPointSummary.FaultType, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointSummaryLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.Summary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    </Grid>
+                    <Border Margin="0,14,0,0" Style="{StaticResource MutedPanelStyle}" Padding="12">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding SelectedPointActionLabel}" />
-                            <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointSummary.ActionHint}" />
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.SelectedPointActionLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.ActionHint, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
-        </Grid>
+
+            <Border Width="520" Canvas.Left="{Binding LegendPanel.X}" Canvas.Top="{Binding LegendPanel.Y}" DataContext="{Binding LegendPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="Transparent" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.LegendPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.MapSelectionHint, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="1" Width="28" Height="28" Margin="12,0,0,0" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                    </Grid>
+                    <WrapPanel>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendFaultText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendNormalText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendKeyText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendInspectingText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Canvas>
     </Grid>
 </UserControl>

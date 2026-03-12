@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 using System.Windows.Threading;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
@@ -14,8 +15,10 @@ public sealed class ShellViewModel : ViewModelBase
     private readonly IClockService _clockService;
     private readonly DispatcherTimer _clockTimer;
     private readonly Dictionary<AppSectionId, PageViewModelBase> _pageViewModels;
+    private readonly ITextService _textService;
     private string _currentTimeText = string.Empty;
     private PageViewModelBase _currentPageViewModel;
+    private string _headerStatusFeedback = string.Empty;
 
     public ShellViewModel(
         ITextService textService,
@@ -26,6 +29,7 @@ public sealed class ShellViewModel : ViewModelBase
         ReportsPageViewModel reportsPage,
         SettingsPageViewModel settingsPage)
     {
+        _textService = textService;
         _clockService = clockService;
         _pageViewModels = new Dictionary<AppSectionId, PageViewModelBase>
         {
@@ -40,16 +44,23 @@ public sealed class ShellViewModel : ViewModelBase
         CurrentUserLabel = textService.Resolve(TextTokens.ShellCurrentUserLabel);
         CurrentUserValue = textService.Resolve(TextTokens.ShellCurrentUserValue);
         CurrentTimeLabel = textService.Resolve(TextTokens.ShellCurrentTimeLabel);
-        SearchPlaceholder = textService.Resolve(TextTokens.ShellSearchPlaceholder);
-        ThemeEntry = textService.Resolve(TextTokens.ShellThemeEntry);
-        SettingsEntry = textService.Resolve(TextTokens.ShellSettingsEntry);
+        HeaderStatusFeedback = textService.Resolve(TextTokens.ShellHeaderFeedbackIdle);
+
+        SelectHeaderMetricCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is ShellStatusMetricState metric)
+            {
+                SelectHeaderMetric(metric);
+            }
+        });
 
         HeaderMetrics =
         [
-            new MetricCardState(textService.Resolve(TextTokens.ShellHeaderInspectionTasks), "--", "待接入统计"),
-            new MetricCardState(textService.Resolve(TextTokens.ShellHeaderFaults), "--", "待接入统计"),
-            new MetricCardState(textService.Resolve(TextTokens.ShellHeaderOutstanding), "--", "待接入统计"),
-            new MetricCardState(textService.Resolve(TextTokens.ShellHeaderRecovered), "--", "待接入统计")
+            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderInspectionTasks), "18"),
+            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderFaults), "7"),
+            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderOutstanding), "4"),
+            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderPendingReview), "2"),
+            new ShellStatusMetricState(textService.Resolve(TextTokens.ShellHeaderPendingDispatch), "5")
         ];
 
         NavigationItems =
@@ -64,6 +75,7 @@ public sealed class ShellViewModel : ViewModelBase
         _currentPageViewModel = homePage;
         UpdateSelection(AppSectionId.Home);
         UpdateCurrentTime();
+        SelectHeaderMetric(HeaderMetrics.First());
 
         _clockTimer = new DispatcherTimer
         {
@@ -81,15 +93,17 @@ public sealed class ShellViewModel : ViewModelBase
 
     public string CurrentTimeLabel { get; }
 
-    public string SearchPlaceholder { get; }
-
-    public string ThemeEntry { get; }
-
-    public string SettingsEntry { get; }
-
-    public ObservableCollection<MetricCardState> HeaderMetrics { get; }
+    public ObservableCollection<ShellStatusMetricState> HeaderMetrics { get; }
 
     public ObservableCollection<NavigationItemState> NavigationItems { get; }
+
+    public ICommand SelectHeaderMetricCommand { get; }
+
+    public string HeaderStatusFeedback
+    {
+        get => _headerStatusFeedback;
+        private set => SetProperty(ref _headerStatusFeedback, value);
+    }
 
     public string CurrentTimeText
     {
@@ -131,5 +145,17 @@ public sealed class ShellViewModel : ViewModelBase
     private void UpdateCurrentTime()
     {
         CurrentTimeText = _clockService.GetCurrentTime().ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private void SelectHeaderMetric(ShellStatusMetricState metric)
+    {
+        foreach (var item in HeaderMetrics)
+        {
+            item.IsSelected = item == metric;
+        }
+
+        HeaderStatusFeedback = string.Format(
+            _textService.Resolve(TextTokens.ShellHeaderFeedbackPattern),
+            metric.Title);
     }
 }

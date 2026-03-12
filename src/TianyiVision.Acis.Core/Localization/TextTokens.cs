@@ -14,6 +14,10 @@ public static class TextTokens
     public const string ShellHeaderFaults = "shell.headerFaults";
     public const string ShellHeaderOutstanding = "shell.headerOutstanding";
     public const string ShellHeaderRecovered = "shell.headerRecovered";
+    public const string ShellHeaderPendingReview = "shell.headerPendingReview";
+    public const string ShellHeaderPendingDispatch = "shell.headerPendingDispatch";
+    public const string ShellHeaderFeedbackIdle = "shell.headerFeedbackIdle";
+    public const string ShellHeaderFeedbackPattern = "shell.headerFeedbackPattern";
 
     public const string NavigationHome = "navigation.home";
     public const string NavigationInspection = "navigation.inspection";
@@ -30,7 +34,6 @@ public static class TextTokens
     public const string HomeMetricOutstanding = "home.metricOutstanding";
     public const string HomeMetricPendingReview = "home.metricPendingReview";
     public const string HomeMetricPendingDispatch = "home.metricPendingDispatch";
-    public const string HomeStatusBarDescription = "home.statusBarDescription";
     public const string HomeMapStageBadge = "home.mapStageBadge";
     public const string HomeMapStageTitle = "home.mapStageTitle";
     public const string HomeMapStageDescription = "home.mapStageDescription";
@@ -55,8 +58,15 @@ public static class TextTokens
     public const string HomeSelectedPointSummaryLabel = "home.selectedPointSummaryLabel";
     public const string HomeSelectedPointActionLabel = "home.selectedPointActionLabel";
     public const string HomeSelectedPointActionHint = "home.selectedPointActionHint";
-    public const string HomeStatusFeedbackIdle = "home.statusFeedbackIdle";
-    public const string HomeStatusFeedbackPattern = "home.statusFeedbackPattern";
+    public const string HomeTaskPanelTitle = "home.taskPanelTitle";
+    public const string HomeTaskPanelDescription = "home.taskPanelDescription";
+    public const string HomeFaultPanelTitle = "home.faultPanelTitle";
+    public const string HomeFaultPanelDescription = "home.faultPanelDescription";
+    public const string HomePointPanelTitle = "home.pointPanelTitle";
+    public const string HomePointPanelDescription = "home.pointPanelDescription";
+    public const string HomeLegendPanelTitle = "home.legendPanelTitle";
+    public const string HomePanelRestoreHint = "home.panelRestoreHint";
+    public const string HomeMapSelectionHint = "home.mapSelectionHint";
 
     public const string InspectionTitle = "inspection.title";
     public const string InspectionDescription = "inspection.description";
