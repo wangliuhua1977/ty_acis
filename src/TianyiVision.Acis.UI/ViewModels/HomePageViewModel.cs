@@ -134,7 +134,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         {
             if (parameter is HomeOverlayPanelState panel)
             {
-                ShowOverlayPanel(panel);
+                RestoreOverlayPanel(panel);
             }
         });
         ResetOverlayLayoutCommand = new RelayCommand(_ => ResetOverlayLayout());
@@ -330,11 +330,13 @@ public sealed class HomePageViewModel : PageViewModelBase
         panel.IsUsingDefaultPositionFallback = false;
     }
 
-    private void ShowOverlayPanel(HomeOverlayPanelState panel)
+    public void RestoreOverlayPanel(HomeOverlayPanelState panel)
     {
+        // Keep restore on a single path so button click, position correction, visibility and persistence stay in sync.
         EnsureOverlayPanelPosition(panel);
         panel.IsVisible = true;
         panel.HasPersistedLayout = true;
+        RefreshHiddenPanels();
         SaveOverlayLayout();
     }
 

@@ -95,6 +95,30 @@ public partial class HomePageView : UserControl
         _dragPanel = null;
     }
 
+    private void RestoreTaskPanel_OnClick(object sender, RoutedEventArgs e)
+    {
+        RestoreOverlayPanel(_viewModel?.TaskPanel);
+        e.Handled = true;
+    }
+
+    private void RestoreFaultPanel_OnClick(object sender, RoutedEventArgs e)
+    {
+        RestoreOverlayPanel(_viewModel?.FaultPanel);
+        e.Handled = true;
+    }
+
+    private void RestorePointPanel_OnClick(object sender, RoutedEventArgs e)
+    {
+        RestoreOverlayPanel(_viewModel?.PointPanel);
+        e.Handled = true;
+    }
+
+    private void RestoreLegendPanel_OnClick(object sender, RoutedEventArgs e)
+    {
+        RestoreOverlayPanel(_viewModel?.LegendPanel);
+        e.Handled = true;
+    }
+
     private void SyncOverlayLayout()
     {
         if (DataContext is HomePageViewModel viewModel
@@ -151,5 +175,17 @@ public partial class HomePageView : UserControl
         Canvas.SetTop(border, panel.Y);
         Panel.SetZIndex(border, 30);
         border.Visibility = panel.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RestoreOverlayPanel(HomeOverlayPanelState? panel)
+    {
+        if (_viewModel is null || panel is null)
+        {
+            return;
+        }
+
+        _viewModel.RestoreOverlayPanel(panel);
+        ApplyOverlayPanelStates();
+        UpdateLayout();
     }
 }

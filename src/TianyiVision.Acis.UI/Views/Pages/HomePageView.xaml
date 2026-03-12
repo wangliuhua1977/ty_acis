@@ -33,7 +33,7 @@
             <Setter Property="MinWidth" Value="108" />
             <Setter Property="Opacity" Value="0.84" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding CommandParameter.IsVisible, RelativeSource={RelativeSource Self}}" Value="True">
+                <DataTrigger Binding="{Binding Tag.IsVisible, RelativeSource={RelativeSource Self}}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Theme.AccentSoftBrush}" />
                     <Setter Property="BorderBrush" Value="{DynamicResource Theme.AccentBrush}" />
                     <Setter Property="Opacity" Value="1" />
@@ -177,28 +177,28 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Panel.ZIndex="25" Style="{StaticResource OverlayPanelStyle}" Padding="12">
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Panel.ZIndex="60" Style="{StaticResource OverlayPanelStyle}" Padding="12">
             <StackPanel>
                 <WrapPanel>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding TaskPanel}">
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding TaskPanel}" Click="RestoreTaskPanel_OnClick">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock VerticalAlignment="Center" Text="{Binding TaskPanelTitle}" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding FaultPanel}">
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding FaultPanel}" Click="RestoreFaultPanel_OnClick">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock VerticalAlignment="Center" Text="{Binding FaultPanelTitle}" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding PointPanel}">
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding PointPanel}" Click="RestorePointPanel_OnClick">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock VerticalAlignment="Center" Text="{Binding PointPanelTitle}" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ShowOverlayPanelCommand}" CommandParameter="{Binding LegendPanel}">
+                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding LegendPanel}" Click="RestoreLegendPanel_OnClick">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
                             <TextBlock VerticalAlignment="Center" Text="{Binding LegendPanelTitle}" />
