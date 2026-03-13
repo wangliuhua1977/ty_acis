@@ -41,7 +41,13 @@ public static class ThemeBrushKeys
     public const string InputPlaceholderBrush = "Theme.InputPlaceholderBrush";
     public const string ComboBoxBackgroundBrush = "Theme.ComboBoxBackgroundBrush";
     public const string ComboBoxBorderBrush = "Theme.ComboBoxBorderBrush";
+    public const string ComboBoxHoverBorderBrush = "Theme.ComboBoxHoverBorderBrush";
+    public const string ComboBoxFocusBorderBrush = "Theme.ComboBoxFocusBorderBrush";
+    public const string ComboBoxOpenBorderBrush = "Theme.ComboBoxOpenBorderBrush";
     public const string ComboBoxArrowBrush = "Theme.ComboBoxArrowBrush";
+    public const string ComboBoxArrowHoverBrush = "Theme.ComboBoxArrowHoverBrush";
+    public const string ComboBoxArrowOpenBrush = "Theme.ComboBoxArrowOpenBrush";
+    public const string ComboBoxDividerBrush = "Theme.ComboBoxDividerBrush";
     public const string ComboBoxPopupBackgroundBrush = "Theme.ComboBoxPopupBackgroundBrush";
     public const string ComboBoxPopupBorderBrush = "Theme.ComboBoxPopupBorderBrush";
     public const string ComboBoxItemHoverBrush = "Theme.ComboBoxItemHoverBrush";

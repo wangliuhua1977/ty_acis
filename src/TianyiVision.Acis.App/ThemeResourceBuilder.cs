@@ -68,11 +68,17 @@ internal static class ThemeResourceBuilder
 
         AddBrush(resources, ThemeBrushKeys.ComboBoxBackgroundBrush, Blend(surfaceSecondary, workbenchBackground, 0.30));
         AddBrush(resources, ThemeBrushKeys.ComboBoxBorderBrush, Blend(borderPrimary, windowBackground, 0.14));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxHoverBorderBrush, WithOpacity(Blend(borderStrong, accentPrimary, 0.12), 0.74));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxFocusBorderBrush, WithOpacity(Blend(borderStrong, accentSecondary, 0.18), 0.84));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxOpenBorderBrush, WithOpacity(Blend(borderStrong, accentSecondary, 0.24), 0.92));
         AddBrush(resources, ThemeBrushKeys.ComboBoxArrowBrush, Blend(textSecondary, accentSecondary, 0.16));
-        AddBrush(resources, ThemeBrushKeys.ComboBoxPopupBackgroundBrush, Blend(surfacePrimary, workbenchBackground, 0.14));
-        AddBrush(resources, ThemeBrushKeys.ComboBoxPopupBorderBrush, Blend(borderStrong, accentPrimary, 0.20));
-        AddBrush(resources, ThemeBrushKeys.ComboBoxItemHoverBrush, WithOpacity(accentPrimary, 0.16));
-        AddBrush(resources, ThemeBrushKeys.ComboBoxItemSelectedBrush, WithOpacity(accentSecondary, 0.22));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxArrowHoverBrush, WithOpacity(Blend(textSecondary, accentPrimary, 0.22), 0.92));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxArrowOpenBrush, WithOpacity(Blend(textPrimary, accentSecondary, 0.18), 0.96));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxDividerBrush, WithOpacity(Blend(borderPrimary, windowBackground, 0.08), 0.52));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxPopupBackgroundBrush, Blend(surfacePrimary, workbenchBackground, 0.10));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxPopupBorderBrush, WithOpacity(Blend(borderStrong, accentPrimary, 0.10), 0.72));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxItemHoverBrush, WithOpacity(Blend(accentPrimary, surfacePrimary, 0.14), 0.10));
+        AddBrush(resources, ThemeBrushKeys.ComboBoxItemSelectedBrush, WithOpacity(Blend(accentSecondary, surfacePrimary, 0.16), 0.14));
 
         AddBrush(resources, ThemeBrushKeys.DataGridHeaderBackgroundBrush, Blend(surfacePrimary, borderPrimary, 0.10));
         AddBrush(resources, ThemeBrushKeys.DataGridHeaderForegroundBrush, textPrimary);

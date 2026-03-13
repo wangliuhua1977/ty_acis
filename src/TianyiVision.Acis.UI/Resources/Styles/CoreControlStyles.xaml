@@ -273,10 +273,11 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.ComboBoxItemHoverBrush}" />
+                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.ComboBoxDividerBrush}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.ComboBoxItemSelectedBrush}" />
-                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.InputFocusBorderBrush}" />
+                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.ComboBoxOpenBorderBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="ItemBorder" Property="Opacity" Value="0.54" />
@@ -334,7 +335,7 @@
 
                             <Border Grid.Column="1"
                                     Background="Transparent"
-                                    BorderBrush="{DynamicResource Theme.ComboBoxBorderBrush}"
+                                    BorderBrush="{DynamicResource Theme.ComboBoxDividerBrush}"
                                     BorderThickness="1,0,0,0">
                                 <Grid>
                                     <Path x:Name="ArrowPath"
@@ -382,13 +383,16 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.InputHoverBorderBrush}" />
+                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.ComboBoxHoverBorderBrush}" />
+                            <Setter TargetName="ArrowPath" Property="Stroke" Value="{DynamicResource Theme.ComboBoxArrowHoverBrush}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.InputFocusBorderBrush}" />
+                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.ComboBoxFocusBorderBrush}" />
+                            <Setter TargetName="ArrowPath" Property="Stroke" Value="{DynamicResource Theme.ComboBoxArrowHoverBrush}" />
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.InputFocusBorderBrush}" />
+                            <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource Theme.ComboBoxOpenBorderBrush}" />
+                            <Setter TargetName="ArrowPath" Property="Stroke" Value="{DynamicResource Theme.ComboBoxArrowOpenBrush}" />
                             <Setter TargetName="ArrowPath" Property="RenderTransformOrigin" Value="0.5,0.5" />
                             <Setter TargetName="ArrowPath" Property="RenderTransform">
                                 <Setter.Value>
