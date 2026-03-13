@@ -6,10 +6,14 @@ namespace TianyiVision.Acis.Services.Dispatch;
 public sealed class FileDispatchResponsibilityService : IDispatchResponsibilityService
 {
     private readonly IDispatchResponsibilitySettingsService _settingsService;
+    private readonly IDispatchWorkOrderSnapshotService? _workOrderSnapshotService;
 
-    public FileDispatchResponsibilityService(IDispatchResponsibilitySettingsService settingsService)
+    public FileDispatchResponsibilityService(
+        IDispatchResponsibilitySettingsService settingsService,
+        IDispatchWorkOrderSnapshotService? workOrderSnapshotService = null)
     {
         _settingsService = settingsService;
+        _workOrderSnapshotService = workOrderSnapshotService;
     }
 
     public ServiceResponse<DispatchResponsibilityModel> Resolve(DispatchResponsibilityQueryDto request)
@@ -67,8 +71,11 @@ public sealed class FileDispatchResponsibilityService : IDispatchResponsibilityS
         var nextSettings = settings with { DeviceAssignments = deviceAssignments };
         _settingsService.Save(nextSettings);
 
+        var mapped = MapAssignment(updated, request.CurrentHandlingUnit ?? string.Empty, "LocalFile.Override");
+        _workOrderSnapshotService?.UpdateResponsibility(request.PointId, mapped);
+
         return ServiceResponse<DispatchResponsibilityModel>.Success(
-            MapAssignment(updated, request.CurrentHandlingUnit ?? string.Empty, "LocalFile.Override"),
+            mapped,
             "Responsibility mapping saved to the local dispatch responsibility file.");
     }
 

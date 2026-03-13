@@ -110,6 +110,8 @@ public sealed class ResponsibilityMappingConfigState : ViewModelBase
     public string SupervisorPhone { get; }
     public string NotificationChannelId { get; }
     public string SourceLabel { get; }
+    public string PrimaryLabel => string.IsNullOrWhiteSpace(DeviceCode) ? CurrentHandlingUnit : DeviceCode;
+    public string SecondaryLabel => string.IsNullOrWhiteSpace(PointName) ? $"{Maintainer} / {Supervisor}" : PointName;
 
     public bool IsSelected
     {
@@ -196,6 +198,52 @@ public sealed class ResponsibilityMappingEditorState : ViewModelBase
     }
 }
 
+public sealed class ResponsibilityDefaultEditorState : ViewModelBase
+{
+    private string _currentHandlingUnit = string.Empty;
+    private string _maintainer = string.Empty;
+    private string _maintainerPhone = string.Empty;
+    private string _supervisor = string.Empty;
+    private string _supervisorPhone = string.Empty;
+    private string _notificationChannelId = string.Empty;
+
+    public string CurrentHandlingUnit
+    {
+        get => _currentHandlingUnit;
+        set => SetProperty(ref _currentHandlingUnit, value);
+    }
+
+    public string Maintainer
+    {
+        get => _maintainer;
+        set => SetProperty(ref _maintainer, value);
+    }
+
+    public string MaintainerPhone
+    {
+        get => _maintainerPhone;
+        set => SetProperty(ref _maintainerPhone, value);
+    }
+
+    public string Supervisor
+    {
+        get => _supervisor;
+        set => SetProperty(ref _supervisor, value);
+    }
+
+    public string SupervisorPhone
+    {
+        get => _supervisorPhone;
+        set => SetProperty(ref _supervisorPhone, value);
+    }
+
+    public string NotificationChannelId
+    {
+        get => _notificationChannelId;
+        set => SetProperty(ref _notificationChannelId, value);
+    }
+}
+
 public sealed class NotificationChannelConfigState : ViewModelBase
 {
     private bool _isSelected;
@@ -225,6 +273,9 @@ public sealed class NotificationChannelConfigState : ViewModelBase
 
     public string EnabledLabel => IsEnabled ? "已启用" : "已停用";
     public string DefaultLabel => IsDefault ? "默认通道" : "非默认";
+    public string MaskedWebhook => string.IsNullOrWhiteSpace(WebhookUrl)
+        ? "未配置 Webhook"
+        : $"{WebhookUrl[..Math.Min(24, WebhookUrl.Length)]}{(WebhookUrl.Length > 24 ? "..." : string.Empty)}";
 
     public bool IsSelected
     {

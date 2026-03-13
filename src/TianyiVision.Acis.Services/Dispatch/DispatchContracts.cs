@@ -29,11 +29,18 @@ public sealed record DispatchResponsibilityModel(
     string NotificationChannelId,
     string SourceTag);
 
+public sealed record DispatchNotificationTimelineEntryModel(
+    string SendType,
+    string SentAt,
+    string StatusText,
+    string TimelineActor);
+
 public sealed record DispatchNotificationRecordModel(
     string FaultNotificationSentAt,
     string FaultNotificationStatus,
     string RecoveryNotificationSentAt,
-    string RecoveryNotificationStatus);
+    string RecoveryNotificationStatus,
+    IReadOnlyList<DispatchNotificationTimelineEntryModel> TimelineEntries);
 
 public sealed record DispatchRepeatFaultModel(
     string FirstFaultTime,

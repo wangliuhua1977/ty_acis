@@ -112,7 +112,7 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             DispatchWorkOrderStatusModel.PendingDispatch,
             DispatchRecoveryStatusModel.Unrecovered,
             responsibility,
-            new DispatchNotificationRecordModel("--", "待发送", "--", "待发送"),
+            new DispatchNotificationRecordModel("--", "待发送", "--", "待发送", []),
             alerts.Min(item => item.FirstDetectedAt),
             alerts.Max(item => item.LatestDetectedAt),
             alerts.Count,

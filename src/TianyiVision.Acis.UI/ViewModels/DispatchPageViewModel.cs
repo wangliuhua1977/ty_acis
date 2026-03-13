@@ -647,7 +647,8 @@ public sealed class DispatchPageViewModel : PageViewModelBase
             workOrder.NotificationRecord.FaultNotificationSentAt,
             workOrder.NotificationRecord.FaultNotificationStatus,
             workOrder.NotificationRecord.RecoveryNotificationSentAt,
-            workOrder.NotificationRecord.RecoveryNotificationStatus);
+            workOrder.NotificationRecord.RecoveryNotificationStatus,
+            workOrder.NotificationRecord.TimelineEntries);
     }
 
     private static DateTime ParseFaultTime(string value)
@@ -689,30 +690,11 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         string faultNotificationSentAt,
         string faultNotificationStatus,
         string recoveryNotificationSentAt,
-        string recoveryNotificationStatus)
+        string recoveryNotificationStatus,
+        IReadOnlyList<DispatchNotificationTimelineEntryModel> notificationTimeline)
     {
         var repeatSummary = string.Format(_textService.Resolve(TextTokens.DispatchRepeatSummaryPattern), repeatCount);
-        var entries = new ObservableCollection<DispatchNotificationEntryState>();
-
-        if (faultNotificationSentAt != "--")
-        {
-            entries.Add(new DispatchNotificationEntryState(
-                _textService.Resolve(TextTokens.DispatchNotificationFaultTitle),
-                faultNotificationSentAt,
-                faultNotificationStatus,
-                $"{responsibility.CurrentHandlingUnit} / {responsibility.MaintainerName}"));
-        }
-
-        if (recoveryNotificationSentAt != "--")
-        {
-            entries.Insert(
-                0,
-                new DispatchNotificationEntryState(
-                    _textService.Resolve(TextTokens.DispatchNotificationRecoveryTitle),
-                    recoveryNotificationSentAt,
-                    recoveryNotificationStatus,
-                    $"{responsibility.CurrentHandlingUnit} / {responsibility.MaintainerName}"));
-        }
+        var entries = CreateTimelineEntries(notificationTimeline, responsibility, faultNotificationSentAt, faultNotificationStatus, recoveryNotificationSentAt, recoveryNotificationStatus);
 
         return new DispatchWorkOrderDetailState(
             workOrderId,
@@ -748,5 +730,55 @@ public sealed class DispatchPageViewModel : PageViewModelBase
                 recoveryNotificationStatus,
                 entries),
             new DispatchRepeatFaultState(firstFaultTime, latestFaultTime, repeatCount, repeatSummary));
+    }
+
+    private ObservableCollection<DispatchNotificationEntryState> CreateTimelineEntries(
+        IReadOnlyList<DispatchNotificationTimelineEntryModel> notificationTimeline,
+        DispatchResponsibilityState responsibility,
+        string faultNotificationSentAt,
+        string faultNotificationStatus,
+        string recoveryNotificationSentAt,
+        string recoveryNotificationStatus)
+    {
+        if (notificationTimeline.Count > 0)
+        {
+            return new ObservableCollection<DispatchNotificationEntryState>(
+                notificationTimeline.Select(item => new DispatchNotificationEntryState(
+                    ResolveTimelineTitle(item.SendType),
+                    item.SentAt,
+                    item.StatusText,
+                    item.TimelineActor)));
+        }
+
+        var entries = new ObservableCollection<DispatchNotificationEntryState>();
+
+        if (faultNotificationSentAt != "--")
+        {
+            entries.Add(new DispatchNotificationEntryState(
+                _textService.Resolve(TextTokens.DispatchNotificationFaultTitle),
+                faultNotificationSentAt,
+                faultNotificationStatus,
+                $"{responsibility.CurrentHandlingUnit} / {responsibility.MaintainerName}"));
+        }
+
+        if (recoveryNotificationSentAt != "--")
+        {
+            entries.Insert(
+                0,
+                new DispatchNotificationEntryState(
+                    _textService.Resolve(TextTokens.DispatchNotificationRecoveryTitle),
+                    recoveryNotificationSentAt,
+                    recoveryNotificationStatus,
+                    $"{responsibility.CurrentHandlingUnit} / {responsibility.MaintainerName}"));
+        }
+
+        return entries;
+    }
+
+    private string ResolveTimelineTitle(string sendType)
+    {
+        return string.Equals(sendType, ConfigDrivenDispatchNotificationService.RecoverySendTypeValue, StringComparison.Ordinal)
+            ? _textService.Resolve(TextTokens.DispatchNotificationRecoveryTitle)
+            : _textService.Resolve(TextTokens.DispatchNotificationFaultTitle);
     }
 }

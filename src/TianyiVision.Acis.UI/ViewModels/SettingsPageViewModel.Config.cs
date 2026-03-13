@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Services.Configuration;
+using TianyiVision.Acis.Services.Storage;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
 
@@ -13,12 +14,30 @@ public sealed partial class SettingsPageViewModel
     private ManagedPointConfigState? _selectedManagedPointConfig;
     private ResponsibilityMappingConfigState? _selectedResponsibilityMappingConfig;
     private ResponsibilityMappingEditorState? _responsibilityMappingEditor;
+    private ResponsibilityDefaultEditorState _responsibilityDefaultEditor = new();
     private NotificationChannelConfigState? _selectedNotificationChannelConfig;
     private NotificationChannelEditorState? _notificationChannelEditor;
     private VideoProtocolStrategyConfigState? _selectedVideoProtocolStrategyConfig;
     private string _configWorkspaceFeedback = string.Empty;
+    private bool _responsibilityDemoFallbackEnabled;
+    private string _responsibilityServiceMode = DispatchResponsibilitySettingsExtensions.AutoFallbackMode;
     private bool _notificationDemoFallbackEnabled;
-    private string _notificationServiceMode = string.Empty;
+    private string _notificationServiceMode = DispatchNotificationSettingsExtensions.AutoFallbackMode;
+    private readonly AcisLocalDataPaths _configPaths = new();
+
+    public ObservableCollection<string> ResponsibilityServiceModes { get; } =
+    [
+        DispatchResponsibilitySettingsExtensions.AutoFallbackMode,
+        DispatchResponsibilitySettingsExtensions.LocalFileMode,
+        DispatchResponsibilitySettingsExtensions.DemoMode
+    ];
+
+    public ObservableCollection<string> NotificationServiceModes { get; } =
+    [
+        DispatchNotificationSettingsExtensions.AutoFallbackMode,
+        DispatchNotificationSettingsExtensions.EnterpriseWeChatMode,
+        DispatchNotificationSettingsExtensions.DemoMode
+    ];
 
     public ObservableCollection<InspectionGroupConfigState> InspectionGroupConfigs { get; } =
     [
@@ -69,6 +88,12 @@ public sealed partial class SettingsPageViewModel
         private set => SetProperty(ref _responsibilityMappingEditor, value);
     }
 
+    public ResponsibilityDefaultEditorState ResponsibilityDefaultEditor
+    {
+        get => _responsibilityDefaultEditor;
+        private set => SetProperty(ref _responsibilityDefaultEditor, value);
+    }
+
     public NotificationChannelConfigState? SelectedNotificationChannelConfig
     {
         get => _selectedNotificationChannelConfig;
@@ -93,6 +118,18 @@ public sealed partial class SettingsPageViewModel
         private set => SetProperty(ref _configWorkspaceFeedback, value);
     }
 
+    public bool ResponsibilityDemoFallbackEnabled
+    {
+        get => _responsibilityDemoFallbackEnabled;
+        set => SetProperty(ref _responsibilityDemoFallbackEnabled, value);
+    }
+
+    public string ResponsibilityServiceMode
+    {
+        get => _responsibilityServiceMode;
+        set => SetProperty(ref _responsibilityServiceMode, value);
+    }
+
     public bool NotificationDemoFallbackEnabled
     {
         get => _notificationDemoFallbackEnabled;
@@ -102,7 +139,7 @@ public sealed partial class SettingsPageViewModel
     public string NotificationServiceMode
     {
         get => _notificationServiceMode;
-        private set => SetProperty(ref _notificationServiceMode, value);
+        set => SetProperty(ref _notificationServiceMode, value);
     }
 
     public ICommand SelectInspectionGroupConfigCommand => new RelayCommand(parameter =>
@@ -134,6 +171,8 @@ public sealed partial class SettingsPageViewModel
     public ICommand SaveResponsibilityMappingCommand => new RelayCommand(_ => SaveResponsibilityMapping(), _ => ResponsibilityMappingEditor is not null);
 
     public ICommand DeleteResponsibilityMappingCommand => new RelayCommand(_ => DeleteResponsibilityMapping(), _ => SelectedResponsibilityMappingConfig is not null);
+
+    public ICommand SaveResponsibilityDefaultsCommand => new RelayCommand(_ => SaveResponsibilityDefaults());
 
     public ICommand TriggerConfigPlaceholderActionCommand => new RelayCommand(parameter =>
     {
@@ -194,6 +233,12 @@ public sealed partial class SettingsPageViewModel
     public string PointPausedLabel => _textService.Resolve(TextTokens.SettingsPointPausedLabel);
     public string ResponsibilityPageTitle => "单位与责任人映射";
     public string ResponsibilityPageDescription => "正式管理 dispatch-responsibility.json 中的设备/单位责任归属映射，保存后直接回写本地轻量文件。";
+    public string ResponsibilityConfigPathLabel => "责任映射文件";
+    public string ResponsibilityConfigPath => _configPaths.DispatchResponsibilityFile;
+    public string ResponsibilityServiceModeLabel => "责任映射模式";
+    public string ResponsibilityFallbackLabel => "责任映射启用 demo fallback";
+    public string ResponsibilityDefaultSectionTitle => "默认责任归属";
+    public string ResponsibilityDefaultSectionDescription => "当设备映射和单位映射都未命中时，系统回退到这一组默认责任人信息。";
     public string ResponsibilityDeviceCodeLabel => "设备编码";
     public string ResponsibilityPointNameLabel => "点位名称";
     public string ResponsibilityUnitLabel => "当前处理单位";
@@ -205,13 +250,15 @@ public sealed partial class SettingsPageViewModel
     public string ResponsibilitySourceLabel => "映射来源";
     public string NotificationChannelsPageTitle => "通知通道管理";
     public string NotificationChannelsPageDescription => "正式管理 dispatch-notification.json 中的 webhook 通道，不在普通业务页展示底层地址。";
+    public string NotificationConfigPathLabel => "通知通道文件";
+    public string NotificationConfigPath => _configPaths.DispatchNotificationFile;
     public string NotificationChannelIdLabel => "通道 ID";
     public string NotificationChannelNameLabel => "通道名称";
     public string NotificationChannelWebhookLabel => "Webhook 地址";
     public string NotificationChannelEnabledLabel => "是否启用";
     public string NotificationChannelDefaultLabel => "默认通道";
     public string NotificationFallbackLabel => "启用 demo fallback";
-    public string NotificationServiceModeLabel => "当前通知模式";
+    public string NotificationServiceModeLabel => "通知发送模式";
     public string VideoStrategyPageTitle => _textService.Resolve(TextTokens.SettingsVideoStrategyPageTitle);
     public string VideoStrategyPageDescription => _textService.Resolve(TextTokens.SettingsVideoStrategyPageDescription);
     public string VideoUnitLabel => _textService.Resolve(TextTokens.SettingsVideoUnitLabel);
@@ -240,6 +287,17 @@ public sealed partial class SettingsPageViewModel
     private void LoadResponsibilityMappings(string? selectedId = null)
     {
         var settings = _dispatchResponsibilitySettingsService.Load();
+        ResponsibilityDemoFallbackEnabled = settings.EnableDemoFallback;
+        ResponsibilityServiceMode = settings.ServiceMode;
+        ResponsibilityDefaultEditor = new ResponsibilityDefaultEditorState
+        {
+            CurrentHandlingUnit = settings.DefaultAssignment.CurrentHandlingUnit,
+            Maintainer = settings.DefaultAssignment.MaintainerName,
+            MaintainerPhone = settings.DefaultAssignment.MaintainerPhone,
+            Supervisor = settings.DefaultAssignment.SupervisorName,
+            SupervisorPhone = settings.DefaultAssignment.SupervisorPhone,
+            NotificationChannelId = settings.DefaultAssignment.NotificationChannelId
+        };
         ResponsibilityMappingConfigs.Clear();
 
         foreach (var item in settings.DeviceAssignments.OrderBy(item => item.DeviceCode, StringComparer.OrdinalIgnoreCase))
@@ -421,12 +479,29 @@ public sealed partial class SettingsPageViewModel
 
         _dispatchResponsibilitySettingsService.Save(settings with
         {
+            ServiceMode = ResponsibilityServiceMode,
+            EnableDemoFallback = ResponsibilityDemoFallbackEnabled,
+            DefaultAssignment = BuildResponsibilityDefaultSettings(),
             DeviceAssignments = deviceAssignments,
             UnitAssignments = unitAssignments
         });
 
         LoadResponsibilityMappings(selectedId);
         ConfigWorkspaceFeedback = "责任归属映射已保存到本地轻量配置文件。";
+    }
+
+    private void SaveResponsibilityDefaults()
+    {
+        var settings = _dispatchResponsibilitySettingsService.Load();
+        _dispatchResponsibilitySettingsService.Save(settings with
+        {
+            ServiceMode = ResponsibilityServiceMode,
+            EnableDemoFallback = ResponsibilityDemoFallbackEnabled,
+            DefaultAssignment = BuildResponsibilityDefaultSettings()
+        });
+
+        LoadResponsibilityMappings(SelectedResponsibilityMappingConfig?.Id);
+        ConfigWorkspaceFeedback = "默认责任归属和映射模式已保存到本地轻量配置文件。";
     }
 
     private void DeleteResponsibilityMapping()
@@ -442,14 +517,26 @@ public sealed partial class SettingsPageViewModel
             var deviceAssignments = settings.DeviceAssignments
                 .Where(item => !string.Equals(item.DeviceCode, SelectedResponsibilityMappingConfig.DeviceCode, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            _dispatchResponsibilitySettingsService.Save(settings with { DeviceAssignments = deviceAssignments });
+            _dispatchResponsibilitySettingsService.Save(settings with
+            {
+                ServiceMode = ResponsibilityServiceMode,
+                EnableDemoFallback = ResponsibilityDemoFallbackEnabled,
+                DefaultAssignment = BuildResponsibilityDefaultSettings(),
+                DeviceAssignments = deviceAssignments
+            });
         }
         else
         {
             var unitAssignments = settings.UnitAssignments
                 .Where(item => !string.Equals(item.UnitName, SelectedResponsibilityMappingConfig.CurrentHandlingUnit, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            _dispatchResponsibilitySettingsService.Save(settings with { UnitAssignments = unitAssignments });
+            _dispatchResponsibilitySettingsService.Save(settings with
+            {
+                ServiceMode = ResponsibilityServiceMode,
+                EnableDemoFallback = ResponsibilityDemoFallbackEnabled,
+                DefaultAssignment = BuildResponsibilityDefaultSettings(),
+                UnitAssignments = unitAssignments
+            });
         }
 
         LoadResponsibilityMappings();
@@ -516,6 +603,7 @@ public sealed partial class SettingsPageViewModel
             editor.IsDefault));
         _notificationSettingsService.Save(settings with
         {
+            ServiceMode = NotificationServiceMode,
             EnableDemoFallback = NotificationDemoFallbackEnabled,
             Channels = channels
         });
@@ -542,6 +630,7 @@ public sealed partial class SettingsPageViewModel
 
         _notificationSettingsService.Save(settings with
         {
+            ServiceMode = NotificationServiceMode,
             EnableDemoFallback = NotificationDemoFallbackEnabled,
             Channels = channels
         });
@@ -566,6 +655,7 @@ public sealed partial class SettingsPageViewModel
             .ToList();
         _notificationSettingsService.Save(settings with
         {
+            ServiceMode = NotificationServiceMode,
             EnableDemoFallback = NotificationDemoFallbackEnabled,
             Channels = channels
         });
@@ -581,5 +671,18 @@ public sealed partial class SettingsPageViewModel
         {
             config.IsSelected = config == item;
         }
+    }
+
+    private DispatchResponsibilityDefaultSettings BuildResponsibilityDefaultSettings()
+    {
+        return new DispatchResponsibilityDefaultSettings(
+            ResponsibilityDefaultEditor.CurrentHandlingUnit.Trim(),
+            ResponsibilityDefaultEditor.Maintainer.Trim(),
+            ResponsibilityDefaultEditor.MaintainerPhone.Trim(),
+            ResponsibilityDefaultEditor.Supervisor.Trim(),
+            ResponsibilityDefaultEditor.SupervisorPhone.Trim(),
+            string.IsNullOrWhiteSpace(ResponsibilityDefaultEditor.NotificationChannelId)
+                ? "default"
+                : ResponsibilityDefaultEditor.NotificationChannelId.Trim());
     }
 }

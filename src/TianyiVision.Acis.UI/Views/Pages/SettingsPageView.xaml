@@ -287,11 +287,11 @@
                                                 Command="{Binding DataContext.SelectResponsibilityMappingConfigCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel>
-                                                <DockPanel LastChildFill="False">
-                                                    <TextBlock DockPanel.Dock="Left" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding DeviceCode}" />
-                                                    <Border DockPanel.Dock="Right"
-                                                            Padding="8,3"
-                                                            Background="{DynamicResource Theme.AccentSoftBrush}"
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding PrimaryLabel}" />
+                                                        <Border DockPanel.Dock="Right"
+                                                                Padding="8,3"
+                                                                Background="{DynamicResource Theme.AccentSoftBrush}"
                                                             BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="10">
@@ -300,10 +300,10 @@
                                                                    Text="{Binding SourceLabel}" />
                                                     </Border>
                                                 </DockPanel>
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PointName}" />
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentHandlingUnit}" />
-                                            </StackPanel>
-                                        </Button>
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SecondaryLabel}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentHandlingUnit}" />
+                                                </StackPanel>
+                                            </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -316,13 +316,57 @@
                                 <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding NewResponsibilityMappingCommand}" Content="{Binding ConfigActionNewText}" />
                                 <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveResponsibilityMappingCommand}" Content="{Binding ConfigActionSaveText}" />
                                 <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding DeleteResponsibilityMappingCommand}" Content="{Binding ConfigActionDeleteText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding SaveResponsibilityDefaultsCommand}" Content="保存默认责任归属" />
                             </WrapPanel>
                             <Border Margin="0,18,0,0" Style="{StaticResource MutedPanelStyle}">
                                 <StackPanel>
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityConfigPathLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ResponsibilityConfigPath}" />
+                                    <TextBlock Margin="12,0,0,0" />
                                     <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityMappingEditor.EditorMode}" />
                                     <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="设备编码为空时，保存为单位级映射；设备编码有值时，保存为设备级映射。" />
                                 </StackPanel>
                             </Border>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityServiceModeLabel}" />
+                                    <ComboBox Style="{StaticResource SettingsEditorComboBoxStyle}"
+                                              ItemsSource="{Binding ResponsibilityServiceModes}"
+                                              SelectedItem="{Binding ResponsibilityServiceMode}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <CheckBox Margin="0,24,0,0"
+                                              Foreground="{DynamicResource Theme.TextPrimaryBrush}"
+                                              Content="{Binding ResponsibilityFallbackLabel}"
+                                              IsChecked="{Binding ResponsibilityDemoFallbackEnabled}" />
+                                </StackPanel>
+                            </Grid>
+                            <Border Margin="0,18,0,0" Style="{StaticResource MutedPanelStyle}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityDefaultSectionTitle}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ResponsibilityDefaultSectionDescription}" />
+                                </StackPanel>
+                            </Border>
+                            <Grid Margin="0,18,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityUnitLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.CurrentHandlingUnit, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityMaintainerLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.Maintainer, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityMaintainerPhoneLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.MaintainerPhone, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilitySupervisorLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.Supervisor, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilitySupervisorPhoneLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.SupervisorPhone, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ResponsibilityChannelLabel}" />
+                                    <TextBox Style="{StaticResource SettingsEditorTextBoxStyle}" Text="{Binding ResponsibilityDefaultEditor.NotificationChannelId, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                            </Grid>
                             <Grid Margin="0,18,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,12,0">
@@ -382,11 +426,12 @@
                                                                    Text="{Binding DefaultLabel}" />
                                                     </Border>
                                                 </DockPanel>
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DisplayName}" />
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding EnabledLabel}" />
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding MaskedWebhook}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding EnabledLabel}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
@@ -402,6 +447,9 @@
                             </WrapPanel>
                             <Border Margin="0,18,0,0" Style="{StaticResource MutedPanelStyle}">
                                 <StackPanel>
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding NotificationConfigPathLabel}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding NotificationConfigPath}" />
+                                    <TextBlock Margin="12,0,0,0" />
                                     <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding NotificationChannelEditor.EditorMode}" />
                                     <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="Webhook 只在系统设置中可见，不在普通业务页展示。" />
                                 </StackPanel>
@@ -418,7 +466,9 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="12,0,0,0">
                                     <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding NotificationServiceModeLabel}" />
-                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding NotificationServiceMode}" />
+                                    <ComboBox Style="{StaticResource SettingsEditorComboBoxStyle}"
+                                              ItemsSource="{Binding NotificationServiceModes}"
+                                              SelectedItem="{Binding NotificationServiceMode}" />
                                     <CheckBox Margin="0,18,0,0"
                                               Foreground="{DynamicResource Theme.TextPrimaryBrush}"
                                               Content="{Binding NotificationChannelEnabledLabel}"

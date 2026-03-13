@@ -51,6 +51,7 @@ public sealed class AppBootstrapper
         var responsibilitySettingsService = new FileDispatchResponsibilitySettingsService(paths, documentStore);
         var responsibilitySettings = responsibilitySettingsService.Load();
         var notificationHistoryService = new FileDispatchNotificationHistoryService(paths, documentStore);
+        var workOrderSnapshotService = new FileDispatchWorkOrderSnapshotService(paths, documentStore);
         var platformSettings = platformIntegrationSettingsService.Load();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
         var demoAlertQueryService = new DemoAlertQueryService();
@@ -80,6 +81,7 @@ public sealed class AppBootstrapper
         _dispatchResponsibilityService = BuildResponsibilityService(
             responsibilitySettings,
             responsibilitySettingsService,
+            workOrderSnapshotService,
             demoDispatchResponsibilityService);
         var faultPoolService = BuildFaultPoolService(
             deviceWorkspaceService,
@@ -94,6 +96,7 @@ public sealed class AppBootstrapper
             faultPoolService,
             dispatchNotificationSender,
             notificationHistoryService,
+            workOrderSnapshotService,
             demoDispatchNotificationService,
             notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback);
         _reportDataService = new DemoReportDataService();
@@ -274,6 +277,7 @@ public sealed class AppBootstrapper
     private static IDispatchResponsibilityService BuildResponsibilityService(
         DispatchResponsibilitySettings settings,
         IDispatchResponsibilitySettingsService settingsService,
+        IDispatchWorkOrderSnapshotService workOrderSnapshotService,
         IDispatchResponsibilityService demoService)
     {
         if (!settings.IsLocalFilePreferred())
@@ -281,7 +285,7 @@ public sealed class AppBootstrapper
             return demoService;
         }
 
-        var fileService = new FileDispatchResponsibilityService(settingsService);
+        var fileService = new FileDispatchResponsibilityService(settingsService, workOrderSnapshotService);
         return settings.IsAutoFallback() || settings.EnableDemoFallback
             ? new FallbackDispatchResponsibilityService(fileService, demoService)
             : fileService;
