@@ -25,7 +25,9 @@ public sealed record DispatchResponsibilityModel(
     string MaintainerName,
     string MaintainerPhone,
     string SupervisorName,
-    string SupervisorPhone);
+    string SupervisorPhone,
+    string NotificationChannelId,
+    string SourceTag);
 
 public sealed record DispatchNotificationRecordModel(
     string FaultNotificationSentAt,
@@ -58,6 +60,21 @@ public sealed record DispatchWorkOrderModel(
     DispatchNotificationRecordModel NotificationRecord,
     DispatchRepeatFaultModel RepeatFault);
 
+public sealed record DispatchResponsibilityQueryDto(
+    string PointId,
+    string PointName,
+    string CurrentHandlingUnit);
+
+public sealed record DispatchResponsibilityUpdateDto(
+    string PointId,
+    string PointName,
+    string CurrentHandlingUnit,
+    string MaintainerName,
+    string MaintainerPhone,
+    string SupervisorName,
+    string SupervisorPhone,
+    string NotificationChannelId);
+
 public sealed record DispatchNotificationResult(
     string SentAt,
     string StatusText,
@@ -70,4 +87,11 @@ public interface IDispatchNotificationService
     ServiceResponse<DispatchNotificationResult> SendFaultNotification(DispatchNotificationRequestDto request);
 
     ServiceResponse<DispatchNotificationResult> SendRecoveryNotification(DispatchNotificationRequestDto request);
+}
+
+public interface IDispatchResponsibilityService
+{
+    ServiceResponse<DispatchResponsibilityModel> Resolve(DispatchResponsibilityQueryDto request);
+
+    ServiceResponse<DispatchResponsibilityModel> Save(DispatchResponsibilityUpdateDto request);
 }

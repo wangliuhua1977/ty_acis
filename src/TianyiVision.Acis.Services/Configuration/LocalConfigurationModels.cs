@@ -62,7 +62,43 @@ public sealed record NotificationChannelSettings(
     bool IsEnabled);
 
 public sealed record DispatchNotificationSettings(
+    string ServiceMode,
+    bool EnableDemoFallback,
     IReadOnlyList<NotificationChannelSettings> Channels);
+
+public sealed record DispatchResponsibilityAssignmentSettings(
+    string DeviceCode,
+    string PointName,
+    string CurrentHandlingUnit,
+    string MaintainerName,
+    string MaintainerPhone,
+    string SupervisorName,
+    string SupervisorPhone,
+    string NotificationChannelId);
+
+public sealed record DispatchResponsibilityUnitAssignmentSettings(
+    string UnitName,
+    string CurrentHandlingUnit,
+    string MaintainerName,
+    string MaintainerPhone,
+    string SupervisorName,
+    string SupervisorPhone,
+    string NotificationChannelId);
+
+public sealed record DispatchResponsibilityDefaultSettings(
+    string CurrentHandlingUnit,
+    string MaintainerName,
+    string MaintainerPhone,
+    string SupervisorName,
+    string SupervisorPhone,
+    string NotificationChannelId);
+
+public sealed record DispatchResponsibilitySettings(
+    string ServiceMode,
+    bool EnableDemoFallback,
+    DispatchResponsibilityDefaultSettings DefaultAssignment,
+    IReadOnlyList<DispatchResponsibilityAssignmentSettings> DeviceAssignments,
+    IReadOnlyList<DispatchResponsibilityUnitAssignmentSettings> UnitAssignments);
 
 public sealed record LocalConfigurationSnapshot(
     AppPreferencesSnapshot Preferences,

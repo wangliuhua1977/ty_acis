@@ -8,15 +8,18 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
 {
     private readonly IDeviceWorkspaceService _deviceWorkspaceService;
     private readonly IAlertQueryService _alertQueryService;
+    private readonly IDispatchResponsibilityService _responsibilityService;
     private readonly TimeSpan _lookbackWindow;
 
     public ConfigDrivenFaultPoolService(
         IDeviceWorkspaceService deviceWorkspaceService,
         IAlertQueryService alertQueryService,
+        IDispatchResponsibilityService responsibilityService,
         TimeSpan? lookbackWindow = null)
     {
         _deviceWorkspaceService = deviceWorkspaceService;
         _alertQueryService = alertQueryService;
+        _responsibilityService = responsibilityService;
         _lookbackWindow = lookbackWindow ?? TimeSpan.FromHours(72);
     }
 
@@ -58,7 +61,7 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
 
         if (alerts.Count == 0)
         {
-            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], "最近时间窗内没有可聚合的 CTYun 告警。");
+            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], "No CTYun alerts were available in the lookback window.");
         }
 
         var devicesByCode = devices.ToDictionary(device => device.DeviceCode, StringComparer.Ordinal);
@@ -80,18 +83,24 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
         var latest = alerts.OrderByDescending(item => item.LatestDetectedAt).First();
         devicesByCode.TryGetValue(latest.PointId, out var device);
 
-        var currentHandlingUnit = device?.UnitName ?? "待补齐所属单位";
-        var responsibility = CreateResponsibility(currentHandlingUnit);
+        var currentHandlingUnit = device?.UnitName ?? "Pending Assignment";
+        var responsibilityResponse = _responsibilityService.Resolve(new DispatchResponsibilityQueryDto(
+            latest.PointId,
+            latest.PointName,
+            currentHandlingUnit));
+        var responsibility = responsibilityResponse.IsSuccess
+            ? responsibilityResponse.Data
+            : CreatePlaceholderResponsibility(currentHandlingUnit);
         var isOfflineFault = latest.FaultType.Contains("离线", StringComparison.Ordinal);
-        var isAutomatic = isOfflineFault;
+        var dispatchMethod = isOfflineFault ? DispatchMethodModel.Automatic : DispatchMethodModel.Manual;
 
         return new FaultPoolItemModel(
             $"{latest.PointId}:{latest.FaultType}",
             latest.PointId,
             latest.PointName,
             latest.FaultType,
-            "CTYun 实时目录组",
-            currentHandlingUnit,
+            "CTYun Live Fault Pool",
+            responsibility.CurrentHandlingUnit,
             device?.AreaName ?? currentHandlingUnit,
             latest.Content,
             "故障",
@@ -99,9 +108,9 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             latest.AlertSource,
             true,
             latest.LatestDetectedAt.Date == DateTime.Today,
-            isAutomatic ? DispatchMethodModel.Automatic : DispatchMethodModel.Manual,
+            dispatchMethod,
             DispatchWorkOrderStatusModel.PendingDispatch,
-            isOfflineFault ? DispatchRecoveryStatusModel.Unrecovered : DispatchRecoveryStatusModel.Unrecovered,
+            DispatchRecoveryStatusModel.Unrecovered,
             responsibility,
             new DispatchNotificationRecordModel("--", "待发送", "--", "待发送"),
             alerts.Min(item => item.FirstDetectedAt),
@@ -110,15 +119,16 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             alerts.Select(item => item.AlertSource).Distinct(StringComparer.Ordinal).ToList());
     }
 
-    private static DispatchResponsibilityModel CreateResponsibility(string currentHandlingUnit)
+    private static DispatchResponsibilityModel CreatePlaceholderResponsibility(string currentHandlingUnit)
     {
-        // 当前未接入真实责任归属映射，先保留统一挂接位置，供后续派单页替换。
         return new DispatchResponsibilityModel(
             currentHandlingUnit,
             "待配置维护人",
             "--",
             "待配置负责人",
-            "--");
+            "--",
+            "default",
+            "FaultPool.Placeholder");
     }
 }
 
@@ -194,7 +204,7 @@ public sealed class FallbackFaultPoolService : IFaultPoolService
         }
         catch (Exception ex)
         {
-            response = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], $"真实故障池调用异常。 {ex.Message}");
+            response = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], $"Real fault pool call failed: {ex.Message}");
         }
 
         if (response.IsSuccess && response.Data.Count > 0)
@@ -207,8 +217,8 @@ public sealed class FallbackFaultPoolService : IFaultPoolService
             ? ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Success(
                 fallback.Data,
                 string.IsNullOrWhiteSpace(response.Message)
-                    ? "已回退到 demo 故障池。"
-                    : $"{response.Message} 已回退到 demo 故障池。")
+                    ? "Fell back to the demo fault pool."
+                    : $"{response.Message} Fell back to the demo fault pool.")
             : fallback;
     }
 }

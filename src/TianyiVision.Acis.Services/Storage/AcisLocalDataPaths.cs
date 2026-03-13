@@ -28,4 +28,8 @@ public sealed class AcisLocalDataPaths
     public string NotificationDirectory => Path.Combine(ConfigDirectory, "notifications");
 
     public string DispatchNotificationFile => Path.Combine(NotificationDirectory, "dispatch-notification.json");
+
+    public string DispatchDirectory => Path.Combine(ConfigDirectory, "dispatch");
+
+    public string DispatchResponsibilityFile => Path.Combine(DispatchDirectory, "dispatch-responsibility.json");
 }

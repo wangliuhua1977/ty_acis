@@ -25,6 +25,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private const string AllOptionKey = "all";
 
     private readonly IDispatchNotificationService _dispatchNotificationService;
+    private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
     private readonly ITextService _textService;
     private readonly List<DispatchWorkOrderDetailState> _allWorkOrders;
     private readonly RelayCommand _dispatchNowCommand;
@@ -41,12 +42,16 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private DispatchResponsibilityState? _responsibilityEditor;
     private string _workspaceFeedback = string.Empty;
 
-    public DispatchPageViewModel(ITextService textService, IDispatchNotificationService dispatchNotificationService)
+    public DispatchPageViewModel(
+        ITextService textService,
+        IDispatchNotificationService dispatchNotificationService,
+        IDispatchResponsibilityService dispatchResponsibilityService)
         : base(
             textService.Resolve(TextTokens.DispatchTitle),
             textService.Resolve(TextTokens.DispatchDescription))
     {
         _dispatchNotificationService = dispatchNotificationService;
+        _dispatchResponsibilityService = dispatchResponsibilityService;
         _textService = textService;
         InitializeText();
 
@@ -475,8 +480,6 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         var notificationResponse = _dispatchNotificationService.SendFaultNotification(CreateNotificationRequest(SelectedWorkOrderDetail));
         var sentAt = notificationResponse.Data.SentAt;
         var statusText = notificationResponse.Data.StatusText;
-        SelectedWorkOrderDetail.WorkOrderStatus = DispatchWorkOrderStatus.Dispatched;
-        SelectedWorkOrderDetail.WorkOrderStatusText = _textService.Resolve(TextTokens.DispatchWorkOrderDispatched);
         SelectedWorkOrderDetail.NotificationRecord.FaultNotificationSentAt = sentAt;
         SelectedWorkOrderDetail.NotificationRecord.FaultNotificationStatus = statusText;
         SelectedWorkOrderDetail.NotificationRecord.TimelineEntries.Insert(
@@ -487,9 +490,18 @@ public sealed class DispatchPageViewModel : PageViewModelBase
                 statusText,
                 notificationResponse.Data.TimelineActor));
 
-        WorkspaceFeedback = string.Format(
-            _textService.Resolve(TextTokens.DispatchDispatchFeedbackPattern),
-            SelectedWorkOrderDetail.PointName);
+        if (notificationResponse.IsSuccess)
+        {
+            SelectedWorkOrderDetail.WorkOrderStatus = DispatchWorkOrderStatus.Dispatched;
+            SelectedWorkOrderDetail.WorkOrderStatusText = _textService.Resolve(TextTokens.DispatchWorkOrderDispatched);
+            WorkspaceFeedback = string.Format(
+                _textService.Resolve(TextTokens.DispatchDispatchFeedbackPattern),
+                SelectedWorkOrderDetail.PointName);
+        }
+        else
+        {
+            WorkspaceFeedback = notificationResponse.Message;
+        }
 
         ApplyFilters(SelectedWorkOrderDetail.WorkOrderId);
     }
@@ -504,8 +516,6 @@ public sealed class DispatchPageViewModel : PageViewModelBase
         var notificationResponse = _dispatchNotificationService.SendRecoveryNotification(CreateNotificationRequest(SelectedWorkOrderDetail));
         var sentAt = notificationResponse.Data.SentAt;
         var statusText = notificationResponse.Data.StatusText;
-        SelectedWorkOrderDetail.RecoveryStatus = DispatchRecoveryStatus.Recovered;
-        SelectedWorkOrderDetail.RecoveryStatusText = _textService.Resolve(TextTokens.DispatchRecoveryRecovered);
         SelectedWorkOrderDetail.NotificationRecord.RecoveryNotificationSentAt = sentAt;
         SelectedWorkOrderDetail.NotificationRecord.RecoveryNotificationStatus = statusText;
         SelectedWorkOrderDetail.NotificationRecord.TimelineEntries.Insert(
@@ -516,9 +526,18 @@ public sealed class DispatchPageViewModel : PageViewModelBase
                 statusText,
                 notificationResponse.Data.TimelineActor));
 
-        WorkspaceFeedback = string.Format(
-            _textService.Resolve(TextTokens.DispatchRecoveryFeedbackPattern),
-            SelectedWorkOrderDetail.PointName);
+        if (notificationResponse.IsSuccess)
+        {
+            SelectedWorkOrderDetail.RecoveryStatus = DispatchRecoveryStatus.Recovered;
+            SelectedWorkOrderDetail.RecoveryStatusText = _textService.Resolve(TextTokens.DispatchRecoveryRecovered);
+            WorkspaceFeedback = string.Format(
+                _textService.Resolve(TextTokens.DispatchRecoveryFeedbackPattern),
+                SelectedWorkOrderDetail.PointName);
+        }
+        else
+        {
+            WorkspaceFeedback = notificationResponse.Message;
+        }
 
         ApplyFilters(SelectedWorkOrderDetail.WorkOrderId);
     }
@@ -541,11 +560,27 @@ public sealed class DispatchPageViewModel : PageViewModelBase
             return;
         }
 
-        SelectedWorkOrderDetail.Responsibility.CurrentHandlingUnit = ResponsibilityEditor.CurrentHandlingUnit;
-        SelectedWorkOrderDetail.Responsibility.MaintainerName = ResponsibilityEditor.MaintainerName;
-        SelectedWorkOrderDetail.Responsibility.MaintainerPhone = ResponsibilityEditor.MaintainerPhone;
-        SelectedWorkOrderDetail.Responsibility.SupervisorName = ResponsibilityEditor.SupervisorName;
-        SelectedWorkOrderDetail.Responsibility.SupervisorPhone = ResponsibilityEditor.SupervisorPhone;
+        var saveResponse = _dispatchResponsibilityService.Save(new DispatchResponsibilityUpdateDto(
+            SelectedWorkOrderDetail.PointId,
+            SelectedWorkOrderDetail.PointName,
+            ResponsibilityEditor.CurrentHandlingUnit,
+            ResponsibilityEditor.MaintainerName,
+            ResponsibilityEditor.MaintainerPhone,
+            ResponsibilityEditor.SupervisorName,
+            ResponsibilityEditor.SupervisorPhone,
+            ResponsibilityEditor.NotificationChannelId));
+        if (!saveResponse.IsSuccess)
+        {
+            WorkspaceFeedback = saveResponse.Message;
+            return;
+        }
+
+        SelectedWorkOrderDetail.Responsibility.CurrentHandlingUnit = saveResponse.Data.CurrentHandlingUnit;
+        SelectedWorkOrderDetail.Responsibility.MaintainerName = saveResponse.Data.MaintainerName;
+        SelectedWorkOrderDetail.Responsibility.MaintainerPhone = saveResponse.Data.MaintainerPhone;
+        SelectedWorkOrderDetail.Responsibility.SupervisorName = saveResponse.Data.SupervisorName;
+        SelectedWorkOrderDetail.Responsibility.SupervisorPhone = saveResponse.Data.SupervisorPhone;
+        SelectedWorkOrderDetail.Responsibility.NotificationChannelId = saveResponse.Data.NotificationChannelId;
 
         WorkspaceFeedback = string.Format(
             _textService.Resolve(TextTokens.DispatchResponsibilityFeedbackPattern),
@@ -564,6 +599,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private DispatchNotificationRequestDto CreateNotificationRequest(DispatchWorkOrderDetailState workOrder)
     {
         return new DispatchNotificationRequestDto(
+            workOrder.PointId,
             workOrder.Responsibility.CurrentHandlingUnit,
             workOrder.Responsibility.MaintainerName,
             workOrder.Responsibility.MaintainerPhone,
@@ -572,7 +608,8 @@ public sealed class DispatchPageViewModel : PageViewModelBase
             workOrder.PointName,
             workOrder.FaultType,
             ParseFaultTime(workOrder.RepeatFault.LatestFaultTime),
-            workOrder.ScreenshotTitle);
+            workOrder.ScreenshotTitle,
+            workOrder.Responsibility.NotificationChannelId);
     }
 
     private List<DispatchWorkOrderDetailState> CreateWorkOrders(IReadOnlyList<DispatchWorkOrderModel> workOrders)
@@ -601,7 +638,8 @@ public sealed class DispatchPageViewModel : PageViewModelBase
                 workOrder.Responsibility.MaintainerName,
                 workOrder.Responsibility.MaintainerPhone,
                 workOrder.Responsibility.SupervisorName,
-                workOrder.Responsibility.SupervisorPhone),
+                workOrder.Responsibility.SupervisorPhone,
+                workOrder.Responsibility.NotificationChannelId),
             workOrder.RepeatFault.FirstFaultTime,
             workOrder.RepeatFault.LatestFaultTime,
             workOrder.RepeatFault.RepeatCount,

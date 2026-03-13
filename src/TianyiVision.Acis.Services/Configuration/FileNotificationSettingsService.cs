@@ -15,11 +15,39 @@ public sealed class FileNotificationSettingsService : INotificationSettingsServi
 
     public DispatchNotificationSettings Load()
     {
-        return _documentStore.LoadOrCreate(
+        var settings = _documentStore.LoadOrCreate(
             _paths.DispatchNotificationFile,
             () => new DispatchNotificationSettings(
-            [
-                new NotificationChannelSettings("default", "默认派单通道", string.Empty, false)
-            ]));
+                "AutoFallback",
+                true,
+                [
+                    new NotificationChannelSettings("default", "Default Dispatch Channel", string.Empty, false)
+                ]));
+        var normalized = Normalize(settings);
+        _documentStore.Save(_paths.DispatchNotificationFile, normalized);
+        return normalized;
+    }
+
+    private static DispatchNotificationSettings Normalize(DispatchNotificationSettings settings)
+    {
+        var sourceChannels = settings.Channels ?? Array.Empty<NotificationChannelSettings>();
+        var channels = sourceChannels.Count == 0
+            ? new List<NotificationChannelSettings>
+            {
+                new("default", "Default Dispatch Channel", string.Empty, false)
+            }
+            : sourceChannels
+                .Select(channel => new NotificationChannelSettings(
+                    string.IsNullOrWhiteSpace(channel.ChannelId) ? "default" : channel.ChannelId.Trim(),
+                    string.IsNullOrWhiteSpace(channel.DisplayName) ? "Dispatch Channel" : channel.DisplayName.Trim(),
+                    channel.WebhookUrl?.Trim() ?? string.Empty,
+                    channel.IsEnabled))
+                .ToList();
+
+        var mode = DispatchNotificationSettingsExtensions.NormalizeMode(settings.ServiceMode);
+        return new DispatchNotificationSettings(
+            mode,
+            settings.EnableDemoFallback || mode == DispatchNotificationSettingsExtensions.AutoFallbackMode,
+            channels);
     }
 }

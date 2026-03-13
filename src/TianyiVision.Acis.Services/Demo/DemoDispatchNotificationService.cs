@@ -25,7 +25,7 @@ public sealed class DemoDispatchNotificationService : IDispatchNotificationServi
                 DispatchMethodModel.Manual,
                 DispatchWorkOrderStatusModel.PendingDispatch,
                 DispatchRecoveryStatusModel.Unrecovered,
-                new("沿江运维一中心", "张诚", "13800000001", "李强", "13900000001"),
+                new("沿江运维一中心", "张诚", "13800000001", "李强", "13900000001", "default", "Demo"),
                 new("--", "待发送", "--", "待发送"),
                 new("2026-03-12 07:08", "2026-03-12 08:42", 3)),
             new(
@@ -44,7 +44,7 @@ public sealed class DemoDispatchNotificationService : IDispatchNotificationServi
                 DispatchMethodModel.Automatic,
                 DispatchWorkOrderStatusModel.Dispatched,
                 DispatchRecoveryStatusModel.Unrecovered,
-                new("防汛保障中心", "周岭", "13800000012", "王征", "13900000012"),
+                new("防汛保障中心", "周岭", "13800000012", "王征", "13900000012", "default", "Demo"),
                 new("2026-03-12 07:12", "模拟发送成功", "--", "待发送"),
                 new("2026-03-12 06:12", "2026-03-12 07:10", 2)),
             new(
@@ -63,7 +63,7 @@ public sealed class DemoDispatchNotificationService : IDispatchNotificationServi
                 DispatchMethodModel.Automatic,
                 DispatchWorkOrderStatusModel.Dispatched,
                 DispatchRecoveryStatusModel.Unrecovered,
-                new("航道监护中心", "陈野", "13800000023", "高航", "13900000023"),
+                new("航道监护中心", "陈野", "13800000023", "高航", "13900000023", "default", "Demo"),
                 new("2026-03-11 22:42", "模拟发送成功", "--", "待发送"),
                 new("2026-03-11 22:40", "2026-03-12 06:51", 4)),
             new(
@@ -82,7 +82,7 @@ public sealed class DemoDispatchNotificationService : IDispatchNotificationServi
                 DispatchMethodModel.Manual,
                 DispatchWorkOrderStatusModel.Dispatched,
                 DispatchRecoveryStatusModel.Recovered,
-                new("文旅联合中心", "林悦", "13800000034", "宋晨", "13900000034"),
+                new("文旅联合中心", "林悦", "13800000034", "宋晨", "13900000034", "default", "Demo"),
                 new("2026-03-12 07:56", "模拟发送成功", "2026-03-12 09:10", "模拟发送成功"),
                 new("2026-03-12 07:28", "2026-03-12 07:54", 1)),
             new(
@@ -101,7 +101,7 @@ public sealed class DemoDispatchNotificationService : IDispatchNotificationServi
                 DispatchMethodModel.Manual,
                 DispatchWorkOrderStatusModel.PendingDispatch,
                 DispatchRecoveryStatusModel.Unrecovered,
-                new("沿江运维二中心", "赵宁", "13800000045", "韩征", "13900000045"),
+                new("沿江运维二中心", "赵宁", "13800000045", "韩征", "13900000045", "default", "Demo"),
                 new("--", "待发送", "--", "待发送"),
                 new("2026-03-12 10:16", "2026-03-12 10:16", 1))
         ];

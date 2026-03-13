@@ -32,6 +32,7 @@ public sealed record FaultAlertDto(
     int RepeatCount);
 
 public sealed record DispatchNotificationRequestDto(
+    string PointId,
     string CurrentHandlingUnit,
     string MaintainerName,
     string MaintainerPhone,
@@ -40,7 +41,8 @@ public sealed record DispatchNotificationRequestDto(
     string PointName,
     string FaultType,
     DateTime FaultDetectedAt,
-    string? ScreenshotTitle);
+    string? ScreenshotTitle,
+    string NotificationChannelId);
 
 public sealed record ReportQueryDto(
     string TimeRangeKey,

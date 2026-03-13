@@ -34,6 +34,7 @@ public sealed class AppBootstrapper
     private readonly IHomeDashboardService _homeDashboardService;
     private readonly IInspectionTaskService _inspectionTaskService;
     private readonly IDispatchNotificationService _dispatchNotificationService;
+    private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
     private readonly IReportDataService _reportDataService;
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
@@ -43,12 +44,17 @@ public sealed class AppBootstrapper
         var paths = new AcisLocalDataPaths();
         var documentStore = new JsonFileDocumentStore();
         var platformIntegrationSettingsService = new FilePlatformIntegrationSettingsService(paths, documentStore);
+        var notificationSettingsService = new FileNotificationSettingsService(paths, documentStore);
+        var notificationSettings = notificationSettingsService.Load();
+        var responsibilitySettingsService = new FileDispatchResponsibilitySettingsService(paths, documentStore);
+        var responsibilitySettings = responsibilitySettingsService.Load();
         var platformSettings = platformIntegrationSettingsService.Load();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
         var demoAlertQueryService = new DemoAlertQueryService();
         var demoHomeDashboardService = new DemoHomeDashboardService();
         var demoInspectionTaskService = new DemoInspectionTaskService();
         var demoDispatchNotificationService = new DemoDispatchNotificationService();
+        var demoDispatchResponsibilityService = new DemoDispatchResponsibilityService(demoDispatchNotificationService);
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -59,17 +65,31 @@ public sealed class AppBootstrapper
             _appPreferencesService,
             _homeOverlayLayoutService,
             platformIntegrationSettingsService,
-            new FileNotificationSettingsService(paths, documentStore));
+            notificationSettingsService);
 
         var ctyunRuntime = CreateCtyunRuntime(platformSettings);
         var deviceCatalogService = BuildDeviceCatalogService(platformSettings, demoDeviceCatalogService, ctyunRuntime);
         var alertQueryService = BuildAlertQueryService(platformSettings, demoAlertQueryService, ctyunRuntime);
         var pointDetailService = BuildPointDetailService(platformSettings, demoDeviceCatalogService, deviceCatalogService, ctyunRuntime);
         var deviceWorkspaceService = new DeviceWorkspaceService(deviceCatalogService, pointDetailService);
-        var faultPoolService = BuildFaultPoolService(deviceWorkspaceService, alertQueryService, demoDispatchNotificationService, platformSettings);
+        _dispatchResponsibilityService = BuildResponsibilityService(
+            responsibilitySettings,
+            responsibilitySettingsService,
+            demoDispatchResponsibilityService);
+        var faultPoolService = BuildFaultPoolService(
+            deviceWorkspaceService,
+            alertQueryService,
+            _dispatchResponsibilityService,
+            demoDispatchNotificationService,
+            platformSettings);
+        var dispatchNotificationSender = BuildDispatchNotificationSender(notificationSettings, notificationSettingsService);
         _homeDashboardService = new ConfigDrivenHomeDashboardService(deviceWorkspaceService, faultPoolService, demoHomeDashboardService);
         _inspectionTaskService = new ConfigDrivenInspectionTaskService(deviceWorkspaceService, faultPoolService, demoInspectionTaskService);
-        _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(faultPoolService, demoDispatchNotificationService);
+        _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
+            faultPoolService,
+            dispatchNotificationSender,
+            demoDispatchNotificationService,
+            notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback);
         _reportDataService = new DemoReportDataService();
 
         LoadLocalConfiguration();
@@ -110,7 +130,7 @@ public sealed class AppBootstrapper
         {
             [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService, _homeDashboardService),
             [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService, _inspectionTaskService),
-            [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService, _dispatchNotificationService),
+            [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService, _dispatchNotificationService, _dispatchResponsibilityService),
             [AppSectionId.Reports] = () => new ReportsPageViewModel(_textService, _reportDataService),
             [AppSectionId.Settings] = () => new SettingsPageViewModel(
                 _textService,
@@ -227,6 +247,7 @@ public sealed class AppBootstrapper
     private static IFaultPoolService BuildFaultPoolService(
         IDeviceWorkspaceService deviceWorkspaceService,
         IAlertQueryService alertQueryService,
+        IDispatchResponsibilityService dispatchResponsibilityService,
         IDispatchNotificationService demoDispatchNotificationService,
         PlatformIntegrationSettings settings)
     {
@@ -236,9 +257,37 @@ public sealed class AppBootstrapper
             return demoService;
         }
 
-        var ctyunService = new ConfigDrivenFaultPoolService(deviceWorkspaceService, alertQueryService);
+        var ctyunService = new ConfigDrivenFaultPoolService(deviceWorkspaceService, alertQueryService, dispatchResponsibilityService);
         return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
             ? new FallbackFaultPoolService(ctyunService, demoService)
             : ctyunService;
+    }
+
+    private static IDispatchResponsibilityService BuildResponsibilityService(
+        DispatchResponsibilitySettings settings,
+        IDispatchResponsibilitySettingsService settingsService,
+        IDispatchResponsibilityService demoService)
+    {
+        if (!settings.IsLocalFilePreferred())
+        {
+            return demoService;
+        }
+
+        var fileService = new FileDispatchResponsibilityService(settingsService);
+        return settings.IsAutoFallback() || settings.EnableDemoFallback
+            ? new FallbackDispatchResponsibilityService(fileService, demoService)
+            : fileService;
+    }
+
+    private static IDispatchNotificationSender? BuildDispatchNotificationSender(
+        DispatchNotificationSettings settings,
+        INotificationSettingsService notificationSettingsService)
+    {
+        if (!settings.IsEnterpriseWeChatPreferred())
+        {
+            return null;
+        }
+
+        return new EnterpriseWeChatDispatchNotificationSender(new HttpClient(), notificationSettingsService);
     }
 }
