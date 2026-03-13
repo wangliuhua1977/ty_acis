@@ -17,7 +17,16 @@ public sealed class FallbackDeviceCatalogService : IDeviceCatalogService
 
     public ServiceResponse<IReadOnlyList<DeviceListItemDto>> GetDevices()
     {
-        var response = _primary.GetDevices();
+        ServiceResponse<IReadOnlyList<DeviceListItemDto>> response;
+        try
+        {
+            response = _primary.GetDevices();
+        }
+        catch (Exception ex)
+        {
+            response = ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"真实设备目录调用异常。 {ex.Message}");
+        }
+
         if (response.IsSuccess && response.Data.Count > 0)
         {
             return response;
@@ -47,12 +56,12 @@ public sealed class FallbackAlertQueryService : IAlertQueryService
 
     public ServiceResponse<IReadOnlyList<FaultAlertDto>> GetAiAlerts(AiAlertQueryDto query)
     {
-        return Fallback(_primary.GetAiAlerts(query), () => _fallback.GetAiAlerts(query), "AI 告警");
+        return Fallback(SafeExecute(() => _primary.GetAiAlerts(query), "真实 AI 告警调用异常。"), () => _fallback.GetAiAlerts(query), "AI 告警");
     }
 
     public ServiceResponse<IReadOnlyList<FaultAlertDto>> GetDeviceAlerts(DeviceAlertQueryDto query)
     {
-        return Fallback(_primary.GetDeviceAlerts(query), () => _fallback.GetDeviceAlerts(query), "设备告警");
+        return Fallback(SafeExecute(() => _primary.GetDeviceAlerts(query), "真实设备告警调用异常。"), () => _fallback.GetDeviceAlerts(query), "设备告警");
     }
 
     private static ServiceResponse<IReadOnlyList<FaultAlertDto>> Fallback(
@@ -73,5 +82,19 @@ public sealed class FallbackAlertQueryService : IAlertQueryService
                     ? $"{name}已回退到 demo 数据。"
                     : $"{primaryResponse.Message} {name}已回退到 demo 数据。")
             : fallbackResponse;
+    }
+
+    private static ServiceResponse<IReadOnlyList<FaultAlertDto>> SafeExecute(
+        Func<ServiceResponse<IReadOnlyList<FaultAlertDto>>> action,
+        string fallbackMessage)
+    {
+        try
+        {
+            return action();
+        }
+        catch (Exception ex)
+        {
+            return ServiceResponse<IReadOnlyList<FaultAlertDto>>.Failure([], $"{fallbackMessage} {ex.Message}");
+        }
     }
 }

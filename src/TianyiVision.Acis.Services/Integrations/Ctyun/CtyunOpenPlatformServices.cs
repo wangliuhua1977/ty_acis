@@ -591,3 +591,64 @@ public sealed class CtyunAlertQueryService : IAlertQueryService
             : ServiceResponse<IReadOnlyList<FaultAlertDto>>.Success(response.Data.Select(_deviceAlertAdapter.MapAlert).ToList());
     }
 }
+
+public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
+{
+    private readonly CtyunOpenPlatformClient _client;
+    private readonly IDeviceCatalogService _deviceCatalogService;
+
+    public CtyunDevicePointDetailService(
+        CtyunOpenPlatformClient client,
+        IDeviceCatalogService deviceCatalogService)
+    {
+        _client = client;
+        _deviceCatalogService = deviceCatalogService;
+    }
+
+    public ServiceResponse<DevicePointDetailModel> GetPointDetail(string deviceCode)
+    {
+        var detailResponse = _client.GetDeviceDetail(deviceCode);
+        if (!detailResponse.IsSuccess)
+        {
+            return ServiceResponse<DevicePointDetailModel>.Failure(Empty(deviceCode), $"点位详情获取失败：{detailResponse.Message}");
+        }
+
+        var detail = detailResponse.Data;
+        var catalogEntry = _deviceCatalogService.GetDevices().Data.FirstOrDefault(item => item.DeviceCode == deviceCode);
+        var pointName = !string.IsNullOrWhiteSpace(detail.DeviceName)
+            ? detail.DeviceName
+            : catalogEntry?.DeviceName ?? deviceCode;
+        var unitName = !string.IsNullOrWhiteSpace(detail.Location)
+            ? detail.Location
+            : catalogEntry?.HandlingUnit ?? "CTYun所属区域";
+        var onlineText = detail.IsOnline ? "在线" : "离线";
+
+        return ServiceResponse<DevicePointDetailModel>.Success(new DevicePointDetailModel(
+            deviceCode,
+            pointName,
+            string.IsNullOrWhiteSpace(detail.DeviceType) ? catalogEntry?.DeviceType ?? "CTYun设备" : detail.DeviceType,
+            unitName,
+            unitName,
+            unitName,
+            ParseCoordinate(detail.Longitude),
+            ParseCoordinate(detail.Latitude),
+            detail.IsOnline,
+            onlineText,
+            detail.IsOnline ? "待接视频巡检" : "播放待确认",
+            "待接 AI 画面判定",
+            $"设备编码 {deviceCode}，当前来源为 CTYun 设备详情接口。",
+            "CTYun"));
+    }
+
+    private static DevicePointDetailModel Empty(string deviceCode)
+    {
+        return new DevicePointDetailModel(deviceCode, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, 0, 0, false, string.Empty, string.Empty, string.Empty, string.Empty, "CTYun");
+    }
+
+    private static double ParseCoordinate(string? rawValue)
+    {
+        return double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0d;
+    }
+}

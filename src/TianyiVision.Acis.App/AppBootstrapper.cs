@@ -48,6 +48,7 @@ public sealed class AppBootstrapper
         var demoAlertQueryService = new DemoAlertQueryService();
         var demoHomeDashboardService = new DemoHomeDashboardService();
         var demoInspectionTaskService = new DemoInspectionTaskService();
+        var demoDispatchNotificationService = new DemoDispatchNotificationService();
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -63,9 +64,12 @@ public sealed class AppBootstrapper
         var ctyunRuntime = CreateCtyunRuntime(platformSettings);
         var deviceCatalogService = BuildDeviceCatalogService(platformSettings, demoDeviceCatalogService, ctyunRuntime);
         var alertQueryService = BuildAlertQueryService(platformSettings, demoAlertQueryService, ctyunRuntime);
-        _homeDashboardService = new ConfigDrivenHomeDashboardService(deviceCatalogService, alertQueryService, demoHomeDashboardService);
-        _inspectionTaskService = new ConfigDrivenInspectionTaskService(deviceCatalogService, alertQueryService, demoInspectionTaskService);
-        _dispatchNotificationService = new DemoDispatchNotificationService();
+        var pointDetailService = BuildPointDetailService(platformSettings, demoDeviceCatalogService, deviceCatalogService, ctyunRuntime);
+        var deviceWorkspaceService = new DeviceWorkspaceService(deviceCatalogService, pointDetailService);
+        var faultPoolService = BuildFaultPoolService(deviceWorkspaceService, alertQueryService, demoDispatchNotificationService, platformSettings);
+        _homeDashboardService = new ConfigDrivenHomeDashboardService(deviceWorkspaceService, faultPoolService, demoHomeDashboardService);
+        _inspectionTaskService = new ConfigDrivenInspectionTaskService(deviceWorkspaceService, faultPoolService, demoInspectionTaskService);
+        _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(faultPoolService, demoDispatchNotificationService);
         _reportDataService = new DemoReportDataService();
 
         LoadLocalConfiguration();
@@ -199,6 +203,42 @@ public sealed class AppBootstrapper
 
         return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
             ? new FallbackAlertQueryService(ctyunService, demoAlertQueryService)
+            : ctyunService;
+    }
+
+    private static IDevicePointDetailService BuildPointDetailService(
+        PlatformIntegrationSettings settings,
+        IDeviceCatalogService demoDeviceCatalogService,
+        IDeviceCatalogService activeDeviceCatalogService,
+        CtyunOpenPlatformClient? ctyunRuntime)
+    {
+        var demoService = new DemoDevicePointDetailService(demoDeviceCatalogService);
+        if (ctyunRuntime is null)
+        {
+            return demoService;
+        }
+
+        var ctyunService = new CtyunDevicePointDetailService(ctyunRuntime, activeDeviceCatalogService);
+        return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
+            ? new FallbackDevicePointDetailService(ctyunService, demoService)
+            : ctyunService;
+    }
+
+    private static IFaultPoolService BuildFaultPoolService(
+        IDeviceWorkspaceService deviceWorkspaceService,
+        IAlertQueryService alertQueryService,
+        IDispatchNotificationService demoDispatchNotificationService,
+        PlatformIntegrationSettings settings)
+    {
+        var demoService = new DemoFaultPoolService(demoDispatchNotificationService);
+        if (!settings.IsCtyunPreferred())
+        {
+            return demoService;
+        }
+
+        var ctyunService = new ConfigDrivenFaultPoolService(deviceWorkspaceService, alertQueryService);
+        return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
+            ? new FallbackFaultPoolService(ctyunService, demoService)
             : ctyunService;
     }
 }

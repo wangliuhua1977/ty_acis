@@ -1,87 +1,79 @@
-using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Devices;
+using TianyiVision.Acis.Services.Dispatch;
 
 namespace TianyiVision.Acis.Services.Home;
 
 public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
 {
-    private readonly IDeviceCatalogService _deviceCatalogService;
-    private readonly IAlertQueryService _alertQueryService;
+    private readonly IDeviceWorkspaceService _deviceWorkspaceService;
+    private readonly IFaultPoolService _faultPoolService;
     private readonly IHomeDashboardService _demoService;
 
     public ConfigDrivenHomeDashboardService(
-        IDeviceCatalogService deviceCatalogService,
-        IAlertQueryService alertQueryService,
+        IDeviceWorkspaceService deviceWorkspaceService,
+        IFaultPoolService faultPoolService,
         IHomeDashboardService demoService)
     {
-        _deviceCatalogService = deviceCatalogService;
-        _alertQueryService = alertQueryService;
+        _deviceWorkspaceService = deviceWorkspaceService;
+        _faultPoolService = faultPoolService;
         _demoService = demoService;
     }
 
     public ServiceResponse<HomeDashboardSnapshot> GetDashboard()
     {
-        var devicesResponse = _deviceCatalogService.GetDevices();
-        if (!devicesResponse.IsSuccess || devicesResponse.Data.Count == 0)
+        var devicePoolResponse = _deviceWorkspaceService.GetDevicePool();
+        if (!devicePoolResponse.IsSuccess || devicePoolResponse.Data.Count == 0)
         {
             return _demoService.GetDashboard();
         }
 
-        var endTime = DateTime.Now;
-        var startTime = endTime.AddHours(-72);
-        var aiAlerts = _alertQueryService.GetAiAlerts(new AiAlertQueryDto(
-            null,
-            startTime,
-            endTime,
-            null,
-            null,
-            1,
-            20));
-
-        var deviceAlerts = devicesResponse.Data
-            .Take(6)
-            .SelectMany(device => _alertQueryService.GetDeviceAlerts(new DeviceAlertQueryDto(
-                device.DeviceCode,
-                startTime,
-                endTime,
-                null,
-                null,
-                1,
-                10)).Data)
-            .ToList();
-
-        var latestAlerts = aiAlerts.Data
-            .Concat(deviceAlerts)
+        var faultPoolResponse = _faultPoolService.GetFaultPool();
+        var latestAlerts = faultPoolResponse.Data
             .OrderByDescending(item => item.LatestDetectedAt)
             .ToList();
 
-        var devices = devicesResponse.Data.Take(8).ToList();
+        var devices = devicePoolResponse.Data.Take(8).ToList();
+        var pointDetails = devices
+            .Select(device =>
+            {
+                var detail = _deviceWorkspaceService.GetPointDetail(device.DeviceCode);
+                return new KeyValuePair<string, DevicePointDetailModel>(
+                    device.DeviceCode,
+                    detail.IsSuccess ? detail.Data : CreateFallbackDetail(device));
+            })
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
         var mapPoints = devices
-            .Select((device, index) => CreateMapPoint(device, latestAlerts, index))
+            .Select((device, index) => CreateMapPoint(device, pointDetails[device.DeviceCode], latestAlerts, index))
+            .ToList();
+        var visiblePointIds = mapPoints
+            .Select(point => point.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var visibleRecentFaults = latestAlerts
+            .Where(item => visiblePointIds.Contains(item.PointId))
+            .Take(4)
+            .Select(item => new HomeRecentFaultModel(
+                item.PointId,
+                item.PointName,
+                item.FaultType,
+                item.LatestDetectedAt.ToString("yyyy-MM-dd HH:mm")))
             .ToList();
 
         var snapshot = new HomeDashboardSnapshot(
-            $"CTYun 设备目录接入 · 本轮加载 {devicesResponse.Data.Count} 个点位",
+            $"CTYun 设备池接入 · 本轮加载 {devicePoolResponse.Data.Count} 个点位",
             $"{devices.Count(device => device.IsOnline)} / {devices.Count}",
-            latestAlerts.Count == 0 ? "暂无 CTYun 告警，当前保留页面壳层。" : $"最近 72 小时共发现 {latestAlerts.Count} 条告警。",
-            $"待派单链路仍走 demo，本轮重点验证目录与告警查询。",
+            latestAlerts.Count == 0 ? "暂无 CTYun 故障池数据，当前保留页面壳层。" : $"最近时间窗聚合出 {latestAlerts.Count} 条故障项。",
+            $"首页已通过真实设备池与真实故障池入口生成态势数据。",
             mapPoints,
-            latestAlerts
-                .Take(4)
-                .Select(item => new HomeRecentFaultModel(
-                    item.PointId,
-                    item.PointName,
-                    item.FaultType,
-                    item.LatestDetectedAt.ToString("yyyy-MM-dd HH:mm")))
-                .ToList());
+            visibleRecentFaults);
 
-        return ServiceResponse<HomeDashboardSnapshot>.Success(snapshot, devicesResponse.Message);
+        return ServiceResponse<HomeDashboardSnapshot>.Success(snapshot, devicePoolResponse.Message);
     }
 
     private static HomeMapPointModel CreateMapPoint(
-        DeviceListItemDto device,
-        IReadOnlyList<FaultAlertDto> alerts,
+        DevicePoolItemModel device,
+        DevicePointDetailModel pointDetail,
+        IReadOnlyList<FaultPoolItemModel> alerts,
         int index)
     {
         var latestAlert = alerts.FirstOrDefault(item => item.PointId == device.DeviceCode);
@@ -93,15 +85,34 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
 
         return new HomeMapPointModel(
             device.DeviceCode,
-            device.DeviceName,
-            string.IsNullOrWhiteSpace(device.HandlingUnit) ? "CTYun设备目录" : device.HandlingUnit,
+            pointDetail.PointName,
+            pointDetail.UnitName,
             kind,
             140 + (index % 4) * 260,
             150 + (index / 4) * 170,
-            latestAlert is not null ? "告警" : device.IsOnline ? "在线" : "离线",
+            latestAlert is not null ? "告警" : pointDetail.OnlineStatusText,
             latestAlert?.FaultType ?? "无故障",
-            latestAlert?.Content ?? "当前通过 CTYun 目录数据填充首页地图壳层。",
+            latestAlert?.FaultSummary ?? pointDetail.DetailSummary,
             latestAlert?.LatestDetectedAt.ToString("yyyy-MM-dd HH:mm") ?? "--",
             latestAlert is not null);
+    }
+
+    private static DevicePointDetailModel CreateFallbackDetail(DevicePoolItemModel device)
+    {
+        return new DevicePointDetailModel(
+            device.DeviceCode,
+            device.DeviceName,
+            device.DeviceType,
+            device.UnitName,
+            device.AreaName,
+            device.AreaName,
+            device.Longitude,
+            device.Latitude,
+            device.IsOnline,
+            device.OnlineStatusText,
+            "待接视频巡检",
+            "待接 AI 判定",
+            $"点位详情获取失败，当前回退到设备池摘要。来源：{device.SourceTag}。",
+            device.SourceTag);
     }
 }

@@ -139,8 +139,13 @@ public sealed class HomePageViewModel : PageViewModelBase
         OpenReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
 
         RefreshHiddenPanels();
-        var initialPointId = dashboard.RecentFaults.FirstOrDefault()?.PointId ?? MapPoints.First().Id;
-        SelectPoint(MapPoints.First(point => point.Id == initialPointId));
+        var initialPoint = MapPoints.FirstOrDefault(point =>
+            point.Id == dashboard.RecentFaults.FirstOrDefault()?.PointId)
+            ?? MapPoints.FirstOrDefault();
+        if (initialPoint is not null)
+        {
+            SelectPoint(initialPoint);
+        }
     }
 
     public string MapStageBadge { get; }
