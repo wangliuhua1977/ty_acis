@@ -90,9 +90,10 @@ public sealed class AppBootstrapper
             _dispatchResponsibilityService,
             demoDispatchNotificationService,
             platformSettings);
+        var pointWorkspaceService = new ConfigDrivenPointWorkspaceService(deviceWorkspaceService, faultPoolService);
         var dispatchNotificationSender = BuildDispatchNotificationSender(notificationSettings, notificationSettingsService);
-        _homeDashboardService = new ConfigDrivenHomeDashboardService(deviceWorkspaceService, faultPoolService, demoHomeDashboardService);
-        _inspectionTaskService = new ConfigDrivenInspectionTaskService(deviceWorkspaceService, faultPoolService, demoInspectionTaskService);
+        _homeDashboardService = new ConfigDrivenHomeDashboardService(pointWorkspaceService, demoHomeDashboardService);
+        _inspectionTaskService = new ConfigDrivenInspectionTaskService(pointWorkspaceService, demoInspectionTaskService);
         _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
             faultPoolService,
             dispatchNotificationSender,

@@ -568,9 +568,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         return CreatePoint(
             point.Id,
+            point.DeviceCode,
             point.Name,
             point.UnitName,
             point.CurrentHandlingUnit,
+            point.Longitude,
+            point.Latitude,
+            point.CanRenderOnMap,
+            point.CoordinateStatusText,
             point.X,
             point.Y,
             MapPointStatus(point.Status),
@@ -579,15 +584,21 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.IsPlayable,
             point.IsImageAbnormal,
             point.IsPreviewAvailable,
+            point.FaultSummary,
             point.LastFaultTime,
             point.EntersDispatchPool);
     }
 
     private InspectionPointState CreatePoint(
         string id,
+        string deviceCode,
         string name,
         string unitName,
         string currentHandlingUnit,
+        double longitude,
+        double latitude,
+        bool canRenderOnMap,
+        string coordinateStatusText,
         double x,
         double y,
         InspectionPointStatus status,
@@ -596,6 +607,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         bool isPlayable,
         bool isImageAbnormal,
         bool isPreviewAvailable,
+        string faultSummary,
         string lastFaultTime,
         bool entersDispatchPool)
     {
@@ -614,7 +626,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             isPlayable ? _textService.Resolve(TextTokens.InspectionPlaybackPlayable) : _textService.Resolve(TextTokens.InspectionPlaybackFailed),
             isImageAbnormal ? _textService.Resolve(TextTokens.InspectionImageAbnormal) : _textService.Resolve(TextTokens.InspectionImageNormal),
             faultType,
-            BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal),
+            BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText),
             lastFaultTime,
             entersDispatchPool ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes) : _textService.Resolve(TextTokens.InspectionDispatchPoolNo),
             ResolveConclusion(status, completionStatus),
@@ -674,9 +686,23 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointStatus completionStatus,
         bool isOnline,
         bool isPlayable,
-        bool isImageAbnormal)
+        bool isImageAbnormal,
+        string faultSummary,
+        bool canRenderOnMap,
+        string coordinateStatusText)
     {
         var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;
+
+        if (!string.IsNullOrWhiteSpace(faultSummary)
+            && !string.Equals(faultSummary, "无故障", StringComparison.Ordinal))
+        {
+            return faultSummary;
+        }
+
+        if (!canRenderOnMap)
+        {
+            return $"当前点位暂不可落图：{coordinateStatusText}。";
+        }
 
         if (effectiveStatus == InspectionPointStatus.Silent)
         {

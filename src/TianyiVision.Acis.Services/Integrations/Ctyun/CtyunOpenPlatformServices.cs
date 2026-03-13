@@ -169,14 +169,14 @@ public sealed class CtyunOpenPlatformClient
         _accessTokenService = accessTokenService;
     }
 
-    public ServiceResponse<CtyunDeviceCatalogPageDto> GetDeviceCatalogPage()
+    public ServiceResponse<CtyunDeviceCatalogPageDto> GetDeviceCatalogPage(long lastId)
     {
         var response = SendProtectedRequest(
             _settings.OpenPlatform.DeviceApi.DeviceListPath,
             [
                 new("accessToken", GetTokenOrThrow()),
                 new("enterpriseUser", _settings.OpenPlatform.EnterpriseUser),
-                new("lastId", _settings.OpenPlatform.DeviceApi.InitialLastId.ToString(CultureInfo.InvariantCulture)),
+                new("lastId", lastId.ToString(CultureInfo.InvariantCulture)),
                 new("pageSize", _settings.OpenPlatform.DeviceApi.PageSize.ToString(CultureInfo.InvariantCulture)),
                 new("hasChildDevices", _settings.OpenPlatform.DeviceApi.HasChildDevices.ToString(CultureInfo.InvariantCulture)),
                 .. BuildParentUserParameter()
@@ -532,14 +532,49 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
 
     public ServiceResponse<IReadOnlyList<DeviceListItemDto>> GetDevices()
     {
-        var pageResponse = _client.GetDeviceCatalogPage();
-        if (!pageResponse.IsSuccess)
+        var allCatalogItems = new List<CtyunDeviceCatalogItemDto>();
+        var nextLastId = _settings.OpenPlatform.DeviceApi.InitialLastId;
+        string? pageMessage = null;
+
+        while (true)
         {
-            return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"设备目录获取失败：{pageResponse.Message}");
+            var pageResponse = _client.GetDeviceCatalogPage(nextLastId);
+            if (!pageResponse.IsSuccess)
+            {
+                if (allCatalogItems.Count == 0)
+                {
+                    return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"设备目录获取失败：{pageResponse.Message}");
+                }
+
+                pageMessage = pageResponse.Message;
+                break;
+            }
+
+            allCatalogItems.AddRange(pageResponse.Data.Items);
+
+            if (pageResponse.Data.LastId < 0 || pageResponse.Data.Items.Count == 0)
+            {
+                break;
+            }
+
+            nextLastId = pageResponse.Data.LastId;
+        }
+
+        var catalogItems = allCatalogItems
+            .GroupBy(item => item.DeviceCode, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+        if (catalogItems.Count == 0)
+        {
+            return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回任何设备。");
         }
 
         var devices = new List<DeviceListItemDto>();
-        foreach (var item in pageResponse.Data.Items.Take(_settings.OpenPlatform.DeviceApi.DetailEnrichmentLimit))
+        var detailCandidates = _settings.OpenPlatform.DeviceApi.DetailEnrichmentLimit > 0
+            ? catalogItems.Take(_settings.OpenPlatform.DeviceApi.DetailEnrichmentLimit)
+            : catalogItems;
+
+        foreach (var item in detailCandidates)
         {
             var detailResponse = _client.GetDeviceDetail(item.DeviceCode);
             if (!detailResponse.IsSuccess)
@@ -555,7 +590,7 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回可用设备详情。");
         }
 
-        return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(devices);
+        return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(devices, pageMessage ?? string.Empty);
     }
 }
 
@@ -605,50 +640,58 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
         _deviceCatalogService = deviceCatalogService;
     }
 
-    public ServiceResponse<DevicePointDetailModel> GetPointDetail(string deviceCode)
+    public ServiceResponse<DevicePointDetailModel> GetPointDetail(string pointId)
     {
-        var detailResponse = _client.GetDeviceDetail(deviceCode);
+        var detailResponse = _client.GetDeviceDetail(pointId);
         if (!detailResponse.IsSuccess)
         {
-            return ServiceResponse<DevicePointDetailModel>.Failure(Empty(deviceCode), $"点位详情获取失败：{detailResponse.Message}");
+            return ServiceResponse<DevicePointDetailModel>.Failure(Empty(pointId), $"点位详情获取失败：{detailResponse.Message}");
         }
 
         var detail = detailResponse.Data;
-        var catalogEntry = _deviceCatalogService.GetDevices().Data.FirstOrDefault(item => item.DeviceCode == deviceCode);
+        var catalogEntry = _deviceCatalogService.GetDevices().Data.FirstOrDefault(item => item.PointId == pointId);
         var pointName = !string.IsNullOrWhiteSpace(detail.DeviceName)
             ? detail.DeviceName
-            : catalogEntry?.DeviceName ?? deviceCode;
+            : catalogEntry?.DeviceName ?? pointId;
         var unitName = !string.IsNullOrWhiteSpace(detail.Location)
             ? detail.Location
             : catalogEntry?.HandlingUnit ?? "CTYun所属区域";
         var onlineText = detail.IsOnline ? "在线" : "离线";
+        var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
 
         return ServiceResponse<DevicePointDetailModel>.Success(new DevicePointDetailModel(
-            deviceCode,
+            PointIdentity.CreatePointId(pointId),
+            pointId,
             pointName,
             string.IsNullOrWhiteSpace(detail.DeviceType) ? catalogEntry?.DeviceType ?? "CTYun设备" : detail.DeviceType,
             unitName,
             unitName,
             unitName,
-            ParseCoordinate(detail.Longitude),
-            ParseCoordinate(detail.Latitude),
+            coordinate,
             detail.IsOnline,
             onlineText,
             detail.IsOnline ? "待接视频巡检" : "播放待确认",
             "待接 AI 画面判定",
-            $"设备编码 {deviceCode}，当前来源为 CTYun 设备详情接口。",
+            $"设备编码 {pointId}，当前来源为 CTYun 设备详情接口。",
             "CTYun"));
     }
 
-    private static DevicePointDetailModel Empty(string deviceCode)
+    private static DevicePointDetailModel Empty(string pointId)
     {
-        return new DevicePointDetailModel(deviceCode, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, 0, 0, false, string.Empty, string.Empty, string.Empty, string.Empty, "CTYun");
-    }
-
-    private static double ParseCoordinate(string? rawValue)
-    {
-        return double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : 0d;
+        return new DevicePointDetailModel(
+            pointId,
+            pointId,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
+            false,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            "CTYun");
     }
 }

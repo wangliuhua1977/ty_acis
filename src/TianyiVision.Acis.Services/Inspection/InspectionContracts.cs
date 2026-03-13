@@ -38,9 +38,14 @@ public sealed record InspectionRunSummaryModel(
 
 public sealed record InspectionPointModel(
     string Id,
+    string DeviceCode,
     string Name,
     string UnitName,
     string CurrentHandlingUnit,
+    double Longitude,
+    double Latitude,
+    bool CanRenderOnMap,
+    string CoordinateStatusText,
     double X,
     double Y,
     InspectionPointStatusModel Status,
@@ -49,8 +54,49 @@ public sealed record InspectionPointModel(
     bool IsPlayable,
     bool IsImageAbnormal,
     bool IsPreviewAvailable,
+    string FaultSummary,
     string LastFaultTime,
-    bool EntersDispatchPool);
+    bool EntersDispatchPool)
+{
+    public InspectionPointModel(
+        string id,
+        string name,
+        string unitName,
+        string currentHandlingUnit,
+        double x,
+        double y,
+        InspectionPointStatusModel status,
+        InspectionPointStatusModel completionStatus,
+        bool isOnline,
+        bool isPlayable,
+        bool isImageAbnormal,
+        bool isPreviewAvailable,
+        string lastFaultTime,
+        bool entersDispatchPool)
+        : this(
+            id,
+            id,
+            name,
+            unitName,
+            currentHandlingUnit,
+            0d,
+            0d,
+            false,
+            "待地图坐标",
+            x,
+            y,
+            status,
+            completionStatus,
+            isOnline,
+            isPlayable,
+            isImageAbnormal,
+            isPreviewAvailable,
+            string.Empty,
+            lastFaultTime,
+            entersDispatchPool)
+    {
+    }
+}
 
 public sealed record InspectionRecentFaultModel(
     string PointId,

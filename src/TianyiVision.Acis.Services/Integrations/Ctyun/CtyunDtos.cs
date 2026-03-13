@@ -1,5 +1,6 @@
 using System.Globalization;
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Integrations.Ctyun;
 
@@ -84,20 +85,13 @@ public sealed class CtyunDeviceListAdapter : ICtyunDeviceListAdapter
     public DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details)
     {
         return new DeviceListItemDto(
+            PointIdentity.CreatePointId(catalogItem.DeviceCode),
             catalogItem.DeviceCode,
             string.IsNullOrWhiteSpace(details?.DeviceName) ? catalogItem.DeviceName : details.DeviceName,
             details?.DeviceType ?? "CTYun设备",
             details?.Location ?? string.Empty,
-            ParseCoordinate(details?.Longitude),
-            ParseCoordinate(details?.Latitude),
+            PointCoordinateParser.FromRaw(details?.Longitude, details?.Latitude),
             details?.IsOnline ?? false);
-    }
-
-    private static double ParseCoordinate(string? value)
-    {
-        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var coordinate)
-            ? coordinate
-            : 0d;
     }
 }
 

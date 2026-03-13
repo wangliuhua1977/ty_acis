@@ -1,12 +1,12 @@
 namespace TianyiVision.Acis.Services.Contracts;
 
 public sealed record DeviceListItemDto(
+    string PointId,
     string DeviceCode,
     string DeviceName,
     string DeviceType,
     string HandlingUnit,
-    double Longitude,
-    double Latitude,
+    TianyiVision.Acis.Services.Devices.PointCoordinateModel Coordinate,
     bool IsOnline);
 
 public sealed record InspectionResultDto(
