@@ -7,6 +7,9 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
     public const string FaultSendTypeValue = "FaultNotification";
     public const string RecoverySendTypeValue = "RecoveryNotification";
 
+    private const string ManualRecoverySourceTag = "DispatchManualRecovery";
+    private const string AutoRecoverySourceTag = "CTYunRecoveryReconciliation";
+
     private readonly IFaultPoolService _faultPoolService;
     private readonly IDispatchNotificationSender? _primarySender;
     private readonly IDispatchNotificationHistoryService _historyService;
@@ -42,11 +45,23 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         var latestFaultNotifications = CreateLatestHistoryLookup(historySnapshot.Entries, FaultSendTypeValue);
         var latestRecoveryNotifications = CreateLatestHistoryLookup(historySnapshot.Entries, RecoverySendTypeValue);
         var persistedSnapshot = _workOrderSnapshotService.Load();
-        var persistedById = persistedSnapshot.WorkOrders.ToDictionary(item => item.WorkOrderId, StringComparer.Ordinal);
 
         var response = _faultPoolService.GetFaultPool();
-        if (response.IsSuccess && response.Data.Count > 0)
+        if (response.IsSuccess)
         {
+            ReconcileRecoveredWorkOrders(response.Data, persistedSnapshot.WorkOrders);
+
+            historySnapshot = _historyService.Load();
+            historyByWorkOrder = historySnapshot.Entries
+                .GroupBy(item => item.WorkOrderId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<DispatchNotificationHistoryEntry>)group.OrderByDescending(item => item.SentAt).ToList(),
+                    StringComparer.Ordinal);
+            latestFaultNotifications = CreateLatestHistoryLookup(historySnapshot.Entries, FaultSendTypeValue);
+            latestRecoveryNotifications = CreateLatestHistoryLookup(historySnapshot.Entries, RecoverySendTypeValue);
+            persistedSnapshot = _workOrderSnapshotService.Load();
+            var persistedById = persistedSnapshot.WorkOrders.ToDictionary(item => item.WorkOrderId, StringComparer.Ordinal);
             var liveWorkOrders = response.Data
                 .Select(item => MapWorkOrder(
                     item,
@@ -100,11 +115,7 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
 
     public ServiceResponse<DispatchNotificationResult> SendRecoveryNotification(DispatchNotificationRequestDto request)
     {
-        return Send(
-            request,
-            RecoverySendTypeValue,
-            primary => primary.SendRecoveryNotification(request),
-            fallback => fallback.SendRecoveryNotification(request));
+        return ConfirmRecoveredAndSend(request, ManualRecoverySourceTag);
     }
 
     private DispatchWorkOrderModel MapWorkOrder(
@@ -139,15 +150,19 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
 
         if (persisted is not null)
         {
+            var recoveredAt = ParseTime(persisted.NotificationRecord.RecoveryConfirmedAt);
+            var faultReopened = recoveredAt.HasValue && item.LatestDetectedAt > recoveredAt.Value;
             current = current with
             {
                 WorkOrderStatus = persisted.WorkOrderStatus == DispatchWorkOrderStatusModel.Dispatched
                     ? DispatchWorkOrderStatusModel.Dispatched
                     : current.WorkOrderStatus,
-                RecoveryStatus = persisted.RecoveryStatus == DispatchRecoveryStatusModel.Recovered
+                RecoveryStatus = persisted.RecoveryStatus == DispatchRecoveryStatusModel.Recovered && !faultReopened
                     ? DispatchRecoveryStatusModel.Recovered
                     : current.RecoveryStatus,
-                NotificationRecord = persisted.NotificationRecord
+                NotificationRecord = faultReopened
+                    ? ClearRecoveryNotification(persisted.NotificationRecord)
+                    : persisted.NotificationRecord
             };
         }
 
@@ -167,12 +182,14 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         var workOrderStatus = latestFaultNotification?.IsSuccess == true
             ? DispatchWorkOrderStatusModel.Dispatched
             : item.WorkOrderStatus;
-        var recoveryStatus = latestRecoveryNotification?.IsSuccess == true
+        var recoveryStatus = item.RecoveryStatus == DispatchRecoveryStatusModel.Recovered || latestRecoveryNotification?.IsSuccess == true
             ? DispatchRecoveryStatusModel.Recovered
             : item.RecoveryStatus;
         var notificationRecord = new DispatchNotificationRecordModel(
             latestFaultNotification?.SentAt.ToString("yyyy-MM-dd HH:mm") ?? item.NotificationRecord.FaultNotificationSentAt,
             latestFaultNotification?.ResultText ?? item.NotificationRecord.FaultNotificationStatus,
+            ResolveRecoveryConfirmedAt(item.NotificationRecord, latestRecoveryNotification),
+            ResolveRecoverySource(item.NotificationRecord, latestRecoveryNotification),
             latestRecoveryNotification?.SentAt.ToString("yyyy-MM-dd HH:mm") ?? item.NotificationRecord.RecoveryNotificationSentAt,
             latestRecoveryNotification?.ResultText ?? item.NotificationRecord.RecoveryNotificationStatus,
             BuildTimelineEntries(historyEntries, item.NotificationRecord.TimelineEntries));
@@ -183,6 +200,36 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             RecoveryStatus = recoveryStatus,
             NotificationRecord = notificationRecord
         };
+    }
+
+    private ServiceResponse<DispatchNotificationResult> ConfirmRecoveredAndSend(
+        DispatchNotificationRequestDto request,
+        string recoverySource)
+    {
+        _workOrderSnapshotService.MarkRecovered(request, DateTime.Now, recoverySource);
+
+        return Send(
+            request,
+            RecoverySendTypeValue,
+            primary => primary.SendRecoveryNotification(request),
+            fallback => fallback.SendRecoveryNotification(request));
+    }
+
+    private void ReconcileRecoveredWorkOrders(
+        IReadOnlyList<FaultPoolItemModel> activeFaults,
+        IReadOnlyList<DispatchWorkOrderModel> persistedWorkOrders)
+    {
+        var activeIds = activeFaults
+            .Select(item => item.FaultKey)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var workOrder in persistedWorkOrders.Where(item =>
+                     item.RecoveryStatus == DispatchRecoveryStatusModel.Unrecovered &&
+                     !string.Equals(item.Responsibility.SourceTag, "Demo", StringComparison.OrdinalIgnoreCase) &&
+                     !activeIds.Contains(item.WorkOrderId)))
+        {
+            ConfirmRecoveredAndSend(CreateNotificationRequest(workOrder), AutoRecoverySourceTag);
+        }
     }
 
     private ServiceResponse<DispatchNotificationResult> Send(
@@ -231,7 +278,7 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             var merged = ServiceResponse<DispatchNotificationResult>.Success(
                 new DispatchNotificationResult(
                     fallback.Data.SentAt,
-                    $"{fallback.Data.StatusText} 已记录真实链路失败并回退 demo。",
+                    $"{fallback.Data.StatusText} Real send failed and demo fallback was recorded.",
                     fallback.Data.TimelineActor),
                 primary.Message);
             PersistHistory(request, sendType, merged, false, true);
@@ -311,11 +358,69 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             .OrderBy(item => item.WorkOrderStatus == DispatchWorkOrderStatusModel.PendingDispatch ? 0 : 1)
             .ThenBy(item => item.RecoveryStatus == DispatchRecoveryStatusModel.Unrecovered ? 0 : 1)
             .ThenByDescending(item => item.RepeatFault.RepeatCount)
-            .ThenByDescending(item => ParseTime(item.RepeatFault.LatestFaultTime));
+            .ThenByDescending(item => ParseTime(item.RepeatFault.LatestFaultTime) ?? DateTime.MinValue);
     }
 
-    private static DateTime ParseTime(string rawValue)
+    private static DispatchNotificationRequestDto CreateNotificationRequest(DispatchWorkOrderModel workOrder)
     {
-        return DateTime.TryParse(rawValue, out var parsed) ? parsed : DateTime.MinValue;
+        return new DispatchNotificationRequestDto(
+            workOrder.WorkOrderId,
+            workOrder.PointId,
+            workOrder.Responsibility.CurrentHandlingUnit,
+            workOrder.Responsibility.MaintainerName,
+            workOrder.Responsibility.MaintainerPhone,
+            workOrder.Responsibility.SupervisorName,
+            workOrder.Responsibility.SupervisorPhone,
+            workOrder.PointName,
+            workOrder.FaultType,
+            ParseTime(workOrder.RepeatFault.LatestFaultTime) ?? DateTime.Now,
+            workOrder.ScreenshotTitle,
+            workOrder.Responsibility.NotificationChannelId);
+    }
+
+    private static DispatchNotificationRecordModel ClearRecoveryNotification(DispatchNotificationRecordModel notificationRecord)
+    {
+        return notificationRecord with
+        {
+            RecoveryConfirmedAt = "--",
+            RecoverySourceTag = "--",
+            RecoveryNotificationSentAt = "--",
+            RecoveryNotificationStatus = "待发送"
+        };
+    }
+
+    private static string ResolveRecoveryConfirmedAt(
+        DispatchNotificationRecordModel notificationRecord,
+        DispatchNotificationHistoryEntry? latestRecoveryNotification)
+    {
+        if (!string.IsNullOrWhiteSpace(notificationRecord.RecoveryConfirmedAt) &&
+            !string.Equals(notificationRecord.RecoveryConfirmedAt, "--", StringComparison.Ordinal))
+        {
+            return notificationRecord.RecoveryConfirmedAt;
+        }
+
+        return latestRecoveryNotification?.IsSuccess == true
+            ? latestRecoveryNotification.SentAt.ToString("yyyy-MM-dd HH:mm")
+            : notificationRecord.RecoveryConfirmedAt;
+    }
+
+    private static string ResolveRecoverySource(
+        DispatchNotificationRecordModel notificationRecord,
+        DispatchNotificationHistoryEntry? latestRecoveryNotification)
+    {
+        if (!string.IsNullOrWhiteSpace(notificationRecord.RecoverySourceTag) &&
+            !string.Equals(notificationRecord.RecoverySourceTag, "--", StringComparison.Ordinal))
+        {
+            return notificationRecord.RecoverySourceTag;
+        }
+
+        return latestRecoveryNotification?.IsSuccess == true
+            ? latestRecoveryNotification.TimelineActor
+            : notificationRecord.RecoverySourceTag;
+    }
+
+    private static DateTime? ParseTime(string rawValue)
+    {
+        return DateTime.TryParse(rawValue, out var parsed) ? parsed : null;
     }
 }

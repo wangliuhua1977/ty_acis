@@ -38,6 +38,8 @@ public sealed record DispatchNotificationTimelineEntryModel(
 public sealed record DispatchNotificationRecordModel(
     string FaultNotificationSentAt,
     string FaultNotificationStatus,
+    string RecoveryConfirmedAt,
+    string RecoverySourceTag,
     string RecoveryNotificationSentAt,
     string RecoveryNotificationStatus,
     IReadOnlyList<DispatchNotificationTimelineEntryModel> TimelineEntries);

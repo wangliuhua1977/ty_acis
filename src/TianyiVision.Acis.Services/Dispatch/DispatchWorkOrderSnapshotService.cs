@@ -14,6 +14,11 @@ public interface IDispatchWorkOrderSnapshotService
 
     void Upsert(DispatchWorkOrderModel workOrder);
 
+    void MarkRecovered(
+        DispatchNotificationRequestDto request,
+        DateTime recoveredAt,
+        string recoverySource);
+
     void UpdateNotificationAttempt(
         DispatchNotificationRequestDto request,
         string sendType,
@@ -50,6 +55,41 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
     {
         var workOrders = Load().WorkOrders.ToDictionary(item => item.WorkOrderId, StringComparer.Ordinal);
         workOrders[workOrder.WorkOrderId] = workOrder;
+        Save(workOrders.Values.ToList());
+    }
+
+    public void MarkRecovered(
+        DispatchNotificationRequestDto request,
+        DateTime recoveredAt,
+        string recoverySource)
+    {
+        var workOrders = Load().WorkOrders.ToDictionary(item => item.WorkOrderId, StringComparer.Ordinal);
+        var existing = workOrders.TryGetValue(request.WorkOrderId, out var current)
+            ? current
+            : CreatePlaceholder(request);
+
+        var updatedWorkOrder = existing with
+        {
+            RecoveryStatus = DispatchRecoveryStatusModel.Recovered,
+            Responsibility = existing.Responsibility with
+            {
+                CurrentHandlingUnit = request.CurrentHandlingUnit,
+                MaintainerName = request.MaintainerName,
+                MaintainerPhone = request.MaintainerPhone,
+                SupervisorName = request.SupervisorName,
+                SupervisorPhone = request.SupervisorPhone,
+                NotificationChannelId = string.IsNullOrWhiteSpace(request.NotificationChannelId)
+                    ? existing.Responsibility.NotificationChannelId
+                    : request.NotificationChannelId
+            },
+            NotificationRecord = existing.NotificationRecord with
+            {
+                RecoveryConfirmedAt = recoveredAt.ToString("yyyy-MM-dd HH:mm"),
+                RecoverySourceTag = string.IsNullOrWhiteSpace(recoverySource) ? "--" : recoverySource.Trim()
+            }
+        };
+
+        workOrders[request.WorkOrderId] = updatedWorkOrder;
         Save(workOrders.Values.ToList());
     }
 
@@ -96,9 +136,6 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
             WorkOrderStatus = sendType == ConfigDrivenDispatchNotificationService.FaultSendTypeValue && response.IsSuccess
                 ? DispatchWorkOrderStatusModel.Dispatched
                 : existing.WorkOrderStatus,
-            RecoveryStatus = sendType == ConfigDrivenDispatchNotificationService.RecoverySendTypeValue && response.IsSuccess
-                ? DispatchRecoveryStatusModel.Recovered
-                : existing.RecoveryStatus,
             Responsibility = existing.Responsibility with
             {
                 CurrentHandlingUnit = request.CurrentHandlingUnit,
@@ -168,10 +205,10 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
             request.FaultType,
             "Local Snapshot",
             request.CurrentHandlingUnit,
-            string.IsNullOrWhiteSpace(request.ScreenshotTitle) ? "未留存截图" : request.ScreenshotTitle.Trim(),
-            "通知链路本地留痕补录",
-            $"{request.FaultType} 本地留痕补录",
-            "故障",
+            string.IsNullOrWhiteSpace(request.ScreenshotTitle) ? "Snapshot pending" : request.ScreenshotTitle.Trim(),
+            "Local snapshot record",
+            $"{request.FaultType} local snapshot record",
+            "Fault",
             true,
             request.FaultDetectedAt.Date == DateTime.Today,
             DispatchMethodModel.Manual,
@@ -185,7 +222,7 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
                 request.SupervisorPhone,
                 string.IsNullOrWhiteSpace(request.NotificationChannelId) ? "default" : request.NotificationChannelId,
                 "LocalSnapshot"),
-            new DispatchNotificationRecordModel("--", "待发送", "--", "待发送", []),
+            new DispatchNotificationRecordModel("--", "待发送", "--", "--", "--", "待发送", []),
             new DispatchRepeatFaultModel(detectedAt, detectedAt, 1));
     }
 }

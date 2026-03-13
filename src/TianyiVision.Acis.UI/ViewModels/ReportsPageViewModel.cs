@@ -745,14 +745,17 @@ public sealed class ReportsPageViewModel : PageViewModelBase
     private bool MatchesDate(DateOnly reportDate)
     {
         var timeRange = FilterState.SelectedTimeRangeOption?.Key ?? TimeTodayKey;
-        var today = new DateOnly(2026, 3, 12);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var weekStart = today.AddDays(-6);
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var customStart = today.AddDays(-8);
 
         return timeRange switch
         {
             TimeTodayKey => reportDate == today,
-            TimeWeekKey => reportDate >= new DateOnly(2026, 3, 9) && reportDate <= today,
-            TimeMonthKey => reportDate >= new DateOnly(2026, 3, 1) && reportDate <= today,
-            TimeCustomKey => reportDate >= new DateOnly(2026, 3, 5) && reportDate <= today,
+            TimeWeekKey => reportDate >= weekStart && reportDate <= today,
+            TimeMonthKey => reportDate >= monthStart && reportDate <= today,
+            TimeCustomKey => reportDate >= customStart && reportDate <= today,
             _ => true
         };
     }

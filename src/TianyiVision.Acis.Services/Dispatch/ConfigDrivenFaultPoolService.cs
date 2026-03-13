@@ -10,17 +10,20 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
     private readonly IAlertQueryService _alertQueryService;
     private readonly IDispatchResponsibilityService _responsibilityService;
     private readonly TimeSpan _lookbackWindow;
+    private readonly TimeSpan _aiFaultIdleWindow;
 
     public ConfigDrivenFaultPoolService(
         IDeviceWorkspaceService deviceWorkspaceService,
         IAlertQueryService alertQueryService,
         IDispatchResponsibilityService responsibilityService,
-        TimeSpan? lookbackWindow = null)
+        TimeSpan? lookbackWindow = null,
+        TimeSpan? aiFaultIdleWindow = null)
     {
         _deviceWorkspaceService = deviceWorkspaceService;
         _alertQueryService = alertQueryService;
         _responsibilityService = responsibilityService;
         _lookbackWindow = lookbackWindow ?? TimeSpan.FromHours(72);
+        _aiFaultIdleWindow = aiFaultIdleWindow ?? TimeSpan.FromHours(2);
     }
 
     public ServiceResponse<IReadOnlyList<FaultPoolItemModel>> GetFaultPool()
@@ -44,28 +47,42 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             1,
             50));
 
-        var deviceAlerts = devices
-            .SelectMany(device => _alertQueryService.GetDeviceAlerts(new DeviceAlertQueryDto(
+        var deviceAlertResponses = devices
+            .Select(device => _alertQueryService.GetDeviceAlerts(new DeviceAlertQueryDto(
                 device.DeviceCode,
                 startTime,
                 endTime,
                 null,
                 null,
                 1,
-                20)).Data)
+                20)))
+            .ToList();
+        var deviceAlerts = deviceAlertResponses
+            .SelectMany(response => response.Data)
             .ToList();
 
-        var alerts = aiAlertsResponse.Data
+        var allAlerts = aiAlertsResponse.Data
             .Concat(deviceAlerts)
+            .Where(alert => !string.IsNullOrWhiteSpace(alert.PointId))
             .ToList();
-
-        if (alerts.Count == 0)
+        var hasSuccessfulAlertQuery = aiAlertsResponse.IsSuccess || deviceAlertResponses.Any(response => response.IsSuccess);
+        if (!hasSuccessfulAlertQuery)
         {
-            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], "No CTYun alerts were available in the lookback window.");
+            var failureMessages = deviceAlertResponses
+                .Where(response => !string.IsNullOrWhiteSpace(response.Message))
+                .Select(response => response.Message)
+                .ToList();
+            if (!string.IsNullOrWhiteSpace(aiAlertsResponse.Message))
+            {
+                failureMessages.Insert(0, aiAlertsResponse.Message);
+            }
+
+            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], string.Join(" ", failureMessages).Trim());
         }
 
+        var activeAlerts = ResolveActiveAlerts(allAlerts, endTime);
         var devicesByCode = devices.ToDictionary(device => device.DeviceCode, StringComparer.Ordinal);
-        var faultPool = alerts
+        var faultPool = activeAlerts
             .GroupBy(alert => new { alert.PointId, alert.FaultType })
             .Select(group => MapGroup(group.ToList(), devicesByCode))
             .OrderBy(item => item.WorkOrderStatus == DispatchWorkOrderStatusModel.PendingDispatch ? 0 : 1)
@@ -73,7 +90,80 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             .ThenByDescending(item => item.LatestDetectedAt)
             .ToList();
 
-        return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Success(faultPool, devicePoolResponse.Message);
+        var messages = new List<string>();
+        if (!aiAlertsResponse.IsSuccess && !string.IsNullOrWhiteSpace(aiAlertsResponse.Message))
+        {
+            messages.Add(aiAlertsResponse.Message);
+        }
+
+        if (faultPool.Count == 0)
+        {
+            messages.Add("No active CTYun faults matched the current reconciliation rules.");
+        }
+
+        return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Success(faultPool, string.Join(" ", messages).Trim());
+    }
+
+    private IReadOnlyList<FaultAlertDto> ResolveActiveAlerts(
+        IReadOnlyList<FaultAlertDto> alerts,
+        DateTime now)
+    {
+        if (alerts.Count == 0)
+        {
+            return [];
+        }
+
+        var alertsByPoint = alerts
+            .GroupBy(alert => alert.PointId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<FaultAlertDto>)group.OrderByDescending(item => item.LatestDetectedAt).ToList(),
+                StringComparer.Ordinal);
+
+        return alerts
+            .Where(IsActionableFaultAlert)
+            .GroupBy(alert => new { alert.PointId, alert.FaultType })
+            .Where(group => IsStillActive(
+                group.OrderByDescending(item => item.LatestDetectedAt).First(),
+                alertsByPoint,
+                now))
+            .SelectMany(group => group)
+            .ToList();
+    }
+
+    private bool IsStillActive(
+        FaultAlertDto alert,
+        IReadOnlyDictionary<string, IReadOnlyList<FaultAlertDto>> alertsByPoint,
+        DateTime now)
+    {
+        if (IsOfflineFault(alert))
+        {
+            return !alertsByPoint.GetValueOrDefault(alert.PointId, Array.Empty<FaultAlertDto>())
+                .Any(candidate => IsRecoverySignal(candidate) && candidate.LatestDetectedAt > alert.LatestDetectedAt);
+        }
+
+        return alert.LatestDetectedAt >= now.Subtract(_aiFaultIdleWindow);
+    }
+
+    private static bool IsActionableFaultAlert(FaultAlertDto alert)
+    {
+        return IsOfflineFault(alert) || IsAiFault(alert);
+    }
+
+    private static bool IsOfflineFault(FaultAlertDto alert)
+    {
+        return alert.FaultType.Contains("离线", StringComparison.Ordinal);
+    }
+
+    private static bool IsRecoverySignal(FaultAlertDto alert)
+    {
+        return alert.FaultType.Contains("上线", StringComparison.Ordinal);
+    }
+
+    private static bool IsAiFault(FaultAlertDto alert)
+    {
+        return !string.Equals(alert.AlertSource, "设备告警", StringComparison.Ordinal)
+            && !IsRecoverySignal(alert);
     }
 
     private FaultPoolItemModel MapGroup(
@@ -91,8 +181,9 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
         var responsibility = responsibilityResponse.IsSuccess
             ? responsibilityResponse.Data
             : CreatePlaceholderResponsibility(currentHandlingUnit);
-        var isOfflineFault = latest.FaultType.Contains("离线", StringComparison.Ordinal);
-        var dispatchMethod = isOfflineFault ? DispatchMethodModel.Automatic : DispatchMethodModel.Manual;
+        var dispatchMethod = IsOfflineFault(latest)
+            ? DispatchMethodModel.Automatic
+            : DispatchMethodModel.Manual;
 
         return new FaultPoolItemModel(
             $"{latest.PointId}:{latest.FaultType}",
@@ -103,8 +194,8 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             responsibility.CurrentHandlingUnit,
             device?.AreaName ?? currentHandlingUnit,
             latest.Content,
-            "故障",
-            $"{latest.FaultType}告警快照",
+            "Fault",
+            $"{latest.FaultType} snapshot",
             latest.AlertSource,
             true,
             latest.LatestDetectedAt.Date == DateTime.Today,
@@ -112,7 +203,7 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             DispatchWorkOrderStatusModel.PendingDispatch,
             DispatchRecoveryStatusModel.Unrecovered,
             responsibility,
-            new DispatchNotificationRecordModel("--", "待发送", "--", "待发送", []),
+            new DispatchNotificationRecordModel("--", "待发送", "--", "--", "--", "待发送", []),
             alerts.Min(item => item.FirstDetectedAt),
             alerts.Max(item => item.LatestDetectedAt),
             alerts.Count,
@@ -123,9 +214,9 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
     {
         return new DispatchResponsibilityModel(
             currentHandlingUnit,
-            "待配置维护人",
+            "Unassigned Maintainer",
             "--",
-            "待配置负责人",
+            "Unassigned Supervisor",
             "--",
             "default",
             "FaultPool.Placeholder");
@@ -207,7 +298,7 @@ public sealed class FallbackFaultPoolService : IFaultPoolService
             response = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], $"Real fault pool call failed: {ex.Message}");
         }
 
-        if (response.IsSuccess && response.Data.Count > 0)
+        if (response.IsSuccess)
         {
             return response;
         }

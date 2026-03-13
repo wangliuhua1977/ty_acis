@@ -526,18 +526,13 @@ public sealed class DispatchPageViewModel : PageViewModelBase
                 statusText,
                 notificationResponse.Data.TimelineActor));
 
-        if (notificationResponse.IsSuccess)
-        {
-            SelectedWorkOrderDetail.RecoveryStatus = DispatchRecoveryStatus.Recovered;
-            SelectedWorkOrderDetail.RecoveryStatusText = _textService.Resolve(TextTokens.DispatchRecoveryRecovered);
-            WorkspaceFeedback = string.Format(
+        SelectedWorkOrderDetail.RecoveryStatus = DispatchRecoveryStatus.Recovered;
+        SelectedWorkOrderDetail.RecoveryStatusText = _textService.Resolve(TextTokens.DispatchRecoveryRecovered);
+        WorkspaceFeedback = notificationResponse.IsSuccess
+            ? string.Format(
                 _textService.Resolve(TextTokens.DispatchRecoveryFeedbackPattern),
-                SelectedWorkOrderDetail.PointName);
-        }
-        else
-        {
-            WorkspaceFeedback = notificationResponse.Message;
-        }
+                SelectedWorkOrderDetail.PointName)
+            : $"{SelectedWorkOrderDetail.PointName} 已标记恢复；{notificationResponse.Message}";
 
         ApplyFilters(SelectedWorkOrderDetail.WorkOrderId);
     }

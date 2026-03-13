@@ -59,6 +59,7 @@ public sealed class AppBootstrapper
         var demoInspectionTaskService = new DemoInspectionTaskService();
         var demoDispatchNotificationService = new DemoDispatchNotificationService();
         var demoDispatchResponsibilityService = new DemoDispatchResponsibilityService(demoDispatchNotificationService);
+        var demoReportDataService = new DemoReportDataService();
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -99,7 +100,10 @@ public sealed class AppBootstrapper
             workOrderSnapshotService,
             demoDispatchNotificationService,
             notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback);
-        _reportDataService = new DemoReportDataService();
+        _reportDataService = new ConfigDrivenReportDataService(
+            _dispatchNotificationService,
+            _textService,
+            demoReportDataService);
 
         LoadLocalConfiguration();
     }
