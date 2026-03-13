@@ -1,10 +1,15 @@
+using System.Net.Http;
 using System.Windows;
 using TianyiVision.Acis.Infrastructure.Localization;
 using TianyiVision.Acis.Infrastructure.Theming;
+using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Demo;
+using TianyiVision.Acis.Services.Devices;
 using TianyiVision.Acis.Services.Dispatch;
 using TianyiVision.Acis.Services.Home;
+using TianyiVision.Acis.Services.Integrations;
+using TianyiVision.Acis.Services.Integrations.Ctyun;
 using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Layout;
@@ -37,6 +42,12 @@ public sealed class AppBootstrapper
     {
         var paths = new AcisLocalDataPaths();
         var documentStore = new JsonFileDocumentStore();
+        var platformIntegrationSettingsService = new FilePlatformIntegrationSettingsService(paths, documentStore);
+        var platformSettings = platformIntegrationSettingsService.Load();
+        var demoDeviceCatalogService = new DemoDeviceCatalogService();
+        var demoAlertQueryService = new DemoAlertQueryService();
+        var demoHomeDashboardService = new DemoHomeDashboardService();
+        var demoInspectionTaskService = new DemoInspectionTaskService();
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -46,10 +57,14 @@ public sealed class AppBootstrapper
         _localConfigurationBootstrapService = new LocalConfigurationBootstrapService(
             _appPreferencesService,
             _homeOverlayLayoutService,
-            new FilePlatformIntegrationSettingsService(paths, documentStore),
+            platformIntegrationSettingsService,
             new FileNotificationSettingsService(paths, documentStore));
-        _homeDashboardService = new DemoHomeDashboardService();
-        _inspectionTaskService = new DemoInspectionTaskService();
+
+        var ctyunRuntime = CreateCtyunRuntime(platformSettings);
+        var deviceCatalogService = BuildDeviceCatalogService(platformSettings, demoDeviceCatalogService, ctyunRuntime);
+        var alertQueryService = BuildAlertQueryService(platformSettings, demoAlertQueryService, ctyunRuntime);
+        _homeDashboardService = new ConfigDrivenHomeDashboardService(deviceCatalogService, alertQueryService, demoHomeDashboardService);
+        _inspectionTaskService = new ConfigDrivenInspectionTaskService(deviceCatalogService, alertQueryService, demoInspectionTaskService);
         _dispatchNotificationService = new DemoDispatchNotificationService();
         _reportDataService = new DemoReportDataService();
 
@@ -134,5 +149,56 @@ public sealed class AppBootstrapper
         {
             _textService.SetProfile(snapshot.ActiveTerminologyId);
         }
+    }
+
+    private static CtyunOpenPlatformClient? CreateCtyunRuntime(PlatformIntegrationSettings settings)
+    {
+        if (!settings.IsCtyunPreferred())
+        {
+            return null;
+        }
+
+        var issues = settings.GetCtyunConfigurationIssues();
+        if (issues.Count > 0)
+        {
+            System.Diagnostics.Trace.WriteLine(string.Join(Environment.NewLine, issues));
+            return null;
+        }
+
+        var httpClient = new HttpClient();
+        var tokenService = new CtyunAccessTokenService(httpClient, settings);
+        return new CtyunOpenPlatformClient(httpClient, settings, tokenService);
+    }
+
+    private static IDeviceCatalogService BuildDeviceCatalogService(
+        PlatformIntegrationSettings settings,
+        IDeviceCatalogService demoDeviceCatalogService,
+        CtyunOpenPlatformClient? ctyunRuntime)
+    {
+        if (ctyunRuntime is null)
+        {
+            return demoDeviceCatalogService;
+        }
+        var ctyunService = new CtyunDeviceCatalogService(ctyunRuntime, new CtyunDeviceListAdapter(), settings);
+
+        return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
+            ? new FallbackDeviceCatalogService(ctyunService, demoDeviceCatalogService)
+            : ctyunService;
+    }
+
+    private static IAlertQueryService BuildAlertQueryService(
+        PlatformIntegrationSettings settings,
+        IAlertQueryService demoAlertQueryService,
+        CtyunOpenPlatformClient? ctyunRuntime)
+    {
+        if (ctyunRuntime is null)
+        {
+            return demoAlertQueryService;
+        }
+        var ctyunService = new CtyunAlertQueryService(ctyunRuntime, new CtyunAiAlertAdapter(), new CtyunDeviceAlertAdapter());
+
+        return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
+            ? new FallbackAlertQueryService(ctyunService, demoAlertQueryService)
+            : ctyunService;
     }
 }

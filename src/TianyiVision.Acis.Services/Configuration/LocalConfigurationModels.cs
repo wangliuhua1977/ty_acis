@@ -4,8 +4,11 @@ using TianyiVision.Acis.Services.Settings;
 namespace TianyiVision.Acis.Services.Configuration;
 
 public sealed record OpenPlatformSettings(
+    string ServiceMode,
+    bool EnableDemoFallback,
     string BaseUrl,
     string AppId,
+    string AppKey,
     string AppSecret,
     string RsaPrivateKey,
     string Version,
@@ -13,7 +16,34 @@ public sealed record OpenPlatformSettings(
     string ClientType,
     string GrantType,
     string EnterpriseUser,
-    string ParentUser);
+    string ParentUser,
+    OpenPlatformTokenSettings Token,
+    OpenPlatformDeviceApiSettings DeviceApi,
+    OpenPlatformAlarmApiSettings AlarmApi);
+
+public sealed record OpenPlatformTokenSettings(
+    string AccessTokenPath,
+    string RefreshGrantType,
+    int ReuseBeforeExpirySeconds);
+
+public sealed record OpenPlatformDeviceApiSettings(
+    string DeviceListPath,
+    string DeviceDetailPath,
+    int PageSize,
+    long InitialLastId,
+    int HasChildDevices,
+    int DetailEnrichmentLimit);
+
+public sealed record OpenPlatformAlarmApiSettings(
+    string AiAlertListPath,
+    string DeviceAlertListPath,
+    int PageNo,
+    int PageSize,
+    int AiAlertSource,
+    int DeviceAlertSource,
+    string AiAlertTypeList,
+    string DeviceAlertTypeList,
+    int LookbackHours);
 
 public sealed record MapProviderSettings(
     string AmapWebJsApiKey,
