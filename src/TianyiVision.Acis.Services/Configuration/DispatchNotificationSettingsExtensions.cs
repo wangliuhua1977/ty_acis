@@ -50,6 +50,11 @@ public static class DispatchNotificationSettingsExtensions
             }
         }
 
+        if (!settings.Channels.Any(channel => channel.IsDefault))
+        {
+            issues.Add("DispatchNotification has no default channel.");
+        }
+
         return issues;
     }
 

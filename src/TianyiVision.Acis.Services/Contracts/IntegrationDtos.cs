@@ -32,6 +32,7 @@ public sealed record FaultAlertDto(
     int RepeatCount);
 
 public sealed record DispatchNotificationRequestDto(
+    string WorkOrderId,
     string PointId,
     string CurrentHandlingUnit,
     string MaintainerName,

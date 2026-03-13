@@ -135,7 +135,7 @@ public sealed class EnterpriseWeChatDispatchNotificationSender : IDispatchNotifi
             }
         }
 
-        return enabledChannels[0];
+        return enabledChannels.FirstOrDefault(channel => channel.IsDefault) ?? enabledChannels[0];
     }
 
     private static string BuildMarkdown(

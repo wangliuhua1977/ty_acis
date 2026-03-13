@@ -599,6 +599,7 @@ public sealed class DispatchPageViewModel : PageViewModelBase
     private DispatchNotificationRequestDto CreateNotificationRequest(DispatchWorkOrderDetailState workOrder)
     {
         return new DispatchNotificationRequestDto(
+            workOrder.WorkOrderId,
             workOrder.PointId,
             workOrder.Responsibility.CurrentHandlingUnit,
             workOrder.Responsibility.MaintainerName,

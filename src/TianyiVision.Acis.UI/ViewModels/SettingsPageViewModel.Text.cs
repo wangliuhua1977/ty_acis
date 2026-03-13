@@ -106,6 +106,11 @@ public sealed partial class SettingsPageViewModel
                 _textService.Resolve(TextTokens.SettingsSectionResponsibilityDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
+                SettingsSectionKey.NotificationChannels,
+                "通知通道管理",
+                "管理企业微信群 webhook 通道、默认通道与 demo fallback 开关。",
+                SelectSectionCommand),
+            new SettingsSectionState(
                 SettingsSectionKey.VideoProtocolStrategy,
                 _textService.Resolve(TextTokens.SettingsSectionVideoStrategyTitle),
                 _textService.Resolve(TextTokens.SettingsSectionVideoStrategyDescription),

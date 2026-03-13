@@ -126,6 +126,7 @@ public sealed partial class SettingsPageViewModel
         OnPropertyChanged(nameof(IsInspectionGroupsVisible));
         OnPropertyChanged(nameof(IsPointsVisible));
         OnPropertyChanged(nameof(IsResponsibilityVisible));
+        OnPropertyChanged(nameof(IsNotificationChannelsVisible));
         OnPropertyChanged(nameof(IsVideoStrategyVisible));
 
         if (IsPlaceholderSectionVisible)

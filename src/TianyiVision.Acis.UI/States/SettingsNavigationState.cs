@@ -8,6 +8,7 @@ public enum SettingsSectionKey
     InspectionGroups,
     PointManagement,
     ResponsibilityMapping,
+    NotificationChannels,
     VideoProtocolStrategy,
     ThemeCenter,
     TerminologyCenter

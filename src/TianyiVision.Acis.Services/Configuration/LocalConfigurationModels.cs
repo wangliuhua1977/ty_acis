@@ -59,7 +59,8 @@ public sealed record NotificationChannelSettings(
     string ChannelId,
     string DisplayName,
     string WebhookUrl,
-    bool IsEnabled);
+    bool IsEnabled,
+    bool IsDefault);
 
 public sealed record DispatchNotificationSettings(
     string ServiceMode,

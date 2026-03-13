@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Core.Theming;
+using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Settings;
 using TianyiVision.Acis.Services.Theming;
@@ -32,6 +33,8 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
 
     private readonly Action<ThemeDefinition> _applyThemeToApplication;
     private readonly IAppPreferencesService _appPreferencesService;
+    private readonly IDispatchResponsibilitySettingsService _dispatchResponsibilitySettingsService;
+    private readonly INotificationSettingsService _notificationSettingsService;
     private readonly Dictionary<string, ThemeEditorFieldState> _themeFields = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TerminologyFieldState> _terminologyFields = new(StringComparer.Ordinal);
     private readonly ITextService _textService;
@@ -51,6 +54,8 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         ITextService textService,
         IThemeService themeService,
         IAppPreferencesService appPreferencesService,
+        IDispatchResponsibilitySettingsService dispatchResponsibilitySettingsService,
+        INotificationSettingsService notificationSettingsService,
         Action<ThemeDefinition> applyThemeToApplication)
         : base(
             textService.Resolve(TextTokens.SettingsTitle),
@@ -59,6 +64,8 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         _textService = textService;
         _themeService = themeService;
         _appPreferencesService = appPreferencesService;
+        _dispatchResponsibilitySettingsService = dispatchResponsibilitySettingsService;
+        _notificationSettingsService = notificationSettingsService;
         _applyThemeToApplication = applyThemeToApplication;
         _preferencesSnapshot = appPreferencesService.Load();
 

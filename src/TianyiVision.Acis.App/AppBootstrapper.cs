@@ -29,12 +29,14 @@ public sealed class AppBootstrapper
 {
     private readonly IClockService _clockService;
     private readonly IAppPreferencesService _appPreferencesService;
+    private readonly IDispatchResponsibilitySettingsService _dispatchResponsibilitySettingsService;
     private readonly IHomeOverlayLayoutService _homeOverlayLayoutService;
     private readonly ILocalConfigurationBootstrapService _localConfigurationBootstrapService;
     private readonly IHomeDashboardService _homeDashboardService;
     private readonly IInspectionTaskService _inspectionTaskService;
     private readonly IDispatchNotificationService _dispatchNotificationService;
     private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
+    private readonly INotificationSettingsService _notificationSettingsService;
     private readonly IReportDataService _reportDataService;
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
@@ -48,6 +50,7 @@ public sealed class AppBootstrapper
         var notificationSettings = notificationSettingsService.Load();
         var responsibilitySettingsService = new FileDispatchResponsibilitySettingsService(paths, documentStore);
         var responsibilitySettings = responsibilitySettingsService.Load();
+        var notificationHistoryService = new FileDispatchNotificationHistoryService(paths, documentStore);
         var platformSettings = platformIntegrationSettingsService.Load();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
         var demoAlertQueryService = new DemoAlertQueryService();
@@ -59,6 +62,8 @@ public sealed class AppBootstrapper
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
         _clockService = new SystemClockService();
+        _notificationSettingsService = notificationSettingsService;
+        _dispatchResponsibilitySettingsService = responsibilitySettingsService;
         _homeOverlayLayoutService = new FileHomeOverlayLayoutService(paths, documentStore);
         _appPreferencesService = new FileAppPreferencesService(paths, documentStore);
         _localConfigurationBootstrapService = new LocalConfigurationBootstrapService(
@@ -88,6 +93,7 @@ public sealed class AppBootstrapper
         _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
             faultPoolService,
             dispatchNotificationSender,
+            notificationHistoryService,
             demoDispatchNotificationService,
             notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback);
         _reportDataService = new DemoReportDataService();
@@ -136,6 +142,8 @@ public sealed class AppBootstrapper
                 _textService,
                 _themeService,
                 _appPreferencesService,
+                _dispatchResponsibilitySettingsService,
+                _notificationSettingsService,
                 theme => ApplyTheme(applicationResources, theme))
         };
 
