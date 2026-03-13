@@ -26,20 +26,12 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="SettingsEditorTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
-            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <Style x:Key="SettingsEditorTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="Margin" Value="0,8,0,0" />
         </Style>
 
-        <Style x:Key="SettingsEditorComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
-            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <Style x:Key="SettingsEditorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="Margin" Value="0,8,0,0" />
         </Style>

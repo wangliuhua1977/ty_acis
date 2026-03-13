@@ -18,11 +18,7 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ReviewComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimaryBrush}" />
-            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <Style x:Key="ReviewComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="Margin" Value="0,8,12,0" />
             <Setter Property="MinWidth" Value="180" />
