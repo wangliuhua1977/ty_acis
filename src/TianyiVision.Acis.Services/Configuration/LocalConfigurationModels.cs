@@ -49,7 +49,10 @@ public sealed record MapProviderSettings(
     string AmapWebJsApiKey,
     string AmapSecurityJsCode,
     string AmapJsApiVersion,
-    string CoordinateSystem);
+    string CoordinateSystem,
+    double DefaultCenterLongitude,
+    double DefaultCenterLatitude,
+    int DefaultZoom);
 
 public sealed record PlatformIntegrationSettings(
     OpenPlatformSettings OpenPlatform,

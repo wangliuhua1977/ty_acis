@@ -40,6 +40,7 @@ public sealed class AppBootstrapper
     private readonly IReportDataService _reportDataService;
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
+    private readonly MapProviderSettings _mapProviderSettings;
 
     public AppBootstrapper()
     {
@@ -60,6 +61,7 @@ public sealed class AppBootstrapper
         var demoDispatchNotificationService = new DemoDispatchNotificationService();
         var demoDispatchResponsibilityService = new DemoDispatchResponsibilityService(demoDispatchNotificationService);
         var demoReportDataService = new DemoReportDataService();
+        _mapProviderSettings = platformSettings.MapProvider;
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -142,8 +144,8 @@ public sealed class AppBootstrapper
     {
         var pageFactories = new Dictionary<AppSectionId, Func<PageViewModelBase>>
         {
-            [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService, _homeDashboardService),
-            [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService, _inspectionTaskService),
+            [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService, _homeDashboardService, _mapProviderSettings),
+            [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService, _inspectionTaskService, _mapProviderSettings),
             [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService, _dispatchNotificationService, _dispatchResponsibilityService),
             [AppSectionId.Reports] = () => new ReportsPageViewModel(_textService, _reportDataService),
             [AppSectionId.Settings] = () => new SettingsPageViewModel(

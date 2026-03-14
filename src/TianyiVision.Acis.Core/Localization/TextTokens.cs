@@ -55,10 +55,12 @@ public static class TextTokens
     public const string HomeRightSummaryTitle = "home.rightSummaryTitle";
     public const string HomeRightSummaryDescription = "home.rightSummaryDescription";
     public const string HomeSelectedPointStatusLabel = "home.selectedPointStatusLabel";
+    public const string HomeSelectedPointCoordinateLabel = "home.selectedPointCoordinateLabel";
     public const string HomeSelectedPointFaultTypeLabel = "home.selectedPointFaultTypeLabel";
     public const string HomeSelectedPointSummaryLabel = "home.selectedPointSummaryLabel";
     public const string HomeSelectedPointActionLabel = "home.selectedPointActionLabel";
     public const string HomeSelectedPointActionHint = "home.selectedPointActionHint";
+    public const string HomeCoordinateReserveAction = "home.coordinateReserveAction";
     public const string HomeTaskPanelTitle = "home.taskPanelTitle";
     public const string HomeTaskPanelDescription = "home.taskPanelDescription";
     public const string HomeFaultPanelTitle = "home.faultPanelTitle";
@@ -66,6 +68,8 @@ public static class TextTokens
     public const string HomePointPanelTitle = "home.pointPanelTitle";
     public const string HomePointPanelDescription = "home.pointPanelDescription";
     public const string HomeLegendPanelTitle = "home.legendPanelTitle";
+    public const string HomeUnmappedPointsTitle = "home.unmappedPointsTitle";
+    public const string HomeUnmappedPointsDescription = "home.unmappedPointsDescription";
     public const string HomePanelRestoreHint = "home.panelRestoreHint";
     public const string HomeResetOverlayLayoutAction = "home.resetOverlayLayoutAction";
     public const string HomeMapSelectionHint = "home.mapSelectionHint";
@@ -123,6 +127,7 @@ public static class TextTokens
     public const string InspectionDetailUnitLabel = "inspection.detailUnitLabel";
     public const string InspectionDetailCurrentHandlingUnitLabel = "inspection.detailCurrentHandlingUnitLabel";
     public const string InspectionDetailCurrentStatusLabel = "inspection.detailCurrentStatusLabel";
+    public const string InspectionDetailCoordinateLabel = "inspection.detailCoordinateLabel";
     public const string InspectionDetailStatusTitle = "inspection.detailStatusTitle";
     public const string InspectionDetailOnlineLabel = "inspection.detailOnlineLabel";
     public const string InspectionDetailPlaybackLabel = "inspection.detailPlaybackLabel";
@@ -137,12 +142,15 @@ public static class TextTokens
     public const string InspectionPreviewUnavailableHint = "inspection.previewUnavailableHint";
     public const string InspectionPreviewPlayableCanvas = "inspection.previewPlayableCanvas";
     public const string InspectionPreviewUnavailableCanvas = "inspection.previewUnavailableCanvas";
+    public const string InspectionCoordinateReserveAction = "inspection.coordinateReserveAction";
     public const string InspectionRecordTitle = "inspection.recordTitle";
     public const string InspectionRecordDescription = "inspection.recordDescription";
     public const string InspectionDetailHistoryTitle = "inspection.detailHistoryTitle";
     public const string InspectionDetailLastFaultLabel = "inspection.detailLastFaultLabel";
     public const string InspectionDetailDispatchEntryLabel = "inspection.detailDispatchEntryLabel";
     public const string InspectionDetailLastConclusionLabel = "inspection.detailLastConclusionLabel";
+    public const string InspectionUnmappedPointsTitle = "inspection.unmappedPointsTitle";
+    public const string InspectionUnmappedPointsDescription = "inspection.unmappedPointsDescription";
     public const string InspectionResultModeReview = "inspection.resultModeReview";
     public const string InspectionResultModeDirectDispatch = "inspection.resultModeDirectDispatch";
     public const string InspectionDispatchModeAuto = "inspection.dispatchModeAuto";

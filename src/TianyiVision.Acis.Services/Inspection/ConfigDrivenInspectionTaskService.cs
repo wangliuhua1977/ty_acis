@@ -35,7 +35,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             return _demoService.GetWorkspace();
         }
 
-        var points = pointCollectionResponse.Data.Take(12).ToList();
+        var points = pointCollectionResponse.Data.ToList();
         var stagePlacements = PointStageProjection.Project(points, InspectionStagePreset);
 
         var inspectionPoints = points

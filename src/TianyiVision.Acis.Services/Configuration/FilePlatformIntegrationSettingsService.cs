@@ -5,6 +5,10 @@ namespace TianyiVision.Acis.Services.Configuration;
 
 public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegrationSettingsService
 {
+    private const double DefaultMapCenterLongitude = 103.761263d;
+    private const double DefaultMapCenterLatitude = 29.552997d;
+    private const int DefaultMapZoom = 11;
+
     private readonly AcisLocalDataPaths _paths;
     private readonly JsonFileDocumentStore _documentStore;
 
@@ -19,7 +23,8 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         var settings = _documentStore.LoadOrCreate(_paths.CtyunIntegrationFile, CreateDefaultSettings);
         var normalized = settings with
         {
-            OpenPlatform = Normalize(settings.OpenPlatform)
+            OpenPlatform = Normalize(settings.OpenPlatform),
+            MapProvider = Normalize(settings.MapProvider)
         };
 
         _documentStore.Save(_paths.CtyunIntegrationFile, normalized);
@@ -28,7 +33,9 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
 
     private PlatformIntegrationSettings CreateDefaultSettings()
     {
-        var templatePath = FindBundledTemplateFile();
+        var settings = CreateFallbackSettings();
+
+        var templatePath = FindBundledTemplateFile("appsettings.json");
         if (!string.IsNullOrWhiteSpace(templatePath))
         {
             try
@@ -37,7 +44,7 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                 var template = JsonSerializer.Deserialize<CtyunTemplateDocument>(stream);
                 if (template?.OpenPlatform is not null && template.MapProvider is not null)
                 {
-                    return new PlatformIntegrationSettings(
+                    settings = new PlatformIntegrationSettings(
                         new OpenPlatformSettings(
                             template.OpenPlatform.ServiceMode ?? "AutoFallback",
                             template.OpenPlatform.EnableDemoFallback ?? true,
@@ -77,7 +84,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                             template.MapProvider.AmapWebJsApiKey ?? string.Empty,
                             template.MapProvider.AmapSecurityJsCode ?? string.Empty,
                             template.MapProvider.AmapJsApiVersion ?? "2.0",
-                            template.MapProvider.CoordinateSystem ?? "GCJ-02"));
+                            template.MapProvider.CoordinateSystem ?? "GCJ-02",
+                            template.MapProvider.DefaultCenterLongitude ?? DefaultMapCenterLongitude,
+                            template.MapProvider.DefaultCenterLatitude ?? DefaultMapCenterLatitude,
+                            template.MapProvider.DefaultZoom ?? DefaultMapZoom));
                 }
             }
             catch
@@ -86,6 +96,26 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
             }
         }
 
+        var localOverridePath = FindBundledTemplateFile("appsettings.local.json");
+        if (!string.IsNullOrWhiteSpace(localOverridePath))
+        {
+            try
+            {
+                using var stream = File.OpenRead(localOverridePath);
+                var localOverride = JsonSerializer.Deserialize<LocalSettingsOverrideDocument>(stream);
+                settings = ApplyLocalOverride(settings, localOverride);
+            }
+            catch
+            {
+                // Ignore invalid local overrides so startup still falls back cleanly.
+            }
+        }
+
+        return settings;
+    }
+
+    private static PlatformIntegrationSettings CreateFallbackSettings()
+    {
         return new PlatformIntegrationSettings(
             new OpenPlatformSettings(
                 "AutoFallback",
@@ -126,7 +156,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                 string.Empty,
                 string.Empty,
                 "2.0",
-                "GCJ-02"));
+                "GCJ-02",
+                DefaultMapCenterLongitude,
+                DefaultMapCenterLatitude,
+                DefaultMapZoom));
     }
 
     private static OpenPlatformSettings Normalize(OpenPlatformSettings settings)
@@ -173,12 +206,84 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         };
     }
 
-    private static string? FindBundledTemplateFile()
+    private static MapProviderSettings Normalize(MapProviderSettings settings)
+    {
+        var defaultLongitude = settings.DefaultCenterLongitude is >= -180d and <= 180d
+            ? settings.DefaultCenterLongitude
+            : DefaultMapCenterLongitude;
+        var defaultLatitude = settings.DefaultCenterLatitude is >= -90d and <= 90d
+            ? settings.DefaultCenterLatitude
+            : DefaultMapCenterLatitude;
+
+        return settings with
+        {
+            AmapWebJsApiKey = settings.AmapWebJsApiKey?.Trim() ?? string.Empty,
+            AmapSecurityJsCode = settings.AmapSecurityJsCode?.Trim() ?? string.Empty,
+            AmapJsApiVersion = string.IsNullOrWhiteSpace(settings.AmapJsApiVersion) ? "2.0" : settings.AmapJsApiVersion.Trim(),
+            CoordinateSystem = string.IsNullOrWhiteSpace(settings.CoordinateSystem) ? "GCJ-02" : settings.CoordinateSystem.Trim(),
+            DefaultCenterLongitude = defaultLongitude,
+            DefaultCenterLatitude = defaultLatitude,
+            DefaultZoom = settings.DefaultZoom <= 0 ? DefaultMapZoom : settings.DefaultZoom
+        };
+    }
+
+    private static PlatformIntegrationSettings ApplyLocalOverride(
+        PlatformIntegrationSettings settings,
+        LocalSettingsOverrideDocument? localOverride)
+    {
+        if (localOverride is null)
+        {
+            return settings;
+        }
+
+        var openPlatform = settings.OpenPlatform;
+        var mapProvider = settings.MapProvider;
+
+        if (localOverride.TylinkApi is not null)
+        {
+            openPlatform = openPlatform with
+            {
+                BaseUrl = localOverride.TylinkApi.BaseUrl ?? openPlatform.BaseUrl,
+                AppId = localOverride.TylinkApi.AppId ?? openPlatform.AppId,
+                AppSecret = localOverride.TylinkApi.AppSecret ?? openPlatform.AppSecret,
+                RsaPrivateKey = localOverride.TylinkApi.RsaPrivateKey ?? openPlatform.RsaPrivateKey,
+                Version = localOverride.TylinkApi.Version ?? openPlatform.Version,
+                ApiVersion = localOverride.TylinkApi.ApiVersion ?? openPlatform.ApiVersion,
+                ClientType = localOverride.TylinkApi.ClientType?.ToString() ?? openPlatform.ClientType,
+                EnterpriseUser = localOverride.TylinkApi.EnterpriseUser ?? openPlatform.EnterpriseUser,
+                ParentUser = localOverride.TylinkApi.ParentUser ?? openPlatform.ParentUser,
+                Token = openPlatform.Token with
+                {
+                    ReuseBeforeExpirySeconds = localOverride.TylinkApi.TokenRefreshAheadSeconds ?? openPlatform.Token.ReuseBeforeExpirySeconds
+                },
+                AlarmApi = openPlatform.AlarmApi with
+                {
+                    PageSize = localOverride.TylinkApi.DefaultPageSize ?? openPlatform.AlarmApi.PageSize
+                }
+            };
+        }
+
+        if (localOverride.Amap is not null)
+        {
+            mapProvider = mapProvider with
+            {
+                AmapWebJsApiKey = localOverride.Amap.ApiKey ?? mapProvider.AmapWebJsApiKey,
+                AmapSecurityJsCode = localOverride.Amap.SecurityJsCode ?? mapProvider.AmapSecurityJsCode,
+                DefaultCenterLongitude = localOverride.Amap.DefaultCenterLongitude ?? mapProvider.DefaultCenterLongitude,
+                DefaultCenterLatitude = localOverride.Amap.DefaultCenterLatitude ?? mapProvider.DefaultCenterLatitude,
+                DefaultZoom = localOverride.Amap.DefaultZoom ?? mapProvider.DefaultZoom
+            };
+        }
+
+        return new PlatformIntegrationSettings(openPlatform, mapProvider);
+    }
+
+    private static string? FindBundledTemplateFile(string fileName)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, "docs", "ctyun-api", "appsettings.json");
+            var candidate = Path.Combine(directory.FullName, "docs", "ctyun-api", fileName);
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -240,5 +345,32 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         string? AmapWebJsApiKey,
         string? AmapSecurityJsCode,
         string? AmapJsApiVersion,
-        string? CoordinateSystem);
+        string? CoordinateSystem,
+        double? DefaultCenterLongitude,
+        double? DefaultCenterLatitude,
+        int? DefaultZoom);
+
+    private sealed record LocalSettingsOverrideDocument(
+        LocalTylinkApiTemplate? TylinkApi,
+        LocalAmapTemplate? Amap);
+
+    private sealed record LocalTylinkApiTemplate(
+        string? BaseUrl,
+        string? AppId,
+        string? AppSecret,
+        string? RsaPrivateKey,
+        string? Version,
+        string? ApiVersion,
+        int? ClientType,
+        string? EnterpriseUser,
+        string? ParentUser,
+        int? TokenRefreshAheadSeconds,
+        int? DefaultPageSize);
+
+    private sealed record LocalAmapTemplate(
+        string? ApiKey,
+        string? SecurityJsCode,
+        double? DefaultCenterLongitude,
+        double? DefaultCenterLatitude,
+        int? DefaultZoom);
 }

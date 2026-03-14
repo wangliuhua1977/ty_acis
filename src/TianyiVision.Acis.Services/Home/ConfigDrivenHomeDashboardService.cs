@@ -35,7 +35,7 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             return _demoService.GetDashboard();
         }
 
-        var points = pointCollectionResponse.Data.Take(8).ToList();
+        var points = pointCollectionResponse.Data.ToList();
         var stagePlacements = PointStageProjection.Project(points, HomeStagePreset);
         var recentFaults = pointCollectionResponse.Data
             .Where(point => point.HasFault && point.LatestFaultTime.HasValue)

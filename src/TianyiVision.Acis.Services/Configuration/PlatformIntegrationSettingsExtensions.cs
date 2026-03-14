@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace TianyiVision.Acis.Services.Configuration;
 
 public static class PlatformIntegrationSettingsExtensions
@@ -14,6 +17,29 @@ public static class PlatformIntegrationSettingsExtensions
     public static bool IsAutoFallback(this PlatformIntegrationSettings settings)
     {
         return NormalizeMode(settings.OpenPlatform.ServiceMode) == AutoFallbackMode;
+    }
+
+    public static bool HasUsableAmapWebSdk(this PlatformIntegrationSettings settings)
+    {
+        return !IsPlaceholderValue(settings.MapProvider.AmapWebJsApiKey)
+            && !IsPlaceholderValue(settings.MapProvider.AmapSecurityJsCode);
+    }
+
+    public static IReadOnlyList<string> GetAmapConfigurationIssues(this PlatformIntegrationSettings settings)
+    {
+        var issues = new List<string>();
+
+        if (IsPlaceholderValue(settings.MapProvider.AmapWebJsApiKey))
+        {
+            issues.Add("AMap 配置缺少 MapProvider.AmapWebJsApiKey。");
+        }
+
+        if (IsPlaceholderValue(settings.MapProvider.AmapSecurityJsCode))
+        {
+            issues.Add("AMap 配置缺少 MapProvider.AmapSecurityJsCode。");
+        }
+
+        return issues;
     }
 
     public static IReadOnlyList<string> GetCtyunConfigurationIssues(this PlatformIntegrationSettings settings)
@@ -82,5 +108,12 @@ public static class PlatformIntegrationSettingsExtensions
         }
 
         return AutoFallbackMode;
+    }
+
+    private static bool IsPlaceholderValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            || value.Contains("your-", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("placeholder", StringComparison.OrdinalIgnoreCase);
     }
 }

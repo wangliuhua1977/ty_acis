@@ -10,9 +10,14 @@ public sealed class InspectionPointState : ViewModelBase
 
     public InspectionPointState(
         string id,
+        string deviceCode,
         string name,
         string unitName,
         string currentHandlingUnit,
+        double longitude,
+        double latitude,
+        bool canRenderOnMap,
+        string coordinateStatusText,
         double x,
         double y,
         InspectionPointStatus status,
@@ -28,9 +33,14 @@ public sealed class InspectionPointState : ViewModelBase
         bool isPreviewAvailable)
     {
         Id = id;
+        DeviceCode = deviceCode;
         Name = name;
         UnitName = unitName;
         CurrentHandlingUnit = currentHandlingUnit;
+        Longitude = longitude;
+        Latitude = latitude;
+        CanRenderOnMap = canRenderOnMap;
+        CoordinateStatusText = coordinateStatusText;
         X = x;
         Y = y;
         _status = status;
@@ -48,11 +58,21 @@ public sealed class InspectionPointState : ViewModelBase
 
     public string Id { get; }
 
+    public string DeviceCode { get; }
+
     public string Name { get; }
 
     public string UnitName { get; }
 
     public string CurrentHandlingUnit { get; }
+
+    public double Longitude { get; }
+
+    public double Latitude { get; }
+
+    public bool CanRenderOnMap { get; }
+
+    public string CoordinateStatusText { get; }
 
     public double X { get; }
 

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Home;
 using TianyiVision.Acis.Services.Layout;
 using TianyiVision.Acis.Services.Localization;
@@ -25,11 +26,13 @@ public sealed class HomePageViewModel : PageViewModelBase
     private bool _overlayLayoutInitialized;
     private Size _overlayViewport;
     private HomePointSummaryState? _selectedPointSummary;
+    private string _selectedMapPointId = string.Empty;
 
     public HomePageViewModel(
         ITextService textService,
         IHomeOverlayLayoutService layoutService,
-        IHomeDashboardService homeDashboardService)
+        IHomeDashboardService homeDashboardService,
+        MapProviderSettings mapProvider)
         : base(
             textService.Resolve(TextTokens.HomeTitle),
             textService.Resolve(TextTokens.HomeDescription))
@@ -37,6 +40,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         _textService = textService;
         _layoutService = layoutService;
         _overlayDefinitions = CreateOverlayDefinitions();
+        MapProvider = mapProvider;
 
         MapStageBadge = textService.Resolve(TextTokens.HomeMapStageBadge);
         MapStageTitle = textService.Resolve(TextTokens.HomeMapStageTitle);
@@ -58,15 +62,19 @@ public sealed class HomePageViewModel : PageViewModelBase
         PendingDispatchLabel = textService.Resolve(TextTokens.HomePendingDispatchLabel);
         RecentFaultTimeLabel = textService.Resolve(TextTokens.HomeRecentFaultTimeLabel);
         SelectedPointStatusLabel = textService.Resolve(TextTokens.HomeSelectedPointStatusLabel);
+        SelectedPointCoordinateLabel = textService.Resolve(TextTokens.HomeSelectedPointCoordinateLabel);
         SelectedPointFaultTypeLabel = textService.Resolve(TextTokens.HomeSelectedPointFaultTypeLabel);
         SelectedPointSummaryLabel = textService.Resolve(TextTokens.HomeSelectedPointSummaryLabel);
         SelectedPointActionLabel = textService.Resolve(TextTokens.HomeSelectedPointActionLabel);
         OpenDispatchWorkspaceText = textService.Resolve(TextTokens.DispatchActionOpenWorkspace);
         OpenReportsCenterText = textService.Resolve(TextTokens.ReportsActionOpenCenter);
+        CoordinateReserveActionText = textService.Resolve(TextTokens.HomeCoordinateReserveAction);
         LegendFaultText = textService.Resolve(TextTokens.HomeMapLegendFault);
         LegendNormalText = textService.Resolve(TextTokens.HomeMapLegendNormal);
         LegendKeyText = textService.Resolve(TextTokens.HomeMapLegendKey);
         LegendInspectingText = textService.Resolve(TextTokens.HomeMapLegendInspecting);
+        UnmappedPointsTitle = textService.Resolve(TextTokens.HomeUnmappedPointsTitle);
+        UnmappedPointsDescription = textService.Resolve(TextTokens.HomeUnmappedPointsDescription);
 
         var dashboard = homeDashboardService.GetDashboard().Data;
 
@@ -94,7 +102,8 @@ public sealed class HomePageViewModel : PageViewModelBase
             panel.PropertyChanged += HandleOverlayPanelChanged;
         }
 
-        MapPoints = new ObservableCollection<HomeMapPointState>(dashboard.MapPoints.Select(CreatePoint));
+        MapPoints = new ObservableCollection<MapPointState>(dashboard.MapPoints.Select(CreatePoint));
+        UnmappedPoints = new ObservableCollection<MapPointState>(MapPoints.Where(point => !point.CanRenderOnMap));
         RecentFaults = new ObservableCollection<HomeRecentFaultState>(
             dashboard.RecentFaults.Select(item => new HomeRecentFaultState(
                 item.PointId,
@@ -104,7 +113,7 @@ public sealed class HomePageViewModel : PageViewModelBase
 
         SelectMapPointCommand = new RelayCommand(parameter =>
         {
-            if (parameter is HomeMapPointState point)
+            if (parameter is MapPointState point)
             {
                 SelectPoint(point);
             }
@@ -113,7 +122,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         {
             if (parameter is HomeRecentFaultState fault)
             {
-                var point = MapPoints.FirstOrDefault(item => item.Id == fault.PointId);
+                var point = MapPoints.FirstOrDefault(item => item.PointId == fault.PointId);
                 if (point is not null)
                 {
                     SelectPoint(point);
@@ -140,7 +149,7 @@ public sealed class HomePageViewModel : PageViewModelBase
 
         RefreshHiddenPanels();
         var initialPoint = MapPoints.FirstOrDefault(point =>
-            point.Id == dashboard.RecentFaults.FirstOrDefault()?.PointId)
+            point.PointId == dashboard.RecentFaults.FirstOrDefault()?.PointId)
             ?? MapPoints.FirstOrDefault();
         if (initialPoint is not null)
         {
@@ -168,23 +177,29 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string PendingDispatchLabel { get; }
     public string RecentFaultTimeLabel { get; }
     public string SelectedPointStatusLabel { get; }
+    public string SelectedPointCoordinateLabel { get; }
     public string SelectedPointFaultTypeLabel { get; }
     public string SelectedPointSummaryLabel { get; }
     public string SelectedPointActionLabel { get; }
     public string OpenDispatchWorkspaceText { get; }
     public string OpenReportsCenterText { get; }
+    public string CoordinateReserveActionText { get; }
     public string LegendFaultText { get; }
     public string LegendNormalText { get; }
     public string LegendKeyText { get; }
     public string LegendInspectingText { get; }
+    public string UnmappedPointsTitle { get; }
+    public string UnmappedPointsDescription { get; }
     public string CurrentGroupSummary { get; }
     public string ExecutionProgress { get; }
     public string PendingReviewSummary { get; }
     public string PendingDispatchSummary { get; }
+    public MapProviderSettings MapProvider { get; }
 
     public ObservableCollection<HomeOverlayPanelState> OverlayPanels { get; }
     public ObservableCollection<HomeOverlayPanelState> HiddenPanels { get; }
-    public ObservableCollection<HomeMapPointState> MapPoints { get; }
+    public ObservableCollection<MapPointState> MapPoints { get; }
+    public ObservableCollection<MapPointState> UnmappedPoints { get; }
     public ObservableCollection<HomeRecentFaultState> RecentFaults { get; }
     public HomeOverlayPanelState TaskPanel { get; }
     public HomeOverlayPanelState FaultPanel { get; }
@@ -195,6 +210,12 @@ public sealed class HomePageViewModel : PageViewModelBase
     {
         get => _selectedPointSummary;
         private set => SetProperty(ref _selectedPointSummary, value);
+    }
+
+    public string SelectedMapPointId
+    {
+        get => _selectedMapPointId;
+        private set => SetProperty(ref _selectedMapPointId, value);
     }
 
     public ICommand SelectMapPointCommand { get; }
@@ -265,53 +286,63 @@ public sealed class HomePageViewModel : PageViewModelBase
         SaveOverlayLayout();
     }
 
-    private HomeMapPointState CreatePoint(HomeMapPointModel point)
+    private MapPointState CreatePoint(HomeMapPointModel point)
     {
-        return new HomeMapPointState(
+        return new MapPointState(
             point.Id,
+            point.DeviceCode,
             point.Name,
             point.UnitName,
-            MapPointKind(point.Kind),
+            point.UnitName,
+            point.Longitude,
+            point.Latitude,
+            point.CanRenderOnMap,
+            point.CoordinateStatusText,
             point.X,
             point.Y,
+            MapPointKind(point.Kind),
             point.StatusText,
             point.FaultType,
             point.Summary,
-            _textService.Resolve(TextTokens.HomeSelectedPointActionHint),
             point.LatestFaultTime,
-            point.IsInRecentFaultList);
+            point.CanRenderOnMap);
     }
 
-    private static HomeMapPointKind MapPointKind(HomeMapPointKindModel kind)
+    private static MapPointVisualKind MapPointKind(HomeMapPointKindModel kind)
     {
         return kind switch
         {
-            HomeMapPointKindModel.Fault => HomeMapPointKind.Fault,
-            HomeMapPointKindModel.Inspecting => HomeMapPointKind.Inspecting,
-            HomeMapPointKindModel.Key => HomeMapPointKind.Key,
-            _ => HomeMapPointKind.Normal
+            HomeMapPointKindModel.Fault => MapPointVisualKind.Fault,
+            HomeMapPointKindModel.Inspecting => MapPointVisualKind.Inspecting,
+            HomeMapPointKindModel.Key => MapPointVisualKind.Key,
+            _ => MapPointVisualKind.Normal
         };
     }
 
-    private void SelectPoint(HomeMapPointState point)
+    private void SelectPoint(MapPointState point)
     {
         foreach (var item in MapPoints)
         {
-            item.IsSelected = item.Id == point.Id;
+            item.IsSelected = item.PointId == point.PointId;
         }
 
         foreach (var fault in RecentFaults)
         {
-            fault.IsSelected = fault.PointId == point.Id;
+            fault.IsSelected = fault.PointId == point.PointId;
         }
 
+        SelectedMapPointId = point.PointId;
         SelectedPointSummary = new HomePointSummaryState(
-            point.Name,
+            point.PointName,
             point.UnitName,
             point.StatusText,
+            point.CoordinateStatusText,
             point.FaultType,
             point.Summary,
-            point.ActionHint);
+            point.CanRenderOnMap
+                ? _textService.Resolve(TextTokens.HomeSelectedPointActionHint)
+                : $"{_textService.Resolve(TextTokens.HomeSelectedPointActionHint)} {_textService.Resolve(TextTokens.HomeCoordinateReserveAction)}",
+            !point.CanRenderOnMap);
     }
 
     private void HandleOverlayPanelChanged(object? sender, PropertyChangedEventArgs e)

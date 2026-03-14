@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using TianyiVision.Acis.UI.States;
 using TianyiVision.Acis.UI.ViewModels;
+using TianyiVision.Acis.UI.Views.Controls;
 
 namespace TianyiVision.Acis.UI.Views.Pages;
 
@@ -18,6 +19,7 @@ public partial class HomePageView : UserControl
     {
         InitializeComponent();
         DataContextChanged += HomePageView_OnDataContextChanged;
+        RealMapHost.AvailabilityChanged += RealMapHost_OnAvailabilityChanged;
     }
 
     private void HomePageView_OnLoaded(object sender, RoutedEventArgs e)
@@ -187,5 +189,10 @@ public partial class HomePageView : UserControl
         _viewModel.RestoreOverlayPanel(panel);
         ApplyOverlayPanelStates();
         UpdateLayout();
+    }
+
+    private void RealMapHost_OnAvailabilityChanged(object? sender, MapAvailabilityChangedEventArgs e)
+    {
+        FallbackMapLayer.Visibility = e.IsAvailable ? Visibility.Collapsed : Visibility.Visible;
     }
 }

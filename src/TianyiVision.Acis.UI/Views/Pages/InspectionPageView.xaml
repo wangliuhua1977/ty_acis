@@ -1,6 +1,7 @@
 <UserControl x:Class="TianyiVision.Acis.UI.Views.Pages.InspectionPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:TianyiVision.Acis.UI.Views.Controls"
              xmlns:state="clr-namespace:TianyiVision.Acis.UI.States"
              xmlns:views="clr-namespace:TianyiVision.Acis.UI.Views.Pages">
     <UserControl.Resources>
@@ -74,21 +75,17 @@
                             <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{DynamicResource Theme.InspectionActiveSoftBrush}" Opacity="0" />
                             <Ellipse x:Name="FaultRing" Width="76" Height="76" Fill="{DynamicResource Theme.DangerSoftBrush}" Opacity="0" />
                             <Border x:Name="CoreBorder" Width="52" Height="52" Background="{DynamicResource Theme.AccentSoftBrush}" BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}" BorderThickness="1" CornerRadius="26" VerticalAlignment="Top" HorizontalAlignment="Center">
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8" TextWrapping="Wrap" TextAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Name}" />
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8" TextWrapping="Wrap" TextAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding PointName}" />
                             </Border>
                             <Border x:Name="SelectionTag" Width="16" Height="16" CornerRadius="8" Background="{DynamicResource Theme.AccentBrush}" BorderBrush="{DynamicResource Theme.TextPrimaryBrush}" BorderThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0" Visibility="Collapsed" />
-                            <TextBlock Margin="0,62,0,0" HorizontalAlignment="Center" TextAlignment="Center" Width="90" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding Name}" />
+                            <TextBlock Margin="0,62,0,0" HorizontalAlignment="Center" TextAlignment="Center" Width="90" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding PointName}" />
                         </Grid>
                         <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Pending}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.AccentSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderStrongBrush}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Normal}">
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Normal}">
                                 <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.SuccessSoftBrush}" />
                                 <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.SuccessBrush}" />
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Fault}">
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Fault}">
                                 <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
                                 <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
                                 <Setter TargetName="FaultRing" Property="Opacity" Value="0.65" />
@@ -100,16 +97,20 @@
                                     </BeginStoryboard>
                                 </DataTrigger.EnterActions>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Silent}">
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Key}">
+                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
+                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Silent}">
                                 <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
                                 <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.TextSecondaryBrush}" />
                                 <Setter TargetName="CoreBorder" Property="Opacity" Value="0.7" />
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.PausedUntilRecovery}">
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Paused}">
                                 <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
                                 <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Inspecting}">
                                 <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.InspectionActiveSoftBrush}" />
                                 <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.InspectionActiveBrush}" />
                                 <Setter TargetName="PulseRing" Property="Opacity" Value="0.75" />
@@ -281,6 +282,27 @@
                             </ItemsControl>
                         </StackPanel>
                     </Border>
+
+                    <Border Style="{StaticResource InspectionSectionCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding UnmappedPointsTitle}" />
+                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding UnmappedPointsDescription}" />
+                            <ItemsControl ItemsSource="{Binding UnmappedPoints}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type state:MapPointState}">
+                                        <Button Style="{StaticResource FaultItemButtonStyle}"
+                                                Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
+                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CoordinateStatusText}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
@@ -349,41 +371,54 @@
                             </Border>
 
                             <Grid Grid.Row="1" Margin="0,18,0,0" ClipToBounds="True">
-                                <Canvas>
-                                    <Line X1="50" Y1="70" X2="1140" Y2="70" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="50" Y1="170" X2="1140" Y2="170" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="50" Y1="270" X2="1140" Y2="270" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="50" Y1="370" X2="1140" Y2="370" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="120" Y1="30" X2="120" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="320" Y1="30" X2="320" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="520" Y1="30" X2="520" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="720" Y1="30" X2="720" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Line X1="920" Y1="30" X2="920" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                    <Path Stroke="{DynamicResource Theme.AccentSecondaryBrush}" StrokeThickness="2" Opacity="0.45" Data="M 80,310 C 220,180 340,220 460,140 S 720,120 900,210 1080,300 1120,260" />
-                                    <Path Stroke="{DynamicResource Theme.PanelBorderStrongBrush}" StrokeThickness="2" Opacity="0.40" Data="M 100,120 C 240,260 380,260 520,310 650,360 900,360 1080,170" />
-                                </Canvas>
+                                <controls:RealMapHost x:Name="RealMapHost"
+                                                      ItemsSource="{Binding MapPoints}"
+                                                      SelectedPointId="{Binding SelectedMapPointId}"
+                                                      PointSelectedCommand="{Binding SelectPointCommand}"
+                                                      ApiKey="{Binding MapProvider.AmapWebJsApiKey}"
+                                                      SecurityJsCode="{Binding MapProvider.AmapSecurityJsCode}"
+                                                      ApiVersion="{Binding MapProvider.AmapJsApiVersion}"
+                                                      DefaultCenterLongitude="{Binding MapProvider.DefaultCenterLongitude}"
+                                                      DefaultCenterLatitude="{Binding MapProvider.DefaultCenterLatitude}"
+                                                      DefaultZoom="{Binding MapProvider.DefaultZoom}" />
 
-                                <ItemsControl ItemsSource="{Binding Points}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Canvas />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemContainerStyle>
-                                        <Style TargetType="ContentPresenter">
-                                            <Setter Property="Canvas.Left" Value="{Binding X}" />
-                                            <Setter Property="Canvas.Top" Value="{Binding Y}" />
-                                        </Style>
-                                    </ItemsControl.ItemContainerStyle>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Style="{StaticResource MapPointButtonStyle}"
-                                                    ToolTip="{Binding Name}"
-                                                    Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                    CommandParameter="{Binding}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <Grid x:Name="FallbackMapLayer">
+                                    <Canvas>
+                                        <Line X1="50" Y1="70" X2="1140" Y2="70" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="50" Y1="170" X2="1140" Y2="170" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="50" Y1="270" X2="1140" Y2="270" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="50" Y1="370" X2="1140" Y2="370" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="120" Y1="30" X2="120" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="320" Y1="30" X2="320" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="520" Y1="30" X2="520" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="720" Y1="30" X2="720" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Line X1="920" Y1="30" X2="920" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
+                                        <Path Stroke="{DynamicResource Theme.AccentSecondaryBrush}" StrokeThickness="2" Opacity="0.45" Data="M 80,310 C 220,180 340,220 460,140 S 720,120 900,210 1080,300 1120,260" />
+                                        <Path Stroke="{DynamicResource Theme.PanelBorderStrongBrush}" StrokeThickness="2" Opacity="0.40" Data="M 100,120 C 240,260 380,260 520,310 650,360 900,360 1080,170" />
+                                    </Canvas>
+
+                                    <ItemsControl ItemsSource="{Binding MapPoints}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                                <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type state:MapPointState}">
+                                                <Button Style="{StaticResource MapPointButtonStyle}"
+                                                        ToolTip="{Binding PointName}"
+                                                        Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
                             </Grid>
                         </Grid>
                     </Border>
@@ -421,6 +456,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPointNameLabel}" />
                                         <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PointName}" />
@@ -430,6 +466,8 @@
                                         <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentHandlingUnit}" />
                                         <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCurrentStatusLabel}" />
                                         <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentStatus}" />
+                                        <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCoordinateLabel}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CoordinateStatusText}" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -460,6 +498,20 @@
                                         <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailFaultNoteLabel}" />
                                         <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.FaultDescription}" />
                                     </Grid>
+                                    <Button Margin="0,14,0,0"
+                                            Content="{Binding CoordinateReserveActionText}"
+                                            IsEnabled="False">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedPointDetail.IsCoordinatePending}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 
