@@ -1,4 +1,5 @@
 <UserControl x:Class="TianyiVision.Acis.UI.Views.Pages.HomePageView"
+             x:Name="HomePageRoot"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:TianyiVision.Acis.UI.Views.Controls"
@@ -192,81 +193,125 @@
             </ItemsControl>
         </Grid>
 
-        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,18,0" Panel.ZIndex="60" Style="{StaticResource OverlayPanelStyle}" Padding="12">
-            <StackPanel>
-                <WrapPanel>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding TaskPanel}" Click="RestoreTaskPanel_OnClick">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding TaskPanelTitle}" />
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding FaultPanel}" Click="RestoreFaultPanel_OnClick">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding FaultPanelTitle}" />
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding PointPanel}" Click="RestorePointPanel_OnClick">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding PointPanelTitle}" />
-                        </StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding LegendPanel}" Click="RestoreLegendPanel_OnClick">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding LegendPanelTitle}" />
-                        </StackPanel>
-                    </Button>
-                </WrapPanel>
-                <Button Margin="0,8,0,0" Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ResetOverlayLayoutCommand}" Content="{Binding ResetOverlayLayoutText}" />
-            </StackPanel>
-        </Border>
+        <Canvas x:Name="OverlayCanvas"
+                Background="Transparent"
+                IsHitTestVisible="False"
+                Panel.ZIndex="30" />
 
-        <Canvas x:Name="OverlayCanvas" Background="Transparent" Panel.ZIndex="30">
-            <Border x:Name="TaskPanelBorder" Width="300" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding TaskPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Popup x:Name="RestoreToolbarPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsOpen="True"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=OverlayCanvas}"
+               PopupAnimation="Fade"
+               StaysOpen="True">
+            <Grid Width="{Binding PlacementTarget.ActualWidth, RelativeSource={RelativeSource AncestorType=Popup}}">
+                <Border HorizontalAlignment="Right"
+                        Margin="0,18,18,0"
+                        DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=Popup}}"
+                        Padding="12"
+                        Style="{StaticResource OverlayPanelStyle}">
+                    <StackPanel>
+                        <WrapPanel>
+                            <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding TaskPanel}" Click="RestoreTaskPanel_OnClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding TaskPanelTitle}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding FaultPanel}" Click="RestoreFaultPanel_OnClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding FaultPanelTitle}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding PointPanel}" Click="RestorePointPanel_OnClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding PointPanelTitle}" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RestoreOverlayButtonStyle}" Tag="{Binding LegendPanel}" Click="RestoreLegendPanel_OnClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{DynamicResource Theme.TextSecondaryBrush}" VerticalAlignment="Center" />
+                                    <TextBlock VerticalAlignment="Center" Text="{Binding LegendPanelTitle}" />
+                                </StackPanel>
+                            </Button>
+                        </WrapPanel>
+                        <Button Margin="0,8,0,0" Style="{StaticResource RestoreOverlayButtonStyle}" Command="{Binding ResetOverlayLayoutCommand}" Content="{Binding ResetOverlayLayoutText}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Popup>
+
+        <Popup x:Name="TaskPanelPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsOpen="{Binding TaskPanel.IsVisible}"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=OverlayCanvas}"
+               PopupAnimation="Fade"
+               StaysOpen="True"
+               HorizontalOffset="{Binding TaskPanel.X}"
+               VerticalOffset="{Binding TaskPanel.Y}">
+            <Border Width="300"
+                    DataContext="{Binding PlacementTarget.DataContext.TaskPanel, RelativeSource={RelativeSource AncestorType=Popup}}"
+                    Style="{StaticResource OverlayPanelStyle}">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top">
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
                                 <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.TaskPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.TaskPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlacementTarget.DataContext.TaskPanelTitle, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.TaskPanelDescription, RelativeSource={RelativeSource AncestorType=Popup}}" />
                                 </StackPanel>
                             </Border>
-                            <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                            <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding PlacementTarget.DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}" Content="×" />
                         </Grid>
-                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.CurrentGroupLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.CurrentGroupSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.ExecutionProgressLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.ExecutionProgress, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.CurrentGroupLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.CurrentGroupSummary, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.ExecutionProgressLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.ExecutionProgress, RelativeSource={RelativeSource AncestorType=Popup}}" />
                         <ProgressBar Margin="0,10,0,0" Height="8" Maximum="12" Value="8" />
-                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.PendingReviewLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PendingReviewSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.PendingDispatchLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PendingDispatchSummary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.PendingReviewLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.PendingReviewSummary, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.PendingDispatchLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.PendingDispatchSummary, RelativeSource={RelativeSource AncestorType=Popup}}" />
                     </StackPanel>
                 </DockPanel>
             </Border>
+        </Popup>
 
-            <Border x:Name="FaultPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding FaultPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Popup x:Name="FaultPanelPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsOpen="{Binding FaultPanel.IsVisible}"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=OverlayCanvas}"
+               PopupAnimation="Fade"
+               StaysOpen="True"
+               HorizontalOffset="{Binding FaultPanel.X}"
+               VerticalOffset="{Binding FaultPanel.Y}">
+            <Border Width="320"
+                    DataContext="{Binding PlacementTarget.DataContext.FaultPanel, RelativeSource={RelativeSource AncestorType=Popup}}"
+                    Style="{StaticResource OverlayPanelStyle}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.FaultPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.FaultPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlacementTarget.DataContext.FaultPanelTitle, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.FaultPanelDescription, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             </StackPanel>
                         </Border>
-                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding PlacementTarget.DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}" Content="×" />
                     </Grid>
-                    <ItemsControl ItemsSource="{Binding DataContext.RecentFaults, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                    <ItemsControl ItemsSource="{Binding PlacementTarget.DataContext.RecentFaults, RelativeSource={RelativeSource AncestorType=Popup}}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type state:HomeRecentFaultState}">
-                                <Button Style="{StaticResource OverlayFaultButtonStyle}" Command="{Binding DataContext.SelectRecentFaultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                <Button Style="{StaticResource OverlayFaultButtonStyle}" Command="{Binding PlacementTarget.DataContext.SelectRecentFaultCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel>
@@ -274,7 +319,7 @@
                                             <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding FaultType}" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1">
-                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.RecentFaultTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.RecentFaultTimeLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
                                             <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding LatestFaultTime}" />
                                         </StackPanel>
                                     </Grid>
@@ -284,45 +329,58 @@
                     </ItemsControl>
                 </StackPanel>
             </Border>
+        </Popup>
 
-            <Border x:Name="PointPanelBorder" Width="320" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding PointPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Popup x:Name="PointPanelPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsOpen="{Binding PointPanel.IsVisible}"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=OverlayCanvas}"
+               PopupAnimation="Fade"
+               StaysOpen="True"
+               HorizontalOffset="{Binding PointPanel.X}"
+               VerticalOffset="{Binding PointPanel.Y}">
+            <Border Width="320"
+                    DataContext="{Binding PlacementTarget.DataContext.PointPanel, RelativeSource={RelativeSource AncestorType=Popup}}"
+                    Style="{StaticResource OverlayPanelStyle}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.PointPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.PointPanelDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlacementTarget.DataContext.PointPanelTitle, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.PointPanelDescription, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             </StackPanel>
                         </Border>
-                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding PlacementTarget.DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}" Content="×" />
                     </Grid>
-                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding DataContext.SelectedPointSummary.PointName, RelativeSource={RelativeSource AncestorType=UserControl}}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.UnitName, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.PointName, RelativeSource={RelativeSource AncestorType=Popup}}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.UnitName, RelativeSource={RelativeSource AncestorType=Popup}}" />
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="94" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointStatusLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.SelectedPointSummary.StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointCoordinateLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.SelectedPointSummary.CoordinateStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointFaultTypeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.SelectedPointSummary.FaultType, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DataContext.SelectedPointSummaryLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.Summary, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointStatusLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.StatusText, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointCoordinateLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.CoordinateStatusText, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointFaultTypeLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.FaultType, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummaryLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.Summary, RelativeSource={RelativeSource AncestorType=Popup}}" />
                     </Grid>
                     <Border Margin="0,14,0,0" Style="{StaticResource MutedPanelStyle}" Padding="12">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.SelectedPointActionLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.SelectedPointSummary.ActionHint, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointActionLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.ActionHint, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             <Button Margin="0,12,0,0"
-                                    Content="{Binding DataContext.CoordinateReserveActionText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Content="{Binding PlacementTarget.DataContext.CoordinateReserveActionText, RelativeSource={RelativeSource AncestorType=Popup}}"
                                     IsEnabled="False">
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding DataContext.SelectedPointSummary.IsCoordinatePending, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                                            <DataTrigger Binding="{Binding PlacementTarget.DataContext.SelectedPointSummary.IsCoordinatePending, RelativeSource={RelativeSource AncestorType=Popup}}" Value="True">
                                                 <Setter Property="Visibility" Value="Visible" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -331,45 +389,58 @@
                             </Button>
                             <Button Margin="0,12,0,0"
                                     Style="{StaticResource SecondaryActionButtonStyle}"
-                                    Command="{Binding DataContext.OpenDispatchWorkspaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Content="{Binding DataContext.OpenDispatchWorkspaceText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    Command="{Binding PlacementTarget.DataContext.OpenDispatchWorkspaceCommand, RelativeSource={RelativeSource AncestorType=Popup}}"
+                                    Content="{Binding PlacementTarget.DataContext.OpenDispatchWorkspaceText, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             <Button Margin="0,10,0,0"
                                     Style="{StaticResource SecondaryActionButtonStyle}"
-                                    Command="{Binding DataContext.OpenReportsCenterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    Content="{Binding DataContext.OpenReportsCenterText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    Command="{Binding PlacementTarget.DataContext.OpenReportsCenterCommand, RelativeSource={RelativeSource AncestorType=Popup}}"
+                                    Content="{Binding PlacementTarget.DataContext.OpenReportsCenterText, RelativeSource={RelativeSource AncestorType=Popup}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </Border>
+        </Popup>
 
-            <Border x:Name="LegendPanelBorder" Width="520" Panel.ZIndex="30" Canvas.Left="0" Canvas.Top="0" DataContext="{Binding LegendPanel}" Style="{StaticResource OverlayPanelStyle}" Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Popup x:Name="LegendPanelPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsOpen="{Binding LegendPanel.IsVisible}"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=OverlayCanvas}"
+               PopupAnimation="Fade"
+               StaysOpen="True"
+               HorizontalOffset="{Binding LegendPanel.X}"
+               VerticalOffset="{Binding LegendPanel.Y}">
+            <Border Width="520"
+                    DataContext="{Binding PlacementTarget.DataContext.LegendPanel, RelativeSource={RelativeSource AncestorType=Popup}}"
+                    Style="{StaticResource OverlayPanelStyle}">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="OverlayHeader_OnMouseLeftButtonDown" MouseLeftButtonUp="OverlayHeader_OnMouseLeftButtonUp" MouseMove="OverlayHeader_OnMouseMove" Tag="{Binding}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.LegendPanelTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.MapSelectionHint, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlacementTarget.DataContext.LegendPanelTitle, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.MapSelectionHint, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             </StackPanel>
                         </Border>
-                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Content="×" />
+                        <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding PlacementTarget.DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}" Content="×" />
                     </Grid>
                     <WrapPanel>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendFaultText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendNormalText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendKeyText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
-                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding DataContext.LegendInspectingText, RelativeSource={RelativeSource AncestorType=UserControl}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.LegendFaultText, RelativeSource={RelativeSource AncestorType=Popup}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.LegendNormalText, RelativeSource={RelativeSource AncestorType=Popup}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8" Margin="0,0,10,0"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.LegendKeyText, RelativeSource={RelativeSource AncestorType=Popup}}" /></Border>
+                        <Border Style="{StaticResource MutedPanelStyle}" Padding="12,8"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.LegendInspectingText, RelativeSource={RelativeSource AncestorType=Popup}}" /></Border>
                     </WrapPanel>
                     <Border Margin="0,12,0,0" Style="{StaticResource MutedPanelStyle}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DataContext.UnmappedPointsTitle, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                            <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DataContext.UnmappedPointsDescription, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                            <ItemsControl ItemsSource="{Binding DataContext.UnmappedPoints, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PlacementTarget.DataContext.UnmappedPointsTitle, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                            <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.UnmappedPointsDescription, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                            <ItemsControl ItemsSource="{Binding PlacementTarget.DataContext.UnmappedPoints, RelativeSource={RelativeSource AncestorType=Popup}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type state:MapPointState}">
                                         <Button Margin="0,0,0,8"
                                                 Style="{StaticResource SecondaryActionButtonStyle}"
-                                                Command="{Binding DataContext.SelectMapPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Command="{Binding PlacementTarget.DataContext.SelectMapPointCommand, RelativeSource={RelativeSource AncestorType=Popup}}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel>
                                                 <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
@@ -383,6 +454,6 @@
                     </Border>
                 </StackPanel>
             </Border>
-        </Canvas>
+        </Popup>
     </Grid>
 </UserControl>

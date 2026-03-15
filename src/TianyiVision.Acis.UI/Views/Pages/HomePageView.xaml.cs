@@ -56,7 +56,7 @@ public partial class HomePageView : UserControl
         }
 
         _dragPanel = panel;
-        _dragStart = e.GetPosition(OverlayCanvas);
+        _dragStart = GetScreenPosition(element, e);
         _panelStart = new Point(panel.X, panel.Y);
         element.CaptureMouse();
         e.Handled = true;
@@ -73,7 +73,7 @@ public partial class HomePageView : UserControl
             return;
         }
 
-        var current = e.GetPosition(OverlayCanvas);
+        var current = GetScreenPosition(element, e);
         viewModel.UpdateOverlayPanelPosition(
             _dragPanel.Id,
             _panelStart.X + current.X - _dragStart.Value.X,
@@ -160,23 +160,7 @@ public partial class HomePageView : UserControl
 
     private void ApplyOverlayPanelStates()
     {
-        if (DataContext is not HomePageViewModel viewModel)
-        {
-            return;
-        }
-
-        ApplyOverlayPanelState(TaskPanelBorder, viewModel.TaskPanel);
-        ApplyOverlayPanelState(FaultPanelBorder, viewModel.FaultPanel);
-        ApplyOverlayPanelState(PointPanelBorder, viewModel.PointPanel);
-        ApplyOverlayPanelState(LegendPanelBorder, viewModel.LegendPanel);
-    }
-
-    private static void ApplyOverlayPanelState(Border border, HomeOverlayPanelState panel)
-    {
-        Canvas.SetLeft(border, panel.X);
-        Canvas.SetTop(border, panel.Y);
-        Panel.SetZIndex(border, 30);
-        border.Visibility = panel.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+        UpdateLayout();
     }
 
     private void RestoreOverlayPanel(HomeOverlayPanelState? panel)
@@ -194,5 +178,15 @@ public partial class HomePageView : UserControl
     private void RealMapHost_OnAvailabilityChanged(object? sender, MapAvailabilityChangedEventArgs e)
     {
         FallbackMapLayer.Visibility = e.IsAvailable ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static Point GetScreenPosition(UIElement element, MouseEventArgs e)
+    {
+        var relativePosition = e.GetPosition(element);
+        var screenPosition = element.PointToScreen(relativePosition);
+        var compositionTarget = PresentationSource.FromVisual(element)?.CompositionTarget;
+        return compositionTarget is null
+            ? screenPosition
+            : compositionTarget.TransformFromDevice.Transform(screenPosition);
     }
 }
