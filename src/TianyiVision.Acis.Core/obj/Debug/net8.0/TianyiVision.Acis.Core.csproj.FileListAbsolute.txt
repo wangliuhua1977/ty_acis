@@ -1,0 +1,12 @@
+C:\ty_acis\src\TianyiVision.Acis.Core\bin\Debug\net8.0\TianyiVision.Acis.Core.deps.json
+C:\ty_acis\src\TianyiVision.Acis.Core\bin\Debug\net8.0\TianyiVision.Acis.Core.dll
+C:\ty_acis\src\TianyiVision.Acis.Core\bin\Debug\net8.0\TianyiVision.Acis.Core.pdb
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.AssemblyInfoInputs.cache
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.AssemblyInfo.cs
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.csproj.CoreCompileInputs.cache
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.sourcelink.json
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.dll
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\refint\TianyiVision.Acis.Core.dll
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\TianyiVision.Acis.Core.pdb
+C:\ty_acis\src\TianyiVision.Acis.Core\obj\Debug\net8.0\ref\TianyiVision.Acis.Core.dll

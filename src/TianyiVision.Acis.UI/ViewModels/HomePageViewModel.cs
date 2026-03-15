@@ -8,6 +8,7 @@ using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Home;
 using TianyiVision.Acis.Services.Layout;
 using TianyiVision.Acis.Services.Localization;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
 
@@ -20,18 +21,22 @@ public sealed class HomePageViewModel : PageViewModelBase
     private const double OverlayGrabHeight = 56;
 
     private readonly IHomeOverlayLayoutService _layoutService;
+    private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly IReadOnlyDictionary<string, OverlayPanelDefinition> _overlayDefinitions;
+    private readonly Dictionary<string, PointBusinessSummaryState> _pointSummaries;
     private bool _isInitializingOverlayLayout;
     private bool _overlayLayoutInitialized;
     private Size _overlayViewport;
-    private HomePointSummaryState? _selectedPointSummary;
+    private PointBusinessSummaryState? _selectedPointSummary;
+    private string _currentPointSourceType = string.Empty;
     private string _selectedMapPointId = string.Empty;
 
     public HomePageViewModel(
         ITextService textService,
         IHomeOverlayLayoutService layoutService,
         IHomeDashboardService homeDashboardService,
+        PointSelectionContext pointSelectionContext,
         MapProviderSettings mapProvider)
         : base(
             textService.Resolve(TextTokens.HomeTitle),
@@ -39,6 +44,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     {
         _textService = textService;
         _layoutService = layoutService;
+        _pointSelectionContext = pointSelectionContext;
         _overlayDefinitions = CreateOverlayDefinitions();
         MapProvider = mapProvider;
 
@@ -63,6 +69,7 @@ public sealed class HomePageViewModel : PageViewModelBase
         RecentFaultTimeLabel = textService.Resolve(TextTokens.HomeRecentFaultTimeLabel);
         SelectedPointStatusLabel = textService.Resolve(TextTokens.HomeSelectedPointStatusLabel);
         SelectedPointCoordinateLabel = textService.Resolve(TextTokens.HomeSelectedPointCoordinateLabel);
+        SelectedPointLastSyncLabel = textService.Resolve(TextTokens.HomeSelectedPointLastSyncLabel);
         SelectedPointFaultTypeLabel = textService.Resolve(TextTokens.HomeSelectedPointFaultTypeLabel);
         SelectedPointSummaryLabel = textService.Resolve(TextTokens.HomeSelectedPointSummaryLabel);
         SelectedPointActionLabel = textService.Resolve(TextTokens.HomeSelectedPointActionLabel);
@@ -77,6 +84,10 @@ public sealed class HomePageViewModel : PageViewModelBase
         UnmappedPointsDescription = textService.Resolve(TextTokens.HomeUnmappedPointsDescription);
 
         var dashboard = homeDashboardService.GetDashboard().Data;
+        _pointSummaries = dashboard.MapPoints.ToDictionary(
+            point => point.Id,
+            CreatePointSummary,
+            StringComparer.Ordinal);
 
         CurrentGroupSummary = dashboard.CurrentGroupSummary;
         ExecutionProgress = dashboard.ExecutionProgress;
@@ -149,8 +160,9 @@ public sealed class HomePageViewModel : PageViewModelBase
         OpenReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
 
         RefreshHiddenPanels();
-        var initialPoint = MapPoints.FirstOrDefault(point =>
-            point.PointId == dashboard.RecentFaults.FirstOrDefault()?.PointId)
+        var initialPoint = ResolveContextPoint()
+            ?? MapPoints.FirstOrDefault(point =>
+                point.PointId == dashboard.RecentFaults.FirstOrDefault()?.PointId)
             ?? MapPoints.FirstOrDefault();
         if (initialPoint is not null)
         {
@@ -179,6 +191,7 @@ public sealed class HomePageViewModel : PageViewModelBase
     public string RecentFaultTimeLabel { get; }
     public string SelectedPointStatusLabel { get; }
     public string SelectedPointCoordinateLabel { get; }
+    public string SelectedPointLastSyncLabel { get; }
     public string SelectedPointFaultTypeLabel { get; }
     public string SelectedPointSummaryLabel { get; }
     public string SelectedPointActionLabel { get; }
@@ -207,10 +220,16 @@ public sealed class HomePageViewModel : PageViewModelBase
     public HomeOverlayPanelState PointPanel { get; }
     public HomeOverlayPanelState LegendPanel { get; }
 
-    public HomePointSummaryState? SelectedPointSummary
+    public PointBusinessSummaryState? SelectedPointSummary
     {
         get => _selectedPointSummary;
         private set => SetProperty(ref _selectedPointSummary, value);
+    }
+
+    public string CurrentPointSourceType
+    {
+        get => _currentPointSourceType;
+        private set => SetProperty(ref _currentPointSourceType, value);
     }
 
     public string SelectedMapPointId
@@ -226,6 +245,15 @@ public sealed class HomePageViewModel : PageViewModelBase
     public ICommand ResetOverlayLayoutCommand { get; }
     public ICommand OpenDispatchWorkspaceCommand { get; }
     public ICommand OpenReportsCenterCommand { get; }
+
+    public override void OnNavigatedTo()
+    {
+        var contextPoint = ResolveContextPoint();
+        if (contextPoint is not null)
+        {
+            ApplySelectedPointSummary(contextPoint, ResolvePointSummary(contextPoint), updateSharedContext: false);
+        }
+    }
 
     public void InitializeOverlayLayout(double viewportWidth, double viewportHeight)
     {
@@ -309,6 +337,31 @@ public sealed class HomePageViewModel : PageViewModelBase
             point.CanRenderOnMap);
     }
 
+    private PointBusinessSummaryState CreatePointSummary(HomeMapPointModel point)
+    {
+        if (point.BusinessSummary is not null)
+        {
+            return PointBusinessSummaryState.FromModel(point.BusinessSummary);
+        }
+
+        return PointBusinessSummaryState.CreateFallback(
+            point.Id,
+            point.DeviceCode,
+            point.Name,
+            point.CanRenderOnMap ? point.Longitude : null,
+            point.CanRenderOnMap ? point.Latitude : null,
+            "demo",
+            point.CoordinateStatusText,
+            point.StatusText,
+            point.UnitName,
+            point.Summary,
+            point.FaultType,
+            point.CanRenderOnMap
+                ? "进入AI巡检 / 查看报表"
+                : "进入AI巡检 / 坐标补录预留 / 查看报表",
+            !point.CanRenderOnMap);
+    }
+
     private MapPointState? TryResolvePoint(object? parameter)
     {
         return parameter switch
@@ -333,6 +386,14 @@ public sealed class HomePageViewModel : PageViewModelBase
 
     private void SelectPoint(MapPointState point)
     {
+        ApplySelectedPointSummary(point, ResolvePointSummary(point), updateSharedContext: true);
+    }
+
+    private void ApplySelectedPointSummary(
+        MapPointState point,
+        PointBusinessSummaryState summary,
+        bool updateSharedContext)
+    {
         foreach (var item in MapPoints)
         {
             item.IsSelected = item.PointId == point.PointId;
@@ -344,17 +405,49 @@ public sealed class HomePageViewModel : PageViewModelBase
         }
 
         SelectedMapPointId = point.PointId;
-        SelectedPointSummary = new HomePointSummaryState(
-            point.PointName,
-            point.UnitName,
-            point.StatusText,
-            point.CoordinateStatusText,
-            point.FaultType,
-            point.Summary,
-            point.CanRenderOnMap
-                ? _textService.Resolve(TextTokens.HomeSelectedPointActionHint)
-                : $"{_textService.Resolve(TextTokens.HomeSelectedPointActionHint)} {_textService.Resolve(TextTokens.HomeCoordinateReserveAction)}",
-            !point.CanRenderOnMap);
+        SelectedPointSummary = summary;
+        CurrentPointSourceType = summary.SourceType;
+
+        if (updateSharedContext)
+        {
+            _pointSelectionContext.Update(summary, nameof(HomePageViewModel));
+        }
+
+        MapPointSourceDiagnostics.Write(
+            "HomeSummary",
+            $"home point summary binding = pointId:{summary.PointId}, deviceCode:{summary.DeviceCode}, source:{summary.SourceType}, online:{summary.OnlineStatus}, coordinate:{summary.CoordinateStatus}, fault:{summary.FaultType}, lastSync:{summary.LastSyncTime}");
+    }
+
+    private PointBusinessSummaryState ResolvePointSummary(MapPointState point)
+    {
+        return _pointSummaries.GetValueOrDefault(point.PointId)
+            ?? PointBusinessSummaryState.CreateFallback(
+                point.PointId,
+                point.DeviceCode,
+                point.PointName,
+                point.CanRenderOnMap ? point.Longitude : null,
+                point.CanRenderOnMap ? point.Latitude : null,
+                "demo",
+                point.CoordinateStatusText,
+                point.StatusText,
+                point.UnitName,
+                point.Summary,
+                point.FaultType,
+                point.CanRenderOnMap
+                    ? "进入AI巡检 / 查看报表"
+                    : "进入AI巡检 / 坐标补录预留 / 查看报表",
+                !point.CanRenderOnMap);
+    }
+
+    private MapPointState? ResolveContextPoint()
+    {
+        var currentSummary = _pointSelectionContext.CurrentSummary;
+        if (currentSummary is null)
+        {
+            return null;
+        }
+
+        return MapPoints.FirstOrDefault(point => point.PointId == currentSummary.PointId);
     }
 
     private void HandleOverlayPanelChanged(object? sender, PropertyChangedEventArgs e)

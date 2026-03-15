@@ -37,7 +37,7 @@ public sealed class DeviceWorkspaceService : IDeviceWorkspaceService
                 device.HandlingUnit,
                 device.Coordinate,
                 device.IsOnline,
-                device.IsOnline ? "在线" : "离线",
+                ResolveOnlineStatusText(device.IsOnline),
                 device.SourceTag))
             .ToList();
 
@@ -57,6 +57,16 @@ public sealed class DeviceWorkspaceService : IDeviceWorkspaceService
     public ServiceResponse<DevicePointDetailModel> GetPointDetail(string pointId)
     {
         return _pointDetailService.GetPointDetail(pointId);
+    }
+
+    public static string ResolveOnlineStatusText(bool? isOnline)
+    {
+        return isOnline switch
+        {
+            true => "在线",
+            false => "离线",
+            _ => "待接入"
+        };
     }
 
     private static string ResolveUnitName(string handlingUnit)
@@ -100,9 +110,11 @@ public sealed class DemoDevicePointDetailService : IDevicePointDetailService
             device.HandlingUnit,
             device.Coordinate,
             device.IsOnline,
-            device.IsOnline ? "在线" : "离线",
-            device.IsOnline ? "可播放" : "待确认",
+            DeviceWorkspaceService.ResolveOnlineStatusText(device.IsOnline),
+            device.IsOnline == true ? "可播放" : device.IsOnline == false ? "待确认" : "待接入",
             "待确认",
+            null,
+            "待接入",
             "当前点位详情暂未完整同步，先展示目录摘要信息。",
             "Demo"));
     }
@@ -118,9 +130,11 @@ public sealed class DemoDevicePointDetailService : IDevicePointDetailService
             string.Empty,
             string.Empty,
             new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
-            false,
+            null,
             string.Empty,
             string.Empty,
+            string.Empty,
+            null,
             string.Empty,
             string.Empty,
             "Demo");
@@ -149,7 +163,7 @@ public sealed class FallbackDevicePointDetailService : IDevicePointDetailService
         }
         catch (Exception ex)
         {
-            response = ServiceResponse<DevicePointDetailModel>.Failure(Empty(pointId), $"真实点位详情调用异常。 {ex.Message}");
+            response = ServiceResponse<DevicePointDetailModel>.Failure(Empty(pointId), $"真实点位详情调用异常。{ex.Message}");
         }
 
         if (response.IsSuccess && !string.IsNullOrWhiteSpace(response.Data.PointName))
@@ -178,9 +192,11 @@ public sealed class FallbackDevicePointDetailService : IDevicePointDetailService
             string.Empty,
             string.Empty,
             new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
-            false,
+            null,
             string.Empty,
             string.Empty,
+            string.Empty,
+            null,
             string.Empty,
             string.Empty,
             string.Empty);

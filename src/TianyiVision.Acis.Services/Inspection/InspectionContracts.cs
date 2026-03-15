@@ -1,4 +1,5 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Inspection;
 
@@ -50,13 +51,14 @@ public sealed record InspectionPointModel(
     double Y,
     InspectionPointStatusModel Status,
     InspectionPointStatusModel CompletionStatus,
-    bool IsOnline,
+    bool? IsOnline,
     bool IsPlayable,
     bool IsImageAbnormal,
     bool IsPreviewAvailable,
     string FaultSummary,
     string LastFaultTime,
-    bool EntersDispatchPool)
+    bool EntersDispatchPool,
+    PointBusinessSummaryModel? BusinessSummary = null)
 {
     public InspectionPointModel(
         string id,
@@ -67,12 +69,13 @@ public sealed record InspectionPointModel(
         double y,
         InspectionPointStatusModel status,
         InspectionPointStatusModel completionStatus,
-        bool isOnline,
+        bool? isOnline,
         bool isPlayable,
         bool isImageAbnormal,
         bool isPreviewAvailable,
         string lastFaultTime,
-        bool entersDispatchPool)
+        bool entersDispatchPool,
+        PointBusinessSummaryModel? businessSummary = null)
         : this(
             id,
             id,
@@ -93,7 +96,8 @@ public sealed record InspectionPointModel(
             isPreviewAvailable,
             string.Empty,
             lastFaultTime,
-            entersDispatchPool)
+            entersDispatchPool,
+            businessSummary)
     {
     }
 }

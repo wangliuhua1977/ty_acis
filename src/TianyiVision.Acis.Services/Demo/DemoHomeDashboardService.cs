@@ -27,7 +27,8 @@ public sealed class DemoHomeDashboardService : IHomeDashboardService
                 new("home-105", "防汛泵站外侧", "设备离线", "2026-03-12 07:10"),
                 new("home-106", "江心灯塔监看点", "设备离线", "2026-03-12 06:51"),
                 new("home-104", "城市阳台主广场", "画面异常", "2026-03-12 07:54")
-            ]);
+            ],
+            new HomeHeaderMetricsModel("4", "7", "4", "2", "5"));
 
         return ServiceResponse<HomeDashboardSnapshot>.Success(snapshot);
     }

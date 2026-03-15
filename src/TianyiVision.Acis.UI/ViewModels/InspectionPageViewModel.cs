@@ -3,6 +3,8 @@ using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Services.Configuration;
+using TianyiVision.Acis.Services.Devices;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
@@ -12,6 +14,7 @@ namespace TianyiVision.Acis.UI.ViewModels;
 
 public sealed partial class InspectionPageViewModel : PageViewModelBase
 {
+    private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
     private readonly RelayCommand _executeInspectionCommand;
@@ -29,8 +32,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private ObservableCollection<MapPointState> _mapPoints = [];
     private ObservableCollection<MapPointState> _unmappedPoints = [];
     private ObservableCollection<RecentFaultSummaryState> _recentFaults = [];
+    private PointBusinessSummaryState? _selectedPointSummary;
     private InspectionPointDetailState? _selectedPointDetail;
     private InspectionPointState? _selectedPoint;
+    private string _currentPointSourceType = string.Empty;
     private string _toggleGroupActionText = string.Empty;
     private string _selectedMapPointId = string.Empty;
     private bool _isRealMapAvailable;
@@ -40,11 +45,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public InspectionPageViewModel(
         ITextService textService,
         IInspectionTaskService inspectionTaskService,
+        PointSelectionContext pointSelectionContext,
         MapProviderSettings mapProvider)
         : base(
             textService.Resolve(TextTokens.InspectionTitle),
             textService.Resolve(TextTokens.InspectionDescription))
     {
+        _pointSelectionContext = pointSelectionContext;
         _textService = textService;
         MapProvider = mapProvider;
 
@@ -102,6 +109,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         DetailCurrentHandlingUnitLabel = textService.Resolve(TextTokens.InspectionDetailCurrentHandlingUnitLabel);
         DetailCurrentStatusLabel = textService.Resolve(TextTokens.InspectionDetailCurrentStatusLabel);
         DetailCoordinateLabel = textService.Resolve(TextTokens.InspectionDetailCoordinateLabel);
+        DetailLastSyncLabel = textService.Resolve(TextTokens.InspectionDetailLastSyncLabel);
         DetailStatusTitle = textService.Resolve(TextTokens.InspectionDetailStatusTitle);
         DetailOnlineLabel = textService.Resolve(TextTokens.InspectionDetailOnlineLabel);
         DetailPlaybackLabel = textService.Resolve(TextTokens.InspectionDetailPlaybackLabel);
@@ -196,7 +204,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         _workspaceByGroupId = CreateWorkspaces(inspectionTaskService.GetWorkspace().Data);
         Groups = new ObservableCollection<InspectionGroupSummaryState>(_workspaceByGroupId.Values.Select(workspace => workspace.Group));
-        LoadGroup(Groups.First());
+        LoadGroup(Groups.First(), _pointSelectionContext.CurrentSummary?.PointId);
     }
 
     public string GroupSectionTitle { get; }
@@ -247,6 +255,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string DetailCurrentHandlingUnitLabel { get; }
     public string DetailCurrentStatusLabel { get; }
     public string DetailCoordinateLabel { get; }
+    public string DetailLastSyncLabel { get; }
     public string DetailStatusTitle { get; }
     public string DetailOnlineLabel { get; }
     public string DetailPlaybackLabel { get; }
@@ -345,6 +354,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
     }
 
+    public PointBusinessSummaryState? SelectedPointSummary
+    {
+        get => _selectedPointSummary;
+        private set => SetProperty(ref _selectedPointSummary, value);
+    }
+
     public InspectionPointState? SelectedPoint
     {
         get => _selectedPoint;
@@ -361,6 +376,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         get => _toggleGroupActionText;
         private set => SetProperty(ref _toggleGroupActionText, value);
+    }
+
+    public string CurrentPointSourceType
+    {
+        get => _currentPointSourceType;
+        private set => SetProperty(ref _currentPointSourceType, value);
     }
 
     public bool IsRealMapAvailable
@@ -403,7 +424,25 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public ICommand MarkSelectedReviewCommand { get; private set; } = null!;
     public ICommand SelectReviewQuickFilterCommand { get; private set; } = null!;
 
-    private void LoadGroup(InspectionGroupSummaryState group)
+    public override void OnNavigatedTo()
+    {
+        var summary = _pointSelectionContext.CurrentSummary;
+        if (summary is null)
+        {
+            return;
+        }
+
+        var workspace = _workspaceByGroupId.Values.FirstOrDefault(candidate =>
+            candidate.Points.Any(point => point.Id == summary.PointId));
+        if (workspace is null)
+        {
+            return;
+        }
+
+        LoadGroup(workspace.Group, summary.PointId);
+    }
+
+    private void LoadGroup(InspectionGroupSummaryState group, string? preferredPointId = null)
     {
         foreach (var item in Groups)
         {
@@ -428,7 +467,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         _executeInspectionCommand.RaiseCanExecuteChanged();
 
-        var initialPoint = Points.FirstOrDefault(point => point.IsCurrent)
+        var initialPoint = !string.IsNullOrWhiteSpace(preferredPointId)
+            ? Points.FirstOrDefault(point => point.Id == preferredPointId)
+            : null;
+
+        initialPoint ??= Points.FirstOrDefault(point => point.IsCurrent)
             ?? Points.FirstOrDefault(point => point.Status == InspectionPointStatus.Fault)
             ?? Points.FirstOrDefault();
 
@@ -468,7 +511,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         SelectedPoint = point;
         SelectedMapPointId = point.Id;
-        SelectedPointDetail = CreatePointDetail(point);
+        var summary = point.BusinessSummary;
+        SelectedPointSummary = summary;
+        CurrentPointSourceType = summary.SourceType;
+        SelectedPointDetail = CreatePointDetail(point, summary);
+        _pointSelectionContext.Update(summary, nameof(InspectionPageViewModel));
+
+        MapPointSourceDiagnostics.Write(
+            "InspectionSummary",
+            $"inspection point summary binding = pointId:{summary.PointId}, deviceCode:{summary.DeviceCode}, source:{summary.SourceType}, online:{summary.OnlineStatus}, coordinate:{summary.CoordinateStatus}, fault:{summary.FaultType}, lastSync:{summary.LastSyncTime}");
     }
 
     private void SelectPoint(string pointId)
@@ -582,21 +633,24 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         workspace.ExecutionState.CurrentProgressText = $"{inspectedCount} / {inspectableCount}";
     }
 
-    private InspectionPointDetailState CreatePointDetail(InspectionPointState point)
+    private InspectionPointDetailState CreatePointDetail(
+        InspectionPointState point,
+        PointBusinessSummaryState summary)
     {
         return new InspectionPointDetailState(
-            point.Name,
+            summary.DeviceName,
             point.UnitName,
             point.CurrentHandlingUnit,
             ResolvePointStatus(point.Status),
-            point.CoordinateStatusText,
-            point.OnlineStatus,
+            summary.CoordinateStatus,
+            summary.LastSyncTime,
+            summary.OnlineStatus,
             point.PlaybackStatus,
             point.ImageStatus,
-            point.FaultType,
-            point.FaultDescription,
+            ResolveDetailFaultType(point, summary),
+            ResolveDetailSummary(point, summary),
             point.IsPreviewAvailable,
-            !point.CanRenderOnMap,
+            summary.IsCoordinatePending,
             point.LastFaultTime,
             point.DispatchPoolEntry,
             point.LastInspectionConclusion);
@@ -727,7 +781,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.IsPreviewAvailable,
             point.FaultSummary,
             point.LastFaultTime,
-            point.EntersDispatchPool);
+            point.EntersDispatchPool,
+            point.BusinessSummary);
     }
 
     private InspectionPointState CreatePoint(
@@ -744,15 +799,43 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         double y,
         InspectionPointStatus status,
         InspectionPointStatus completionStatus,
-        bool isOnline,
+        bool? isOnline,
         bool isPlayable,
         bool isImageAbnormal,
         bool isPreviewAvailable,
         string faultSummary,
         string lastFaultTime,
-        bool entersDispatchPool)
+        bool entersDispatchPool,
+        PointBusinessSummaryModel? businessSummary)
     {
         var faultType = ResolveFaultType(status, completionStatus, isOnline, isPlayable, isImageAbnormal);
+        var pointSummary = businessSummary is not null
+            ? PointBusinessSummaryState.FromModel(businessSummary)
+            : PointBusinessSummaryState.CreateFallback(
+                id,
+                deviceCode,
+                name,
+                canRenderOnMap ? longitude : null,
+                canRenderOnMap ? latitude : null,
+                "demo",
+                coordinateStatusText,
+                ResolveOnlineStatus(isOnline),
+                unitName,
+                BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText),
+                faultType,
+                canRenderOnMap
+                    ? "进入AI巡检 / 查看报表"
+                    : "进入AI巡检 / 坐标补录预留 / 查看报表",
+                !canRenderOnMap);
+        var onlineStatus = businessSummary is not null
+            ? pointSummary.OnlineStatus
+            : ResolveOnlineStatus(isOnline);
+        var resolvedFaultType = businessSummary is not null
+            ? pointSummary.FaultType
+            : faultType;
+        var resolvedFaultDescription = businessSummary is not null
+            ? pointSummary.StatusSummary
+            : BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText);
 
         return new InspectionPointState(
             id,
@@ -768,15 +851,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             y,
             status,
             completionStatus,
-            isOnline ? _textService.Resolve(TextTokens.InspectionOnlineOnline) : _textService.Resolve(TextTokens.InspectionOnlineOffline),
-            isPlayable ? _textService.Resolve(TextTokens.InspectionPlaybackPlayable) : _textService.Resolve(TextTokens.InspectionPlaybackFailed),
-            isImageAbnormal ? _textService.Resolve(TextTokens.InspectionImageAbnormal) : _textService.Resolve(TextTokens.InspectionImageNormal),
-            faultType,
-            BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText),
+            onlineStatus,
+            ResolvePlaybackStatus(isOnline, isPlayable),
+            ResolveImageStatus(isOnline, isImageAbnormal),
+            resolvedFaultType,
+            resolvedFaultDescription,
             lastFaultTime,
             entersDispatchPool ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes) : _textService.Resolve(TextTokens.InspectionDispatchPoolNo),
             ResolveConclusion(status, completionStatus),
-            isPreviewAvailable)
+            isPreviewAvailable,
+            pointSummary)
         {
             IsCurrent = status == InspectionPointStatus.Inspecting
         };
@@ -799,7 +883,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string ResolveFaultType(
         InspectionPointStatus status,
         InspectionPointStatus completionStatus,
-        bool isOnline,
+        bool? isOnline,
         bool isPlayable,
         bool isImageAbnormal)
     {
@@ -809,12 +893,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return _textService.Resolve(TextTokens.InspectionFaultTypeNone);
         }
 
-        if (!isOnline)
+        if (isOnline == false)
         {
             return _textService.Resolve(TextTokens.InspectionFaultTypeOffline);
         }
 
-        if (!isPlayable)
+        if (isOnline == true && !isPlayable)
         {
             return _textService.Resolve(TextTokens.InspectionFaultTypePlaybackFailed);
         }
@@ -830,7 +914,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string BuildFaultDescription(
         InspectionPointStatus status,
         InspectionPointStatus completionStatus,
-        bool isOnline,
+        bool? isOnline,
         bool isPlayable,
         bool isImageAbnormal,
         string faultSummary,
@@ -860,12 +944,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return _textService.Resolve(TextTokens.InspectionStatusPausedUntilRecovery);
         }
 
-        if (!isOnline)
+        if (isOnline == false)
         {
             return "设备当前离线，后续应展示接口重试结果与责任单位跟进信息。";
         }
 
-        if (!isPlayable)
+        if (isOnline == true && !isPlayable)
         {
             return "播放检查失败，后续在此承接重试与协议切换过程说明。";
         }
@@ -875,7 +959,62 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return "画面疑似异常，后续接入接口判定结果与本地截图分析说明。";
         }
 
+        if (isOnline is null)
+        {
+            return "当前点位在线状态待接入，先展示目录与地图基础信息。";
+        }
+
         return "当前点位状态正常，本轮用于展示列表与中台联动骨架。";
+    }
+
+    private string ResolveOnlineStatus(bool? isOnline)
+    {
+        return isOnline switch
+        {
+            true => _textService.Resolve(TextTokens.InspectionOnlineOnline),
+            false => _textService.Resolve(TextTokens.InspectionOnlineOffline),
+            _ => "待接入"
+        };
+    }
+
+    private string ResolvePlaybackStatus(bool? isOnline, bool isPlayable)
+    {
+        return isOnline switch
+        {
+            null => "待接入",
+            false => "待确认",
+            _ => isPlayable
+                ? _textService.Resolve(TextTokens.InspectionPlaybackPlayable)
+                : _textService.Resolve(TextTokens.InspectionPlaybackFailed)
+        };
+    }
+
+    private string ResolveImageStatus(bool? isOnline, bool isImageAbnormal)
+    {
+        return isOnline switch
+        {
+            null => "待接入",
+            false => "待确认",
+            _ => isImageAbnormal
+                ? _textService.Resolve(TextTokens.InspectionImageAbnormal)
+                : _textService.Resolve(TextTokens.InspectionImageNormal)
+        };
+    }
+
+    private static string ResolveDetailFaultType(
+        InspectionPointState point,
+        PointBusinessSummaryState summary)
+    {
+        return summary.FaultType == "暂无" ? point.FaultType : summary.FaultType;
+    }
+
+    private static string ResolveDetailSummary(
+        InspectionPointState point,
+        PointBusinessSummaryState summary)
+    {
+        return string.IsNullOrWhiteSpace(summary.StatusSummary) || summary.StatusSummary == "暂无"
+            ? point.FaultDescription
+            : summary.StatusSummary;
     }
 
     private string ResolveConclusion(InspectionPointStatus status, InspectionPointStatus completionStatus)

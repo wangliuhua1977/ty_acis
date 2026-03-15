@@ -1,4 +1,5 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Home;
 
@@ -26,7 +27,8 @@ public sealed record HomeMapPointModel(
     string FaultType,
     string Summary,
     string LatestFaultTime,
-    bool IsInRecentFaultList)
+    bool IsInRecentFaultList,
+    PointBusinessSummaryModel? BusinessSummary = null)
 {
     public HomeMapPointModel(
         string id,
@@ -39,7 +41,8 @@ public sealed record HomeMapPointModel(
         string faultType,
         string summary,
         string latestFaultTime,
-        bool isInRecentFaultList)
+        bool isInRecentFaultList,
+        PointBusinessSummaryModel? businessSummary = null)
         : this(
             id,
             id,
@@ -56,10 +59,18 @@ public sealed record HomeMapPointModel(
             faultType,
             summary,
             latestFaultTime,
-            isInRecentFaultList)
+            isInRecentFaultList,
+            businessSummary)
     {
     }
 }
+
+public sealed record HomeHeaderMetricsModel(
+    string InspectionTasks,
+    string Faults,
+    string Outstanding,
+    string PendingReview,
+    string PendingDispatch);
 
 public sealed record HomeRecentFaultModel(
     string PointId,
@@ -73,7 +84,8 @@ public sealed record HomeDashboardSnapshot(
     string PendingReviewSummary,
     string PendingDispatchSummary,
     IReadOnlyList<HomeMapPointModel> MapPoints,
-    IReadOnlyList<HomeRecentFaultModel> RecentFaults);
+    IReadOnlyList<HomeRecentFaultModel> RecentFaults,
+    HomeHeaderMetricsModel HeaderMetrics);
 
 public interface IHomeDashboardService
 {

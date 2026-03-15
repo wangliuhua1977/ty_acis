@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "TianyiVision.Acis.Core/1.0.0": {
+        "runtime": {
+          "TianyiVision.Acis.Core.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "TianyiVision.Acis.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

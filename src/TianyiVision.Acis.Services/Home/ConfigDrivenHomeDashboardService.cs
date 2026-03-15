@@ -33,19 +33,23 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
         var pointCollectionResponse = _pointWorkspaceService.GetPointCollection();
         if (!pointCollectionResponse.IsSuccess || pointCollectionResponse.Data.Count == 0)
         {
-            var demoResponse = _demoService.GetDashboard();
-            var demoSnapshot = demoResponse.Data;
             MapPointSourceDiagnostics.WriteLines("HomeMap", [
-                $"current map point source = demo/fallback",
-                $"homeMap final source = demo/fallback, pointCount = {demoSnapshot.MapPoints.Count(point => point.CanRenderOnMap)}, reason = {NormalizeReason(pointCollectionResponse.Message, "点位工作区返回 0 条，页面绑定改用 demo 主舞台")}",
-                $"homeMap preview = {BuildHomePreview(demoSnapshot.MapPoints)}"
+                "current map point source = pending",
+                $"homeMap final source = pending, pointCount = 0, reason = {NormalizeReason(pointCollectionResponse.Message, "点位工作区返回 0 条，首页改为安全占位状态")}",
+                "homeMap preview = none"
             ]);
-            return demoResponse;
+            MapPointSourceDiagnostics.WriteLines("HomeHeaderMetrics", [
+                "homeHeaderMetrics final source = pending",
+                "homeHeaderMetrics values = inspectionTasks=待接入, faults=待接入, outstanding=待接入, pendingReview=待接入, pendingDispatch=待接入",
+                "homeHeaderMetrics source = inspectionTasks:待接入, faults:待接入, outstanding:待接入, pendingReview:待接入, pendingDispatch:待接入"
+            ]);
+            return ServiceResponse<HomeDashboardSnapshot>.Success(CreatePendingSnapshot(), pointCollectionResponse.Message);
         }
 
         var points = pointCollectionResponse.Data.ToList();
         var stagePlacements = PointStageProjection.Project(points, HomeStagePreset);
-        var recentFaults = pointCollectionResponse.Data
+        var hasPendingFaultStatus = points.Any(point => point.FaultStatus == PointFaultObservationStatus.Pending);
+        var recentFaults = points
             .Where(point => point.HasFault && point.LatestFaultTime.HasValue)
             .OrderByDescending(point => point.LatestFaultTime)
             .ToList();
@@ -62,16 +66,25 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
                 point.CurrentFaultType,
                 point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--"))
             .ToList();
+        var pendingDispatchCount = hasPendingFaultStatus
+            ? 0
+            : points.Count(point => point.FaultStatus == PointFaultObservationStatus.HasFault && point.EntersDispatchPool);
+        var headerMetrics = BuildHeaderMetrics(points, pendingDispatchCount, hasPendingFaultStatus);
 
         var snapshot = new HomeDashboardSnapshot(
-            $"当前巡检点位 {pointCollectionResponse.Data.Count} 个",
-            $"{points.Count(point => point.IsOnline)} / {points.Count}",
-            recentFaults.Count == 0 ? "当前未发现待跟进故障点位。" : $"当前故障点位 {recentFaults.Count} 个，优先关注最新告警。",
-            points.Any(point => !point.Coordinate.CanRenderOnMap)
-                ? $"存在 {points.Count(point => !point.Coordinate.CanRenderOnMap)} 个未定位点位，可从未定位入口继续查看。"
-                : "当前点位均已具备地图落点。",
+            $"当前点位 {points.Count} 个",
+            BuildExecutionProgress(points),
+            recentFaults.Count == 0
+                ? "当前未发现待跟进故障点位。"
+                : $"当前故障点位 {recentFaults.Count} 个，优先关注最新告警。",
+            hasPendingFaultStatus
+                ? "待派单口径待接入。"
+                : pendingDispatchCount == 0
+                ? "当前暂无待派单点位。"
+                : $"当前待派单点位 {pendingDispatchCount} 个。",
             mapPoints,
-            visibleRecentFaults);
+            visibleRecentFaults,
+            headerMetrics);
 
         var renderablePoints = points.Where(point => point.Coordinate.CanRenderOnMap).ToList();
         var sourceBreakdown = points
@@ -91,6 +104,14 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             $"homeMap preview = {BuildWorkspacePreview(renderablePoints.Count > 0 ? renderablePoints : points)}"
         ]);
 
+        MapPointSourceDiagnostics.WriteLines("HomeHeaderMetrics", [
+            $"homeHeaderMetrics final source = {finalSource}",
+            $"homeHeaderMetrics values = inspectionTasks={headerMetrics.InspectionTasks}, faults={headerMetrics.Faults}, outstanding={headerMetrics.Outstanding}, pendingReview={headerMetrics.PendingReview}, pendingDispatch={headerMetrics.PendingDispatch}",
+            hasPendingFaultStatus
+                ? "homeHeaderMetrics source = inspectionTasks:待接入, faults:待接入, outstanding:待接入, pendingReview:待接入, pendingDispatch:待接入"
+                : "homeHeaderMetrics source = inspectionTasks:待接入, faults:pointCollection(realStatus), outstanding:待接入, pendingReview:待接入, pendingDispatch:pointCollection(realStatus)"
+        ]);
+
         return ServiceResponse<HomeDashboardSnapshot>.Success(snapshot, pointCollectionResponse.Message);
     }
 
@@ -98,6 +119,7 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
         PointWorkspaceItemModel point,
         PointStagePlacementModel placement)
     {
+        var businessSummary = PointBusinessSummaryFactory.Create(point);
         var kind = point.HasFault
             ? HomeMapPointKindModel.Fault
             : !point.Coordinate.CanRenderOnMap
@@ -116,11 +138,34 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             kind,
             placement.X,
             placement.Y,
-            point.HasFault ? "故障关联" : point.OnlineStatusText,
-            point.CurrentFaultType,
-            point.CurrentFaultSummary,
+            businessSummary.OnlineStatus,
+            businessSummary.FaultType,
+            businessSummary.StatusSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
-            point.HasFault);
+            point.HasFault,
+            businessSummary);
+    }
+
+    private static HomeHeaderMetricsModel BuildHeaderMetrics(
+        IReadOnlyCollection<PointWorkspaceItemModel> points,
+        int pendingDispatchCount,
+        bool hasPendingFaultStatus)
+    {
+        return new HomeHeaderMetricsModel(
+            "待接入",
+            hasPendingFaultStatus
+                ? "待接入"
+                : points.Count(point => point.FaultStatus == PointFaultObservationStatus.HasFault).ToString(),
+            "待接入",
+            "待接入",
+            hasPendingFaultStatus ? "待接入" : pendingDispatchCount.ToString());
+    }
+
+    private static string BuildExecutionProgress(IReadOnlyCollection<PointWorkspaceItemModel> points)
+    {
+        return points.All(point => point.IsOnline.HasValue)
+            ? $"{points.Count(point => point.IsOnline == true)} / {points.Count}"
+            : "待接入";
     }
 
     private static string ResolveFinalSource(IReadOnlyDictionary<string, int> sourceBreakdown)
@@ -161,8 +206,25 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
         return preview.Count == 0 ? "none" : string.Join("; ", preview);
     }
 
+    private static HomeDashboardSnapshot CreatePendingSnapshot()
+    {
+        return new HomeDashboardSnapshot(
+            "当前点位待接入",
+            "待接入",
+            "待接入",
+            "待接入",
+            [],
+            [],
+            new HomeHeaderMetricsModel("待接入", "待接入", "待接入", "待接入", "待接入"));
+    }
+
     private static string NormalizeReason(string? message, string fallbackReason)
     {
         return string.IsNullOrWhiteSpace(message) ? fallbackReason : message.Trim();
+    }
+
+    private static string Normalize(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
     }
 }

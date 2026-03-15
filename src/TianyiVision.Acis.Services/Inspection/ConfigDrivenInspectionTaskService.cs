@@ -33,15 +33,12 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         var pointCollectionResponse = _pointWorkspaceService.GetPointCollection();
         if (!pointCollectionResponse.IsSuccess || pointCollectionResponse.Data.Count == 0)
         {
-            var demoResponse = _demoService.GetWorkspace();
-            var demoGroup = demoResponse.Data.Groups.FirstOrDefault();
-            var demoPoints = demoGroup?.Points ?? [];
             MapPointSourceDiagnostics.WriteLines("InspectionMap", [
-                $"current map point source = demo/fallback",
-                $"inspectionMap final source = demo/fallback, pointCount = {demoPoints.Count(point => point.CanRenderOnMap)}, reason = {NormalizeReason(pointCollectionResponse.Message, "点位工作区返回 0 条，巡检页改用 demo 中台")}",
-                $"inspectionMap preview = {BuildInspectionPreview(demoPoints)}"
+                "current map point source = pending",
+                $"inspectionMap final source = pending, pointCount = 0, reason = {NormalizeReason(pointCollectionResponse.Message, "点位工作区返回 0 条，巡检页改为安全占位状态")}",
+                "inspectionMap preview = none"
             ]);
-            return demoResponse;
+            return ServiceResponse<InspectionWorkspaceSnapshot>.Success(CreatePendingWorkspace(), pointCollectionResponse.Message);
         }
 
         var points = pointCollectionResponse.Data.ToList();
@@ -50,7 +47,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         var inspectionPoints = points
             .Select((point, index) => CreatePoint(point, stagePlacements[point.PointId], index))
             .ToList();
-        var recentFaults = pointCollectionResponse.Data
+        var recentFaults = points
             .Where(point => point.HasFault && point.LatestFaultTime.HasValue)
             .OrderByDescending(point => point.LatestFaultTime)
             .Take(5)
@@ -96,7 +93,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         PointStagePlacementModel placement,
         int index)
     {
-        var status = !point.IsOnline
+        var businessSummary = PointBusinessSummaryFactory.Create(point);
+        var status = point.IsOnline == false
             ? InspectionPointStatusModel.PausedUntilRecovery
             : point.HasFault
                 ? InspectionPointStatusModel.Fault
@@ -119,12 +117,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             status,
             status == InspectionPointStatusModel.Inspecting ? InspectionPointStatusModel.Normal : status,
             point.IsOnline,
-            point.PlaybackStatusText.Contains("可播放", StringComparison.Ordinal) || point.IsOnline,
+            point.PlaybackStatusText.Contains("可播放", StringComparison.Ordinal) || point.IsOnline == true,
             point.CurrentFaultType.Contains("画面", StringComparison.Ordinal),
-            point.IsOnline,
+            point.IsOnline == true,
             point.CurrentFaultSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
-            point.EntersDispatchPool);
+            point.EntersDispatchPool,
+            businessSummary);
     }
 
     private static string ResolveFinalSource(IReadOnlyDictionary<string, int> sourceBreakdown)
@@ -163,6 +162,20 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             .ToList();
 
         return preview.Count == 0 ? "none" : string.Join("; ", preview);
+    }
+
+    private static InspectionWorkspaceSnapshot CreatePendingWorkspace()
+    {
+        return new InspectionWorkspaceSnapshot([
+            new InspectionGroupWorkspaceModel(
+                new InspectionGroupModel("g-ctyun-live", "CTYun 实时目录组", "点位状态待接入", true),
+                new InspectionStrategyModel("待接入", "待接入", "待接入", "待接入", "待接入"),
+                new InspectionExecutionModel("待接入", "待接入", "待接入", "当前点位状态待接入，页面保留工作区骨架。", false),
+                new InspectionRunSummaryModel("CTYun 实时目录组", "待接入"),
+                "待接入",
+                [],
+                [])
+        ]);
     }
 
     private static string NormalizeReason(string? message, string fallbackReason)

@@ -2,6 +2,13 @@ using TianyiVision.Acis.Services.Contracts;
 
 namespace TianyiVision.Acis.Services.Devices;
 
+public enum PointFaultObservationStatus
+{
+    NoFault,
+    HasFault,
+    Pending
+}
+
 public sealed record PointWorkspaceItemModel(
     string PointId,
     string DeviceCode,
@@ -11,13 +18,16 @@ public sealed record PointWorkspaceItemModel(
     string AreaName,
     string CurrentHandlingUnit,
     PointCoordinateModel Coordinate,
-    bool IsOnline,
+    bool? IsOnline,
     string OnlineStatusText,
     string PlaybackStatusText,
     string ImageStatusText,
+    DateTime? LastSyncTime,
+    string LastSyncSource,
     DateTime? LatestFaultTime,
     string CurrentFaultType,
     string CurrentFaultSummary,
+    PointFaultObservationStatus FaultStatus,
     bool HasFault,
     bool EntersDispatchPool,
     string DetailSummary,

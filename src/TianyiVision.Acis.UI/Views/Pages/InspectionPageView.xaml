@@ -578,6 +578,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPointNameLabel}" />
                                         <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PointName}" />
@@ -589,6 +590,8 @@
                                         <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentStatus}" />
                                         <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCoordinateLabel}" />
                                         <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CoordinateStatusText}" />
+                                        <TextBlock Grid.Row="5" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailLastSyncLabel}" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.LastSyncTime}" />
                                     </Grid>
                                 </StackPanel>
                             </Border>

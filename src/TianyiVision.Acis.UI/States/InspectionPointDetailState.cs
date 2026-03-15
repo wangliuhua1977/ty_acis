@@ -6,6 +6,7 @@ public sealed record InspectionPointDetailState(
     string CurrentHandlingUnit,
     string CurrentStatus,
     string CoordinateStatusText,
+    string LastSyncTime,
     string OnlineStatus,
     string PlaybackStatus,
     string ImageStatus,

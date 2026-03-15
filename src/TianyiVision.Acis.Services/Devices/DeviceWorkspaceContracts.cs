@@ -26,7 +26,7 @@ public sealed record DevicePoolItemModel(
     string UnitName,
     string AreaName,
     PointCoordinateModel Coordinate,
-    bool IsOnline,
+    bool? IsOnline,
     string OnlineStatusText,
     string SourceTag);
 
@@ -39,10 +39,12 @@ public sealed record DevicePointDetailModel(
     string AreaName,
     string LocationText,
     PointCoordinateModel Coordinate,
-    bool IsOnline,
+    bool? IsOnline,
     string OnlineStatusText,
     string PlaybackStatusText,
     string ImageStatusText,
+    DateTime? LastSyncTime,
+    string LastSyncSource,
     string DetailSummary,
     string SourceTag);
 

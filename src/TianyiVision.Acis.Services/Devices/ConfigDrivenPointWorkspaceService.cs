@@ -69,7 +69,17 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
                 Increment(coordinateFailureReasons, ClassifyCoordinateFailureReason(detail.Coordinate));
             }
 
-            points.Add(BuildPoint(device, latestFaultByPoint.GetValueOrDefault(device.PointId), detail));
+            var point = BuildPoint(
+                device,
+                latestFaultByPoint.GetValueOrDefault(device.PointId),
+                detail,
+                faultPoolResponse.IsSuccess);
+            points.Add(point);
+
+            var businessSummary = PointBusinessSummaryFactory.Create(point);
+            MapPointSourceDiagnostics.Write(
+                "PointStatus",
+                $"status field mapped: pointId = {businessSummary.PointId}, deviceCode = {businessSummary.DeviceCode}, online = {businessSummary.OnlineStatus}, coordinate = {businessSummary.CoordinateStatus}, fault = {businessSummary.FaultType}, lastSync = {(businessSummary.LastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}, lastSyncSource = {NormalizeLastSyncSource(point.LastSyncSource)}, summary = {businessSummary.StatusSummary}");
         }
 
         points = points
@@ -121,15 +131,23 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
     private PointWorkspaceItemModel BuildPoint(
         DevicePoolItemModel device,
         FaultPoolItemModel? fault,
-        DevicePointDetailModel detail)
+        DevicePointDetailModel detail,
+        bool hasReliableFaultPoolSnapshot)
     {
-        var hasFault = fault is not null || !detail.IsOnline;
+        var hasOfflineFault = detail.IsOnline == false;
+        var faultStatus = hasOfflineFault || fault is not null
+            ? PointFaultObservationStatus.HasFault
+            : hasReliableFaultPoolSnapshot
+                ? PointFaultObservationStatus.NoFault
+                : PointFaultObservationStatus.Pending;
+        var hasFault = faultStatus == PointFaultObservationStatus.HasFault;
         var currentFaultType = fault?.FaultType
-            ?? (!detail.IsOnline ? "设备离线" : "无故障");
-        var currentFaultSummary = fault?.FaultSummary
-            ?? (!detail.IsOnline
-                ? "设备当前离线，待补充故障摘要。"
-                : detail.DetailSummary);
+            ?? (faultStatus == PointFaultObservationStatus.HasFault
+                ? "设备离线"
+                : faultStatus == PointFaultObservationStatus.NoFault
+                    ? "无故障"
+                    : "待接入");
+        var currentFaultSummary = ResolveFaultSummary(fault?.FaultSummary, currentFaultType, faultStatus);
 
         return new PointWorkspaceItemModel(
             detail.PointId,
@@ -144,9 +162,12 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             detail.OnlineStatusText,
             detail.PlaybackStatusText,
             detail.ImageStatusText,
+            detail.LastSyncTime,
+            detail.LastSyncSource,
             fault?.LatestDetectedAt,
             currentFaultType,
             currentFaultSummary,
+            faultStatus,
             hasFault,
             fault?.EntersDispatchPool ?? false,
             detail.DetailSummary,
@@ -155,6 +176,10 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
 
     private static DevicePointDetailModel CreateFallbackDetail(DevicePoolItemModel device)
     {
+        var onlineStatusText = !string.IsNullOrWhiteSpace(device.OnlineStatusText)
+            ? device.OnlineStatusText
+            : DeviceWorkspaceService.ResolveOnlineStatusText(device.IsOnline);
+
         return new DevicePointDetailModel(
             device.PointId,
             device.DeviceCode,
@@ -165,10 +190,12 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             device.AreaName,
             device.Coordinate,
             device.IsOnline,
-            device.OnlineStatusText,
-            "待接视频巡检",
-            "待接 AI 判定",
-            "当前点位详情暂未完整同步，先展示目录摘要信息。",
+            onlineStatusText,
+            "待接入",
+            "待接入",
+            null,
+            "待接入",
+            device.IsOnline is null ? "未知 / 待校验 / 待接入" : $"{onlineStatusText} / 待校验 / 待接入",
             device.SourceTag);
     }
 
@@ -183,13 +210,16 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             string.Empty,
             string.Empty,
             new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
-            false,
+            null,
             string.Empty,
             string.Empty,
             string.Empty,
             null,
             string.Empty,
+            null,
             string.Empty,
+            string.Empty,
+            PointFaultObservationStatus.Pending,
             false,
             false,
             string.Empty,
@@ -280,6 +310,31 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
         }
 
         counts[key] = 1;
+    }
+
+    private static string ResolveFaultSummary(
+        string? rawSummary,
+        string currentFaultType,
+        PointFaultObservationStatus faultStatus)
+    {
+        if (!string.IsNullOrWhiteSpace(rawSummary))
+        {
+            return rawSummary.Trim();
+        }
+
+        return faultStatus switch
+        {
+            PointFaultObservationStatus.HasFault when string.Equals(currentFaultType, "设备离线", StringComparison.Ordinal)
+                => "设备当前离线",
+            PointFaultObservationStatus.HasFault => $"当前点位存在异常：{currentFaultType}",
+            PointFaultObservationStatus.NoFault => "无故障",
+            _ => "待接入"
+        };
+    }
+
+    private static string NormalizeLastSyncSource(string? lastSyncSource)
+    {
+        return string.IsNullOrWhiteSpace(lastSyncSource) ? "待接入" : lastSyncSource.Trim();
     }
 
     private static string NormalizeReason(string? message, string fallbackReason)

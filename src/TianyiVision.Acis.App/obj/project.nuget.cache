@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "ihjBMFTx/tg=",
+  "success": true,
+  "projectFilePath": "C:\\ty_acis\\src\\TianyiVision.Acis.App\\TianyiVision.Acis.App.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.web.webview2\\1.0.3800.47\\microsoft.web.webview2.1.0.3800.47.nupkg.sha512"
+  ],
+  "logs": []
+}

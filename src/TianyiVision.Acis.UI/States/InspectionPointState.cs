@@ -30,7 +30,8 @@ public sealed class InspectionPointState : ViewModelBase
         string lastFaultTime,
         string dispatchPoolEntry,
         string lastInspectionConclusion,
-        bool isPreviewAvailable)
+        bool isPreviewAvailable,
+        PointBusinessSummaryState businessSummary)
     {
         Id = id;
         DeviceCode = deviceCode;
@@ -54,6 +55,7 @@ public sealed class InspectionPointState : ViewModelBase
         DispatchPoolEntry = dispatchPoolEntry;
         LastInspectionConclusion = lastInspectionConclusion;
         IsPreviewAvailable = isPreviewAvailable;
+        BusinessSummary = businessSummary;
     }
 
     public string Id { get; }
@@ -103,6 +105,8 @@ public sealed class InspectionPointState : ViewModelBase
     public string LastInspectionConclusion { get; }
 
     public bool IsPreviewAvailable { get; }
+
+    public PointBusinessSummaryState BusinessSummary { get; }
 
     public bool IsSelected
     {

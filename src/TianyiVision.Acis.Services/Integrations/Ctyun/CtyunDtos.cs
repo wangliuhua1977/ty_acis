@@ -36,13 +36,15 @@ public sealed record CtyunDeviceDetailDto(
     string? Longitude,
     string? Latitude,
     string? Location,
-    bool IsOnline,
+    bool? IsOnline,
     bool CloudStatus,
     bool PicCloudStatus,
     bool BandStatus,
     int? DeviceSource,
     string? FwVersion,
-    int? SourceTypeFlag);
+    int? SourceTypeFlag,
+    DateTime? ReportTime,
+    DateTime? ImportTime);
 
 public sealed record CtyunAiAlertDto(
     string Id,
@@ -91,7 +93,7 @@ public sealed class CtyunDeviceListAdapter : ICtyunDeviceListAdapter
             details?.DeviceType ?? "CTYun设备",
             details?.Location ?? string.Empty,
             PointCoordinateParser.FromRaw(details?.Longitude, details?.Latitude),
-            details?.IsOnline ?? false,
+            details?.IsOnline,
             "CTYun");
     }
 }

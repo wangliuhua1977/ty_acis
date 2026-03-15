@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "TianyiVision.Acis.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/TianyiVision.Acis.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/TianyiVision.Acis.Core.dll": {}
+        }
+      },
+      "TianyiVision.Acis.Infrastructure/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "TianyiVision.Acis.Core": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/TianyiVision.Acis.Infrastructure.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/TianyiVision.Acis.Infrastructure.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "TianyiVision.Acis.Core/1.0.0": {
+      "type": "project",
+      "path": "../TianyiVision.Acis.Core/TianyiVision.Acis.Core.csproj",
+      "msbuildProject": "../TianyiVision.Acis.Core/TianyiVision.Acis.Core.csproj"
+    },
+    "TianyiVision.Acis.Infrastructure/1.0.0": {
+      "type": "project",
+      "path": "../TianyiVision.Acis.Infrastructure/TianyiVision.Acis.Infrastructure.csproj",
+      "msbuildProject": "../TianyiVision.Acis.Infrastructure/TianyiVision.Acis.Infrastructure.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "TianyiVision.Acis.Core >= 1.0.0",
+      "TianyiVision.Acis.Infrastructure >= 1.0.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Administrator\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\ty_acis\\src\\TianyiVision.Acis.Services\\TianyiVision.Acis.Services.csproj",
+      "projectName": "TianyiVision.Acis.Services",
+      "projectPath": "C:\\ty_acis\\src\\TianyiVision.Acis.Services\\TianyiVision.Acis.Services.csproj",
+      "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
+      "outputPath": "C:\\ty_acis\\src\\TianyiVision.Acis.Services\\obj\\",
+      "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {
+            "C:\\ty_acis\\src\\TianyiVision.Acis.Core\\TianyiVision.Acis.Core.csproj": {
+              "projectPath": "C:\\ty_acis\\src\\TianyiVision.Acis.Core\\TianyiVision.Acis.Core.csproj"
+            },
+            "C:\\ty_acis\\src\\TianyiVision.Acis.Infrastructure\\TianyiVision.Acis.Infrastructure.csproj": {
+              "projectPath": "C:\\ty_acis\\src\\TianyiVision.Acis.Infrastructure\\TianyiVision.Acis.Infrastructure.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.300"
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.311/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

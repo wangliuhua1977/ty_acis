@@ -56,6 +56,7 @@ public static class TextTokens
     public const string HomeRightSummaryDescription = "home.rightSummaryDescription";
     public const string HomeSelectedPointStatusLabel = "home.selectedPointStatusLabel";
     public const string HomeSelectedPointCoordinateLabel = "home.selectedPointCoordinateLabel";
+    public const string HomeSelectedPointLastSyncLabel = "home.selectedPointLastSyncLabel";
     public const string HomeSelectedPointFaultTypeLabel = "home.selectedPointFaultTypeLabel";
     public const string HomeSelectedPointSummaryLabel = "home.selectedPointSummaryLabel";
     public const string HomeSelectedPointActionLabel = "home.selectedPointActionLabel";
@@ -131,6 +132,7 @@ public static class TextTokens
     public const string InspectionDetailCurrentHandlingUnitLabel = "inspection.detailCurrentHandlingUnitLabel";
     public const string InspectionDetailCurrentStatusLabel = "inspection.detailCurrentStatusLabel";
     public const string InspectionDetailCoordinateLabel = "inspection.detailCoordinateLabel";
+    public const string InspectionDetailLastSyncLabel = "inspection.detailLastSyncLabel";
     public const string InspectionDetailStatusTitle = "inspection.detailStatusTitle";
     public const string InspectionDetailOnlineLabel = "inspection.detailOnlineLabel";
     public const string InspectionDetailPlaybackLabel = "inspection.detailPlaybackLabel";

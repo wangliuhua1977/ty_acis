@@ -1,0 +1,16 @@
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\bin\Debug\net8.0\TianyiVision.Acis.Infrastructure.deps.json
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\bin\Debug\net8.0\TianyiVision.Acis.Infrastructure.dll
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\bin\Debug\net8.0\TianyiVision.Acis.Infrastructure.pdb
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\bin\Debug\net8.0\TianyiVision.Acis.Core.dll
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\bin\Debug\net8.0\TianyiVision.Acis.Core.pdb
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.csproj.AssemblyReference.cache
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.AssemblyInfoInputs.cache
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.AssemblyInfo.cs
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.csproj.CoreCompileInputs.cache
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.sourcelink.json
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVi.DA980B27.Up2Date
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.dll
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\refint\TianyiVision.Acis.Infrastructure.dll
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\TianyiVision.Acis.Infrastructure.pdb
+C:\ty_acis\src\TianyiVision.Acis.Infrastructure\obj\Debug\net8.0\ref\TianyiVision.Acis.Infrastructure.dll

@@ -62,6 +62,7 @@ public sealed class AppBootstrapper
     private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
     private readonly INotificationSettingsService _notificationSettingsService;
     private readonly IReportDataService _reportDataService;
+    private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly IThemeService _themeService;
     private readonly MapProviderSettings _mapProviderSettings;
@@ -99,6 +100,7 @@ public sealed class AppBootstrapper
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
         _clockService = new SystemClockService();
+        _pointSelectionContext = new PointSelectionContext();
         _notificationSettingsService = notificationSettingsService;
         _dispatchResponsibilitySettingsService = responsibilitySettingsService;
         _homeOverlayLayoutService = new FileHomeOverlayLayoutService(paths, documentStore);
@@ -187,8 +189,17 @@ public sealed class AppBootstrapper
     {
         var pageFactories = new Dictionary<AppSectionId, Func<PageViewModelBase>>
         {
-            [AppSectionId.Home] = () => new HomePageViewModel(_textService, _homeOverlayLayoutService, _homeDashboardService, _mapProviderSettings),
-            [AppSectionId.Inspection] = () => new InspectionPageViewModel(_textService, _inspectionTaskService, _mapProviderSettings),
+            [AppSectionId.Home] = () => new HomePageViewModel(
+                _textService,
+                _homeOverlayLayoutService,
+                _homeDashboardService,
+                _pointSelectionContext,
+                _mapProviderSettings),
+            [AppSectionId.Inspection] = () => new InspectionPageViewModel(
+                _textService,
+                _inspectionTaskService,
+                _pointSelectionContext,
+                _mapProviderSettings),
             [AppSectionId.Dispatch] = () => new DispatchPageViewModel(_textService, _dispatchNotificationService, _dispatchResponsibilityService),
             [AppSectionId.Reports] = () => new ReportsPageViewModel(_textService, _reportDataService),
             [AppSectionId.Settings] = () => new SettingsPageViewModel(
@@ -200,7 +211,7 @@ public sealed class AppBootstrapper
                 theme => ApplyTheme(applicationResources, theme))
         };
 
-        return new ShellViewModel(_textService, _clockService, pageFactories);
+        return new ShellViewModel(_textService, _clockService, _homeDashboardService, pageFactories);
     }
 
     private void LoadLocalConfiguration()
@@ -333,9 +344,7 @@ public sealed class AppBootstrapper
         }
 
         var ctyunService = new CtyunDevicePointDetailService(ctyunRuntime, activeDeviceCatalogService);
-        return settings.IsAutoFallback() || settings.OpenPlatform.EnableDemoFallback
-            ? new FallbackDevicePointDetailService(ctyunService, demoService)
-            : ctyunService;
+        return ctyunService;
     }
 
     private static IFaultPoolService BuildFaultPoolService(

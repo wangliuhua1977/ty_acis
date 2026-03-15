@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACIS Real Map Host</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --stage-bg: #07111f;
+      --text: #e8eef9;
+      --panel: rgba(7, 17, 31, 0.72);
+      --normal: #5fbf87;
+      --fault: #ff6b6b;
+      --key: #f7b955;
+      --inspecting: #4db2ff;
+      --silent: #94a7bd;
+      --paused: #f08b62;
+      --selected: #ffffff;
+    }
+
+    html,
+    body,
+    #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: var(--stage-bg);
+      overflow: hidden;
+      font-family: "Microsoft YaHei UI", sans-serif;
+    }
+
+    #map {
+      opacity: 0;
+      transition: opacity 160ms ease-out;
+    }
+
+    body.map-ready #map {
+      opacity: 1;
+    }
+
+    .marker {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .marker-chip {
+      position: relative;
+      min-width: 14px;
+      min-height: 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+      background: var(--tone);
+      pointer-events: auto;
+    }
+
+    .marker-label {
+      margin-top: 8px;
+      padding: 4px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+
+    .marker-ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .marker-selection {
+      position: absolute;
+      inset: -14px;
+      border: 2px solid rgba(255, 255, 255, 0.82);
+      border-radius: 999px;
+      opacity: 0;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+
+    .marker.selected .marker-chip {
+      border-color: var(--selected);
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .marker.selected .marker-selection {
+      opacity: 1;
+    }
+
+    .marker.selected .marker-label {
+      border-color: color-mix(in srgb, var(--selected) 32%, transparent);
+      background: color-mix(in srgb, var(--panel) 82%, var(--selected) 18%);
+      font-weight: 700;
+    }
+
+    .marker.current .marker-chip,
+    .marker.inspecting .marker-chip {
+      width: 18px;
+      height: 18px;
+    }
+
+    .marker.fault .marker-ring {
+      background: color-mix(in srgb, var(--fault) 28%, transparent);
+      opacity: 0.8;
+      animation: fault-pulse 1.6s infinite ease-in-out;
+    }
+
+    .marker.inspecting .marker-ring,
+    .marker.current .marker-ring {
+      background: color-mix(in srgb, var(--inspecting) 28%, transparent);
+      opacity: 0.78;
+      animation: inspect-pulse 1.3s infinite ease-in-out;
+    }
+
+    @keyframes fault-pulse {
+      0% { transform: scale(0.82); opacity: 0.28; }
+      60% { transform: scale(1.22); opacity: 0.92; }
+      100% { transform: scale(1.34); opacity: 0; }
+    }
+
+    @keyframes inspect-pulse {
+      0% { transform: scale(0.72); opacity: 0.18; }
+      60% { transform: scale(1.18); opacity: 0.76; }
+      100% { transform: scale(1.3); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const bootConfig = __BOOT_CONFIG__;
+    let map = null;
+    let mapReady = false;
+    let mapReadyPosted = false;
+    let markerIndex = new Map();
+    let lastPointSignature = "";
+
+    function post(type, payload) {
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage({ type, payload });
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setTheme(theme) {
+      if (!theme) {
+        return;
+      }
+
+      const root = document.documentElement;
+      root.style.setProperty("--stage-bg", theme.stageBackground || "#07111f");
+      root.style.setProperty("--text", theme.textPrimary || "#e8eef9");
+      root.style.setProperty("--panel", theme.panelBackground || "rgba(7, 17, 31, 0.72)");
+      root.style.setProperty("--normal", theme.normal || "#5fbf87");
+      root.style.setProperty("--fault", theme.fault || "#ff6b6b");
+      root.style.setProperty("--key", theme.key || "#f7b955");
+      root.style.setProperty("--inspecting", theme.inspecting || "#4db2ff");
+      root.style.setProperty("--silent", theme.silent || "#94a7bd");
+      root.style.setProperty("--paused", theme.paused || "#f08b62");
+      root.style.setProperty("--selected", theme.selected || "#ffffff");
+    }
+
+    function toneByKind(point) {
+      switch (point.visualKind) {
+        case "Fault":
+          return "var(--fault)";
+        case "Key":
+          return "var(--key)";
+        case "Inspecting":
+          return "var(--inspecting)";
+        case "Silent":
+          return "var(--silent)";
+        case "Paused":
+          return "var(--paused)";
+        default:
+          return "var(--normal)";
+      }
+    }
+
+    function markerClass(point) {
+      const classes = ["marker", point.visualKind.toLowerCase()];
+      if (point.isSelected) {
+        classes.push("selected");
+      }
+      if (point.isCurrent) {
+        classes.push("current");
+      }
+      return classes.join(" ");
+    }
+
+    function buildMarkerContent(point) {
+      return `
+        <div class="${markerClass(point)}" style="--tone:${toneByKind(point)};">
+          <div class="marker-selection"></div>
+          <div class="marker-ring"></div>
+          <div class="marker-chip"></div>
+          <div class="marker-label">${escapeHtml(point.pointName)}</div>
+        </div>`;
+    }
+
+    function fitOrFocus(points, selectedPointId) {
+      if (!map) {
+        return;
+      }
+
+      const selectedMarker = selectedPointId ? markerIndex.get(selectedPointId) : null;
+      if (selectedMarker) {
+        map.panTo(selectedMarker.getPosition());
+        return;
+      }
+
+      const visibleMarkers = Array.from(markerIndex.values());
+      if (visibleMarkers.length === 0) {
+        map.setZoomAndCenter(
+          bootConfig.defaultZoom,
+          [bootConfig.defaultCenterLongitude, bootConfig.defaultCenterLatitude]);
+        return;
+      }
+
+      if (visibleMarkers.length === 1) {
+        map.setZoomAndCenter(Math.max(bootConfig.defaultZoom, 13), visibleMarkers[0].getPosition());
+        return;
+      }
+
+      map.setFitView(visibleMarkers, false, [60, 60, 60, 60]);
+    }
+
+    function applyState(message) {
+      if (!mapReady || !message || message.type !== "state") {
+        return;
+      }
+
+      const points = Array.isArray(message.points) ? message.points : [];
+      setTheme(message.theme);
+
+      const incomingIds = new Set(points.map(point => point.pointId));
+      for (const [pointId, marker] of markerIndex.entries()) {
+        if (!incomingIds.has(pointId)) {
+          map.remove(marker);
+          markerIndex.delete(pointId);
+        }
+      }
+
+      for (const point of points) {
+        const position = [point.longitude, point.latitude];
+        let marker = markerIndex.get(point.pointId);
+
+        if (!marker) {
+            marker = new AMap.Marker({
+              position,
+              anchor: "center",
+              title: point.pointName,
+              content: buildMarkerContent(point),
+              zIndex: point.isCurrent ? 260 : point.isSelected ? 240 : 120
+            });
+
+          marker.on("click", () => post("pointSelected", point.pointId));
+          marker.setMap(map);
+          markerIndex.set(point.pointId, marker);
+        } else {
+          marker.setPosition(position);
+          marker.setContent(buildMarkerContent(point));
+          marker.setzIndex(point.isCurrent ? 260 : point.isSelected ? 240 : 120);
+        }
+      }
+
+      const pointSignature = points.map(point => point.pointId).join("|");
+      if (pointSignature !== lastPointSignature) {
+        lastPointSignature = pointSignature;
+        fitOrFocus(points, message.selectedPointId);
+        return;
+      }
+
+      if (message.selectedPointId) {
+        fitOrFocus(points, message.selectedPointId);
+      }
+    }
+
+    function loadAmap() {
+      return new Promise((resolve, reject) => {
+        if (window.AMap) {
+          resolve();
+          return;
+        }
+
+        if (!bootConfig.apiKey || !bootConfig.securityJsCode) {
+          reject(new Error("map_config_missing"));
+          return;
+        }
+
+        window._AMapSecurityConfig = { securityJsCode: bootConfig.securityJsCode };
+
+        const script = document.createElement("script");
+        script.src = `https://webapi.amap.com/maps?v=${encodeURIComponent(bootConfig.apiVersion)}&key=${encodeURIComponent(bootConfig.apiKey)}`;
+        script.async = true;
+        script.onerror = () => reject(new Error("amap_script_failed"));
+        script.onload = () => {
+          if (window.AMap) {
+            resolve();
+            return;
+          }
+
+          reject(new Error("amap_runtime_missing"));
+        };
+
+        document.head.appendChild(script);
+
+        window.setTimeout(() => {
+          if (!window.AMap) {
+            reject(new Error("amap_script_timeout"));
+          }
+        }, 9000);
+      });
+    }
+
+    function initMap() {
+      map = new AMap.Map("map", {
+        zoom: bootConfig.defaultZoom,
+        center: [bootConfig.defaultCenterLongitude, bootConfig.defaultCenterLatitude],
+        viewMode: "3D",
+        mapStyle: "amap://styles/normal"
+      });
+
+      const completeReady = () => {
+        if (mapReadyPosted) {
+          return;
+        }
+
+        mapReadyPosted = true;
+        mapReady = true;
+        document.body.classList.add("map-ready");
+        post("ready", { message: "map_ready" });
+      };
+
+      map.on("complete", completeReady);
+      window.setTimeout(completeReady, 1200);
+    }
+
+    window.chrome.webview.addEventListener("message", event => applyState(event.data));
+
+    loadAmap()
+      .then(initMap)
+      .catch(error => {
+        post("error", error && error.message ? error.message : "amap_init_failed");
+      });
+  </script>
+</body>
+</html>

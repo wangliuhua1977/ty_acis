@@ -355,24 +355,26 @@
                         </Border>
                         <Button Grid.Column="1" Style="{StaticResource OverlayCloseButtonStyle}" Command="{Binding PlacementTarget.DataContext.HideOverlayPanelCommand, RelativeSource={RelativeSource AncestorType=Popup}}" CommandParameter="{Binding}" Content="×" />
                     </Grid>
-                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.PointName, RelativeSource={RelativeSource AncestorType=Popup}}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.UnitName, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.DeviceName, RelativeSource={RelativeSource AncestorType=Popup}}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.DisplayCodeAndRegion, RelativeSource={RelativeSource AncestorType=Popup}}" />
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="94" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                         <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointStatusLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.StatusText, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.OnlineStatus, RelativeSource={RelativeSource AncestorType=Popup}}" />
                         <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointCoordinateLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.CoordinateStatusText, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointFaultTypeLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.FaultType, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummaryLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.Summary, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.CoordinateStatus, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointLastSyncLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.LastSyncTime, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointFaultTypeLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.FaultType, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummaryLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.StatusSummary, RelativeSource={RelativeSource AncestorType=Popup}}" />
                     </Grid>
                     <Border Margin="0,14,0,0" Style="{StaticResource MutedPanelStyle}" Padding="12">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointActionLabel, RelativeSource={RelativeSource AncestorType=Popup}}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.ActionHint, RelativeSource={RelativeSource AncestorType=Popup}}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PlacementTarget.DataContext.SelectedPointSummary.AvailableActionsText, RelativeSource={RelativeSource AncestorType=Popup}}" />
                             <Button Margin="0,12,0,0"
                                     Content="{Binding PlacementTarget.DataContext.CoordinateReserveActionText, RelativeSource={RelativeSource AncestorType=Popup}}"
                                     IsEnabled="False">

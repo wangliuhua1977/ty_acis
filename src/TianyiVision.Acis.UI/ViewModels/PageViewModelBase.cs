@@ -19,4 +19,8 @@ public abstract class PageViewModelBase : ViewModelBase
 
     protected void RequestNavigate(AppSectionId sectionId)
         => NavigateToSection?.Invoke(sectionId);
+
+    public virtual void OnNavigatedTo()
+    {
+    }
 }

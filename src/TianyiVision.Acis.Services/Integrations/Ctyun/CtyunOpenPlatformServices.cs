@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using TianyiVision.Acis.Services.Alerts;
@@ -646,6 +646,17 @@ public sealed class CtyunOpenPlatformClient
         };
     }
 
+    private static bool? TryReadBooleanLike(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var propertyValue)
+            || propertyValue.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return ReadBooleanLike(propertyValue);
+    }
+
     private static DateTime ParseDateTime(string? rawValue)
     {
         return ParseNullableDateTime(rawValue) ?? DateTime.UtcNow;
@@ -679,7 +690,22 @@ public sealed class CtyunOpenPlatformClient
 
     private static CtyunDeviceDetailDto EmptyDeviceDetail(string deviceCode)
     {
-        return new CtyunDeviceDetailDto(deviceCode, string.Empty, string.Empty, null, null, null, false, false, false, false, null, null, null);
+        return new CtyunDeviceDetailDto(
+            deviceCode,
+            string.Empty,
+            string.Empty,
+            null,
+            null,
+            null,
+            null,
+            false,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            null);
     }
 
     private IEnumerable<string> BuildDeviceDetailPaths()
@@ -750,18 +776,26 @@ public sealed class CtyunOpenPlatformClient
                 ReadPreferredString(data, "longitude"),
                 ReadPreferredString(data, "latitude"),
                 ReadPreferredString(data, "location", "fullRegionName", "regionCode"),
-                data.TryGetProperty("onlineStatus", out var onlineStatus) && ReadBooleanLike(onlineStatus),
+                TryReadBooleanLike(data, "onlineStatus"),
                 data.TryGetProperty("cloudStatus", out var cloudStatus) && ReadBooleanLike(cloudStatus),
                 data.TryGetProperty("picCloudStatus", out var picCloudStatus) && ReadBooleanLike(picCloudStatus),
                 data.TryGetProperty("bandStatus", out var bandStatus) && ReadBooleanLike(bandStatus),
                 TryReadInt32(data, "deviceSource"),
                 ReadPreferredString(data, "fwVersion", "firmwareVersion"),
-                TryReadInt32(data, "sourceTypeFlag"));
+                TryReadInt32(data, "sourceTypeFlag"),
+                ParseNullableDateTime(ReadPreferredString(data, "reportTime")),
+                ParseNullableDateTime(ReadPreferredString(data, "importTime")));
 
             var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
+            var lastSyncTime = detail.ReportTime ?? detail.ImportTime;
+            var lastSyncSource = detail.ReportTime.HasValue
+                ? "reportTime"
+                : detail.ImportTime.HasValue
+                    ? "importTime"
+                    : "待接入";
             MapPointSourceDiagnostics.Write(
                 "PointDetail",
-                $"Device detail parsed: deviceCode = {deviceCode}, path = {path}, pointName = {(string.IsNullOrWhiteSpace(detail.DeviceName) ? "missing" : "present")}, coordinateStatus = {coordinate.Status}, canRender = {coordinate.CanRenderOnMap}");
+                $"Device detail parsed: deviceCode = {deviceCode}, path = {path}, pointName = {(string.IsNullOrWhiteSpace(detail.DeviceName) ? "missing" : "present")}, coordinateStatus = {coordinate.Status}, canRender = {coordinate.CanRenderOnMap}, online = {(detail.IsOnline.HasValue ? detail.IsOnline.Value.ToString() : "null")}, lastSyncSource = {lastSyncSource}, lastSyncTime = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}");
 
             return ServiceResponse<CtyunDeviceDetailDto>.Success(detail, $"已获取设备详情：{path}");
         }
@@ -785,13 +819,15 @@ public sealed class CtyunOpenPlatformClient
             string.IsNullOrWhiteSpace(primary.Longitude) ? candidate.Longitude : primary.Longitude,
             string.IsNullOrWhiteSpace(primary.Latitude) ? candidate.Latitude : primary.Latitude,
             string.IsNullOrWhiteSpace(primary.Location) ? candidate.Location : primary.Location,
-            primary.IsOnline || candidate.IsOnline,
+            primary.IsOnline ?? candidate.IsOnline,
             primary.CloudStatus || candidate.CloudStatus,
             primary.PicCloudStatus || candidate.PicCloudStatus,
             primary.BandStatus || candidate.BandStatus,
             primary.DeviceSource ?? candidate.DeviceSource,
             string.IsNullOrWhiteSpace(primary.FwVersion) ? candidate.FwVersion : primary.FwVersion,
-            primary.SourceTypeFlag ?? candidate.SourceTypeFlag);
+            primary.SourceTypeFlag ?? candidate.SourceTypeFlag,
+            primary.ReportTime ?? candidate.ReportTime,
+            primary.ImportTime ?? candidate.ImportTime);
     }
 
     private static bool HasUsableMapDetail(CtyunDeviceDetailDto detail)
@@ -1164,8 +1200,24 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
         var unitName = !string.IsNullOrWhiteSpace(detail.Location)
             ? detail.Location
             : "待补齐所属单位";
-        var onlineText = detail.IsOnline ? "在线" : "离线";
+        var onlineText = detail.IsOnline switch
+        {
+            true => "在线",
+            false => "离线",
+            _ => "未知"
+        };
         var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
+        var lastSyncTime = detail.ReportTime ?? detail.ImportTime;
+        var lastSyncSource = detail.ReportTime.HasValue
+            ? "reportTime"
+            : detail.ImportTime.HasValue
+                ? "importTime"
+                : "待接入";
+        var detailSummary = BuildDetailSummary(detail.IsOnline, coordinate);
+
+        MapPointSourceDiagnostics.Write(
+            "PointStatus",
+            $"ctyun status mapped: pointId = {pointId}, online = {onlineText}, coordinate = {coordinate.StatusText}, lastSync = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}, lastSyncSource = {lastSyncSource}");
 
         return ServiceResponse<DevicePointDetailModel>.Success(new DevicePointDetailModel(
             PointIdentity.CreatePointId(pointId),
@@ -1178,11 +1230,11 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             coordinate,
             detail.IsOnline,
             onlineText,
-            detail.IsOnline ? "待接视频巡检" : "播放待确认",
-            "待接 AI 画面判定",
-            coordinate.CanRenderOnMap
-                ? "当前点位已同步坐标与状态信息。"
-                : $"当前点位暂未返回有效坐标：{coordinate.StatusText}。",
+            "待接入",
+            "待接入",
+            lastSyncTime,
+            lastSyncSource,
+            detailSummary,
             "CTYun"));
     }
 
@@ -1197,11 +1249,32 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             string.Empty,
             string.Empty,
             new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
-            false,
+            null,
             string.Empty,
             string.Empty,
+            string.Empty,
+            null,
             string.Empty,
             string.Empty,
             "CTYun");
+    }
+
+    private static string BuildDetailSummary(bool? isOnline, PointCoordinateModel coordinate)
+    {
+        var onlineStatus = isOnline switch
+        {
+            true => "在线",
+            false => "离线",
+            _ => "未知"
+        };
+
+        var coordinateStatus = coordinate.Status switch
+        {
+            PointCoordinateStatus.Valid => "坐标可落点",
+            PointCoordinateStatus.Missing or PointCoordinateStatus.Incomplete => "待校验",
+            _ => "坐标异常"
+        };
+
+        return $"{onlineStatus} / {coordinateStatus} / 待接入";
     }
 }

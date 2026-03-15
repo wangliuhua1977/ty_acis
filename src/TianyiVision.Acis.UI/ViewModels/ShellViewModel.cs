@@ -3,6 +3,8 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Diagnostics;
+using TianyiVision.Acis.Services.Home;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Time;
 using TianyiVision.Acis.UI.Mvvm;
@@ -13,6 +15,7 @@ namespace TianyiVision.Acis.UI.ViewModels;
 public sealed class ShellViewModel : ViewModelBase
 {
     private readonly IClockService _clockService;
+    private readonly IHomeDashboardService _homeDashboardService;
     private readonly DispatcherTimer _clockTimer;
     private readonly Dictionary<AppSectionId, Func<PageViewModelBase>> _pageFactories;
     private readonly Dictionary<AppSectionId, PageViewModelBase> _pageViewModels;
@@ -30,10 +33,12 @@ public sealed class ShellViewModel : ViewModelBase
     public ShellViewModel(
         ITextService textService,
         IClockService clockService,
+        IHomeDashboardService homeDashboardService,
         Dictionary<AppSectionId, Func<PageViewModelBase>> pageFactories)
     {
         _textService = textService;
         _clockService = clockService;
+        _homeDashboardService = homeDashboardService;
         _pageFactories = pageFactories;
         _pageViewModels = [];
 
@@ -50,7 +55,10 @@ public sealed class ShellViewModel : ViewModelBase
         RefreshShellText();
         RebuildPages(AppSectionId.Home, null);
         UpdateCurrentTime();
-        SelectHeaderMetric(HeaderMetrics.First());
+        if (HeaderMetrics.Count > 0)
+        {
+            SelectHeaderMetric(HeaderMetrics.First());
+        }
 
         _clockTimer = new DispatcherTimer
         {
@@ -130,6 +138,7 @@ public sealed class ShellViewModel : ViewModelBase
         _currentSection = sectionId;
         CurrentPageViewModel = _pageViewModels[sectionId];
         UpdateSelection(sectionId);
+        CurrentPageViewModel.OnNavigatedTo();
     }
 
     private void UpdateSelection(AppSectionId activeSection)
@@ -183,13 +192,14 @@ public sealed class ShellViewModel : ViewModelBase
         SidebarDescription = _textService.Resolve(TextTokens.ShellSidebarDescription);
         HeaderStatusFeedback = _textService.Resolve(TextTokens.ShellHeaderFeedbackIdle);
 
+        var headerMetricsSnapshot = GetHeaderMetricsSnapshot();
         HeaderMetrics = new ObservableCollection<ShellStatusMetricState>
         {
-            new(_textService.Resolve(TextTokens.ShellHeaderInspectionTasks), "18"),
-            new(_textService.Resolve(TextTokens.ShellHeaderFaults), "7"),
-            new(_textService.Resolve(TextTokens.ShellHeaderOutstanding), "4"),
-            new(_textService.Resolve(TextTokens.ShellHeaderPendingReview), "2"),
-            new(_textService.Resolve(TextTokens.ShellHeaderPendingDispatch), "5")
+            new(_textService.Resolve(TextTokens.ShellHeaderInspectionTasks), headerMetricsSnapshot.InspectionTasks),
+            new(_textService.Resolve(TextTokens.ShellHeaderFaults), headerMetricsSnapshot.Faults),
+            new(_textService.Resolve(TextTokens.ShellHeaderOutstanding), headerMetricsSnapshot.Outstanding),
+            new(_textService.Resolve(TextTokens.ShellHeaderPendingReview), headerMetricsSnapshot.PendingReview),
+            new(_textService.Resolve(TextTokens.ShellHeaderPendingDispatch), headerMetricsSnapshot.PendingDispatch)
         };
         OnPropertyChanged(nameof(HeaderMetrics));
 
@@ -223,5 +233,29 @@ public sealed class ShellViewModel : ViewModelBase
 
         CurrentPageViewModel = _pageViewModels[activeSection];
         UpdateSelection(activeSection);
+        CurrentPageViewModel.OnNavigatedTo();
+    }
+
+    private HomeHeaderMetricsModel GetHeaderMetricsSnapshot()
+    {
+        var dashboardResponse = _homeDashboardService.GetDashboard();
+        if (dashboardResponse.IsSuccess)
+        {
+            var metrics = dashboardResponse.Data.HeaderMetrics;
+            MapPointSourceDiagnostics.Write(
+                "ShellHeaderMetrics",
+                $"shell header metrics binding = inspectionTasks:{metrics.InspectionTasks}, faults:{metrics.Faults}, outstanding:{metrics.Outstanding}, pendingReview:{metrics.PendingReview}, pendingDispatch:{metrics.PendingDispatch}");
+            return metrics;
+        }
+
+        MapPointSourceDiagnostics.Write(
+            "ShellHeaderMetrics",
+            $"shell header metrics unavailable, fallback to pending values: reason = {NormalizeReason(dashboardResponse.Message)}");
+        return new HomeHeaderMetricsModel("待接入", "待接入", "待接入", "待接入", "待接入");
+    }
+
+    private static string NormalizeReason(string? message)
+    {
+        return string.IsNullOrWhiteSpace(message) ? "首页数据暂不可用" : message.Trim();
     }
 }
