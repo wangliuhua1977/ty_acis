@@ -73,9 +73,29 @@
       pointer-events: none;
     }
 
+    .marker-selection {
+      position: absolute;
+      inset: -14px;
+      border: 2px solid rgba(255, 255, 255, 0.82);
+      border-radius: 999px;
+      opacity: 0;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+
     .marker.selected .marker-chip {
       border-color: var(--selected);
       box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 12px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .marker.selected .marker-selection {
+      opacity: 1;
+    }
+
+    .marker.selected .marker-label {
+      border-color: color-mix(in srgb, var(--selected) 32%, transparent);
+      background: color-mix(in srgb, var(--panel) 82%, var(--selected) 18%);
+      font-weight: 700;
     }
 
     .marker.current .marker-chip,
@@ -183,6 +203,7 @@
     function buildMarkerContent(point) {
       return `
         <div class="${markerClass(point)}" style="--tone:${toneByKind(point)};">
+          <div class="marker-selection"></div>
           <div class="marker-ring"></div>
           <div class="marker-chip"></div>
           <div class="marker-label">${escapeHtml(point.pointName)}</div>
@@ -237,13 +258,13 @@
         let marker = markerIndex.get(point.pointId);
 
         if (!marker) {
-          marker = new AMap.Marker({
-            position,
-            anchor: "center",
-            title: point.pointName,
-            content: buildMarkerContent(point),
-            zIndex: point.isSelected ? 240 : 120
-          });
+            marker = new AMap.Marker({
+              position,
+              anchor: "center",
+              title: point.pointName,
+              content: buildMarkerContent(point),
+              zIndex: point.isCurrent ? 260 : point.isSelected ? 240 : 120
+            });
 
           marker.on("click", () => post("pointSelected", point.pointId));
           marker.setMap(map);
@@ -251,7 +272,7 @@
         } else {
           marker.setPosition(position);
           marker.setContent(buildMarkerContent(point));
-          marker.setzIndex(point.isSelected ? 240 : 120);
+          marker.setzIndex(point.isCurrent ? 260 : point.isSelected ? 240 : 120);
         }
       }
 

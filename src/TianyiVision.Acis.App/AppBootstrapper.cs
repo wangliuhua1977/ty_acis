@@ -163,6 +163,8 @@ public sealed class AppBootstrapper
     private void LoadLocalConfiguration()
     {
         var snapshot = _localConfigurationBootstrapService.Initialize().Preferences;
+        var bundledTerminologies = _textService.GetAvailableProfiles()
+            .ToDictionary(profile => profile.Id, profile => profile, StringComparer.Ordinal);
 
         foreach (var theme in snapshot.Themes)
         {
@@ -175,11 +177,29 @@ public sealed class AppBootstrapper
 
         foreach (var terminology in snapshot.Terminologies)
         {
+            bundledTerminologies.TryGetValue(terminology.Id, out var bundledProfile);
+            var mergedTextEntries = bundledProfile is null
+                ? new Dictionary<string, string>(terminology.TextEntries, StringComparer.Ordinal)
+                : new Dictionary<string, string>(bundledProfile.TextEntries, StringComparer.Ordinal);
+            var mergedVariables = bundledProfile is null
+                ? new Dictionary<string, string>(terminology.Variables, StringComparer.Ordinal)
+                : new Dictionary<string, string>(bundledProfile.Variables, StringComparer.Ordinal);
+
+            foreach (var pair in terminology.TextEntries)
+            {
+                mergedTextEntries[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in terminology.Variables)
+            {
+                mergedVariables[pair.Key] = pair.Value;
+            }
+
             _textService.SetProfile(new TerminologyProfile(
                 terminology.Id,
                 terminology.DisplayName,
-                new Dictionary<string, string>(terminology.TextEntries, StringComparer.Ordinal),
-                new Dictionary<string, string>(terminology.Variables, StringComparer.Ordinal)));
+                mergedTextEntries,
+                mergedVariables));
         }
 
         if (!string.IsNullOrWhiteSpace(snapshot.ActiveThemeId))

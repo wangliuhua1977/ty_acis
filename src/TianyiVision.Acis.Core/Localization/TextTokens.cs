@@ -108,6 +108,9 @@ public static class TextTokens
     public const string InspectionWorkbenchDescription = "inspection.workbenchDescription";
     public const string InspectionWorkbenchMapBadge = "inspection.workbenchMapBadge";
     public const string InspectionWorkbenchHint = "inspection.workbenchHint";
+    public const string InspectionMapModeReal = "inspection.mapModeReal";
+    public const string InspectionMapModeFallback = "inspection.mapModeFallback";
+    public const string InspectionMapOverlayReserveAction = "inspection.mapOverlayReserveAction";
     public const string InspectionRunSummaryStartedAtLabel = "inspection.runSummaryStartedAtLabel";
     public const string InspectionRunSummaryTotalPointsLabel = "inspection.runSummaryTotalPointsLabel";
     public const string InspectionRunSummaryInspectedPointsLabel = "inspection.runSummaryInspectedPointsLabel";

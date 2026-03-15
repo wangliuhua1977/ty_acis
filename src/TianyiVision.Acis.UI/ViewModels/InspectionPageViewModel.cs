@@ -17,6 +17,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _openDispatchWorkspaceCommand;
     private readonly RelayCommand _openReportsCenterCommand;
+    private readonly RelayCommand _selectFirstUnmappedPointCommand;
     private RelayCommand _openReviewWallCommand = null!;
     private RelayCommand _confirmReviewCompletedCommand = null!;
     private RelayCommand _markSelectedReviewCommand = null!;
@@ -32,6 +33,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private InspectionPointState? _selectedPoint;
     private string _toggleGroupActionText = string.Empty;
     private string _selectedMapPointId = string.Empty;
+    private bool _isRealMapAvailable;
+    private bool _isMapAvailabilityKnown;
+    private string _mapAvailabilityBadgeText = string.Empty;
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -73,6 +77,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         WorkbenchDescription = textService.Resolve(TextTokens.InspectionWorkbenchDescription);
         WorkbenchMapBadge = textService.Resolve(TextTokens.InspectionWorkbenchMapBadge);
         WorkbenchHint = textService.Resolve(TextTokens.InspectionWorkbenchHint);
+        MapModeRealText = textService.Resolve(TextTokens.InspectionMapModeReal);
+        MapModeFallbackText = textService.Resolve(TextTokens.InspectionMapModeFallback);
+        MapOverlayReserveActionText = textService.Resolve(TextTokens.InspectionMapOverlayReserveAction);
         RunSummaryStartedAtLabel = textService.Resolve(TextTokens.InspectionRunSummaryStartedAtLabel);
         RunSummaryTotalPointsLabel = textService.Resolve(TextTokens.InspectionRunSummaryTotalPointsLabel);
         RunSummaryInspectedPointsLabel = textService.Resolve(TextTokens.InspectionRunSummaryInspectedPointsLabel);
@@ -163,9 +170,20 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         _executeInspectionCommand = new RelayCommand(_ => SimulateInspectionExecution(), _ => ExecutionState?.IsEnabled == true);
         _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
         _openReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
+        _selectFirstUnmappedPointCommand = new RelayCommand(
+            _ =>
+            {
+                var firstUnmapped = UnmappedPoints.FirstOrDefault();
+                if (firstUnmapped is not null)
+                {
+                    SelectPoint(firstUnmapped.PointId);
+                }
+            },
+            _ => UnmappedPoints.Count > 0);
         ExecuteInspectionCommand = _executeInspectionCommand;
         OpenDispatchWorkspaceCommand = _openDispatchWorkspaceCommand;
         OpenReportsCenterCommand = _openReportsCenterCommand;
+        SelectFirstUnmappedPointCommand = _selectFirstUnmappedPointCommand;
         ViewHistoryCommand = new RelayCommand(_ =>
         {
             if (ExecutionState is not null)
@@ -206,6 +224,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string WorkbenchDescription { get; }
     public string WorkbenchMapBadge { get; }
     public string WorkbenchHint { get; }
+    public string MapModeRealText { get; }
+    public string MapModeFallbackText { get; }
+    public string MapOverlayReserveActionText { get; }
     public string RunSummaryStartedAtLabel { get; }
     public string RunSummaryTotalPointsLabel { get; }
     public string RunSummaryInspectedPointsLabel { get; }
@@ -295,7 +316,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public ObservableCollection<MapPointState> UnmappedPoints
     {
         get => _unmappedPoints;
-        private set => SetProperty(ref _unmappedPoints, value);
+        private set
+        {
+            if (SetProperty(ref _unmappedPoints, value))
+            {
+                OnPropertyChanged(nameof(HasUnmappedPoints));
+                OnPropertyChanged(nameof(UnmappedPointCount));
+                _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     public ObservableCollection<RecentFaultSummaryState> RecentFaults
@@ -307,7 +336,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public InspectionPointDetailState? SelectedPointDetail
     {
         get => _selectedPointDetail;
-        private set => SetProperty(ref _selectedPointDetail, value);
+        private set
+        {
+            if (SetProperty(ref _selectedPointDetail, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedPoint));
+            }
+        }
     }
 
     public InspectionPointState? SelectedPoint
@@ -328,9 +363,34 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         private set => SetProperty(ref _toggleGroupActionText, value);
     }
 
+    public bool IsRealMapAvailable
+    {
+        get => _isRealMapAvailable;
+        private set => SetProperty(ref _isRealMapAvailable, value);
+    }
+
+    public bool IsMapAvailabilityKnown
+    {
+        get => _isMapAvailabilityKnown;
+        private set => SetProperty(ref _isMapAvailabilityKnown, value);
+    }
+
+    public string MapAvailabilityBadgeText
+    {
+        get => _mapAvailabilityBadgeText;
+        private set => SetProperty(ref _mapAvailabilityBadgeText, value);
+    }
+
+    public bool HasSelectedPoint => SelectedPointDetail is not null;
+
+    public bool HasUnmappedPoints => UnmappedPoints.Count > 0;
+
+    public int UnmappedPointCount => UnmappedPoints.Count;
+
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
+    public ICommand SelectFirstUnmappedPointCommand { get; }
     public ICommand ExecuteInspectionCommand { get; }
     public ICommand OpenDispatchWorkspaceCommand { get; }
     public ICommand OpenReportsCenterCommand { get; }
@@ -360,6 +420,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         MapPoints = workspace.MapPoints;
         UnmappedPoints = new ObservableCollection<MapPointState>(workspace.MapPoints.Where(point => !point.CanRenderOnMap));
         RecentFaults = workspace.RecentFaults;
+        _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
 
         ToggleGroupActionText = group.IsEnabled
             ? _textService.Resolve(TextTokens.InspectionActionDisable)
@@ -378,6 +439,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         RefreshSummary(workspace);
         LoadReviewState(workspace, refreshFromPoints: false);
+    }
+
+    public void UpdateMapAvailability(bool isAvailable)
+    {
+        IsMapAvailabilityKnown = true;
+        IsRealMapAvailable = isAvailable;
+        MapAvailabilityBadgeText = isAvailable ? MapModeRealText : MapModeFallbackText;
     }
 
     private void SelectPoint(InspectionPointState point)
