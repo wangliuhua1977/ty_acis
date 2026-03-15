@@ -7,7 +7,8 @@ public sealed record DeviceListItemDto(
     string DeviceType,
     string HandlingUnit,
     TianyiVision.Acis.Services.Devices.PointCoordinateModel Coordinate,
-    bool IsOnline);
+    bool IsOnline,
+    string SourceTag);
 
 public sealed record InspectionResultDto(
     string TaskId,

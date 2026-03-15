@@ -25,7 +25,7 @@ public sealed class FallbackDeviceCatalogService : IDeviceCatalogService
         }
         catch (Exception ex)
         {
-            response = ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"真实设备目录调用异常。 {ex.Message}");
+            response = ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"设备目录接口异常：{ex.Message}");
         }
 
         if (response.IsSuccess && response.Data.Count > 0)
@@ -33,17 +33,15 @@ public sealed class FallbackDeviceCatalogService : IDeviceCatalogService
             return response;
         }
 
-        MapPointSourceDiagnostics.Write(
-            string.IsNullOrWhiteSpace(response.Message)
-                ? "Map point source fallback triggered: real device catalog returned no data."
-                : $"Map point source fallback triggered: {response.Message}");
+        var reason = string.IsNullOrWhiteSpace(response.Message)
+            ? "设备目录返回 0 条"
+            : response.Message.Trim();
+        MapPointSourceDiagnostics.Write("Fallback", $"DeviceCatalog fallback triggered: reason = {reason}");
         var fallbackResponse = _fallback.GetDevices();
         return fallbackResponse.IsSuccess
             ? ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(
                 fallbackResponse.Data,
-                string.IsNullOrWhiteSpace(response.Message)
-                    ? "已回退到 demo 设备目录。"
-                    : $"{response.Message} 已回退到 demo 设备目录。")
+                $"{reason} 已回退到 demo 设备目录。")
             : fallbackResponse;
     }
 }

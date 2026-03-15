@@ -1,4 +1,5 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Home;
@@ -32,7 +33,14 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
         var pointCollectionResponse = _pointWorkspaceService.GetPointCollection();
         if (!pointCollectionResponse.IsSuccess || pointCollectionResponse.Data.Count == 0)
         {
-            return _demoService.GetDashboard();
+            var demoResponse = _demoService.GetDashboard();
+            var demoSnapshot = demoResponse.Data;
+            MapPointSourceDiagnostics.WriteLines("HomeMap", [
+                $"current map point source = demo/fallback",
+                $"homeMap final source = demo/fallback, pointCount = {demoSnapshot.MapPoints.Count(point => point.CanRenderOnMap)}, reason = {NormalizeReason(pointCollectionResponse.Message, "点位工作区返回 0 条，页面绑定改用 demo 主舞台")}",
+                $"homeMap preview = {BuildHomePreview(demoSnapshot.MapPoints)}"
+            ]);
+            return demoResponse;
         }
 
         var points = pointCollectionResponse.Data.ToList();
@@ -65,6 +73,24 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             mapPoints,
             visibleRecentFaults);
 
+        var renderablePoints = points.Where(point => point.Coordinate.CanRenderOnMap).ToList();
+        var sourceBreakdown = points
+            .GroupBy(point => MapPointSourceDiagnostics.ClassifySourceTag(point.SourceTag), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var finalSource = ResolveFinalSource(sourceBreakdown);
+        var finalReason = finalSource == "demo/fallback"
+            ? NormalizeReason(pointCollectionResponse.Message, "点位工作区最终使用了 demo/fallback 点位")
+            : renderablePoints.Count == 0
+                ? "坐标清洗后可落点为 0"
+                : NormalizeReason(pointCollectionResponse.Message, "真实点位已进入首页地图");
+
+        MapPointSourceDiagnostics.WriteLines("HomeMap", [
+            $"current map point source = {finalSource}",
+            $"homeMap final source = {finalSource}, pointCount = {renderablePoints.Count}, reason = {finalReason}",
+            $"homeMap sourceBreakdown = {MapPointSourceDiagnostics.SummarizeCounts(sourceBreakdown)}",
+            $"homeMap preview = {BuildWorkspacePreview(renderablePoints.Count > 0 ? renderablePoints : points)}"
+        ]);
+
         return ServiceResponse<HomeDashboardSnapshot>.Success(snapshot, pointCollectionResponse.Message);
     }
 
@@ -95,5 +121,48 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             point.CurrentFaultSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
             point.HasFault);
+    }
+
+    private static string ResolveFinalSource(IReadOnlyDictionary<string, int> sourceBreakdown)
+    {
+        var realCount = sourceBreakdown.GetValueOrDefault("real");
+        var demoCount = sourceBreakdown.GetValueOrDefault("demo");
+
+        if (realCount > 0 && demoCount == 0)
+        {
+            return "real";
+        }
+
+        if (demoCount > 0 && realCount == 0)
+        {
+            return "demo/fallback";
+        }
+
+        return demoCount > 0 ? "mixed" : "unknown";
+    }
+
+    private static string BuildWorkspacePreview(IEnumerable<PointWorkspaceItemModel> points)
+    {
+        var preview = points
+            .Take(10)
+            .Select(point => $"{point.PointName} [PointId={point.PointId}, DeviceCode={point.DeviceCode}, source={MapPointSourceDiagnostics.ClassifySourceTag(point.SourceTag)}]")
+            .ToList();
+
+        return preview.Count == 0 ? "none" : string.Join("; ", preview);
+    }
+
+    private static string BuildHomePreview(IEnumerable<HomeMapPointModel> points)
+    {
+        var preview = points
+            .Take(10)
+            .Select(point => $"{point.Name} [PointId={point.Id}, DeviceCode={point.DeviceCode}]")
+            .ToList();
+
+        return preview.Count == 0 ? "none" : string.Join("; ", preview);
+    }
+
+    private static string NormalizeReason(string? message, string fallbackReason)
+    {
+        return string.IsNullOrWhiteSpace(message) ? fallbackReason : message.Trim();
     }
 }

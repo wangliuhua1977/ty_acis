@@ -91,7 +91,8 @@ public sealed class CtyunDeviceListAdapter : ICtyunDeviceListAdapter
             details?.DeviceType ?? "CTYun设备",
             details?.Location ?? string.Empty,
             PointCoordinateParser.FromRaw(details?.Longitude, details?.Latitude),
-            details?.IsOnline ?? false);
+            details?.IsOnline ?? false,
+            "CTYun");
     }
 }
 

@@ -5,6 +5,7 @@ using TianyiVision.Acis.Infrastructure.Theming;
 using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Demo;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Devices;
 using TianyiVision.Acis.Services.Dispatch;
 using TianyiVision.Acis.Services.Home;
@@ -77,6 +78,7 @@ public sealed class AppBootstrapper
         var notificationHistoryService = new FileDispatchNotificationHistoryService(paths, documentStore);
         var workOrderSnapshotService = new FileDispatchWorkOrderSnapshotService(paths, documentStore);
         var platformSettings = platformIntegrationSettingsService.Load();
+        var ctyunConfigurationIssues = platformSettings.GetCtyunConfigurationIssues();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
         var demoAlertQueryService = new DemoAlertQueryService();
         var demoHomeDashboardService = new DemoHomeDashboardService();
@@ -85,6 +87,14 @@ public sealed class AppBootstrapper
         var demoDispatchResponsibilityService = new DemoDispatchResponsibilityService(demoDispatchNotificationService);
         var demoReportDataService = new DemoReportDataService();
         _mapProviderSettings = platformSettings.MapProvider;
+
+        MapPointSourceDiagnostics.WriteLines("Configuration", [
+            $"diagnosticLogFile = {MapPointSourceDiagnostics.LogFilePath}",
+            $"serviceMode = {PlatformIntegrationSettingsExtensions.NormalizeMode(platformSettings.OpenPlatform.ServiceMode)}",
+            $"enableDemoFallback = {platformSettings.OpenPlatform.EnableDemoFallback}",
+            $"ctyunConfiguration = {(ctyunConfigurationIssues.Count == 0 ? "complete" : "missing")}",
+            $"ctyunConfigurationIssues = {(ctyunConfigurationIssues.Count == 0 ? "none" : string.Join("; ", ctyunConfigurationIssues.Select(ExtractConfigurationIssueField)))}"
+        ]);
 
         _themeService = new ThemeService(new ThemeCatalogProvider());
         _textService = new TextService(new TerminologyCatalogProvider());
@@ -130,6 +140,16 @@ public sealed class AppBootstrapper
             _dispatchNotificationService,
             _textService,
             demoReportDataService);
+
+        MapPointSourceDiagnostics.WriteLines("ServiceSelection", [
+            $"homeMapPointDataService = {_homeDashboardService.GetType().Name} -> {pointWorkspaceService.GetType().Name} -> {deviceWorkspaceService.GetType().Name} -> {deviceCatalogService.GetType().Name}",
+            $"inspectionMapPointDataService = {_inspectionTaskService.GetType().Name} -> {pointWorkspaceService.GetType().Name} -> {deviceWorkspaceService.GetType().Name} -> {deviceCatalogService.GetType().Name}",
+            $"pointDetailService = {pointDetailService.GetType().Name}",
+            $"ctyunRuntime = {(ctyunRuntime is null ? "disabled" : "enabled")}",
+            $"demoFallbackBranchEnabled = {platformSettings.IsAutoFallback() || platformSettings.OpenPlatform.EnableDemoFallback}",
+            $"deviceCatalogFallbackBranch = {DescribeFallbackBranch(deviceCatalogService)}",
+            $"pointDetailFallbackBranch = {DescribeFallbackBranch(pointDetailService)}"
+        ]);
 
         LoadLocalConfiguration();
     }
@@ -246,6 +266,9 @@ public sealed class AppBootstrapper
     {
         if (!settings.IsCtyunPreferred())
         {
+            MapPointSourceDiagnostics.Write(
+                "ServiceSelection",
+                $"CTYun runtime disabled because serviceMode = {PlatformIntegrationSettingsExtensions.NormalizeMode(settings.OpenPlatform.ServiceMode)}.");
             return null;
         }
 
@@ -253,11 +276,15 @@ public sealed class AppBootstrapper
         if (issues.Count > 0)
         {
             System.Diagnostics.Trace.WriteLine(string.Join(Environment.NewLine, issues));
+            MapPointSourceDiagnostics.Write(
+                "Configuration",
+                $"CTYun runtime disabled because configuration is missing: {string.Join("; ", issues.Select(ExtractConfigurationIssueField))}");
             return null;
         }
 
         var httpClient = new HttpClient();
         var tokenService = new CtyunAccessTokenService(httpClient, settings);
+        MapPointSourceDiagnostics.Write("ServiceSelection", "CTYun runtime enabled.");
         return new CtyunOpenPlatformClient(httpClient, settings, tokenService);
     }
 
@@ -432,5 +459,25 @@ public sealed class AppBootstrapper
 
         return LegacyMapTechnicalMarkers.Any(marker =>
             value.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string DescribeFallbackBranch(object service)
+    {
+        return service.GetType().Name.StartsWith("Fallback", StringComparison.Ordinal)
+            ? "enabled"
+            : "disabled";
+    }
+
+    private static string ExtractConfigurationIssueField(string issue)
+    {
+        const string marker = "缺少 ";
+        var normalized = issue?.Trim() ?? string.Empty;
+        var index = normalized.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return normalized.TrimEnd('。');
+        }
+
+        return normalized[(index + marker.Length)..].Trim().TrimEnd('。');
     }
 }

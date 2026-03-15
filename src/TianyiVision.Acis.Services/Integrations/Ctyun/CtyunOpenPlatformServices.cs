@@ -77,6 +77,10 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
     {
         try
         {
+            MapPointSourceDiagnostics.Write(
+                "CTYunToken",
+                $"Calling access token API: path = {_settings.OpenPlatform.Token.AccessTokenPath}, grantType = {grantType}, enterpriseUser = {MapPointSourceDiagnostics.MaskValue(_settings.OpenPlatform.EnterpriseUser)}");
+
             var businessParameters = new List<KeyValuePair<string, string>>
             {
                 new("grantType", grantType)
@@ -107,26 +111,56 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
 
             using var response = _httpClient.Send(request);
             var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            MapPointSourceDiagnostics.Write(
+                "CTYunToken",
+                $"Access token API responded: status = {(int)response.StatusCode} {response.StatusCode}");
             response.EnsureSuccessStatusCode();
 
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
-            var code = root.GetProperty("code").GetInt32();
+            if (!root.TryGetProperty("code", out var codeElement) || codeElement.ValueKind != JsonValueKind.Number)
+            {
+                var topLevelProperties = DescribeTopLevelProperties(root);
+                var alternateCode = ReadOptionalText(root, "CODE");
+                var alternateMessage = ReadOptionalText(root, "MSG");
+                MapPointSourceDiagnostics.Write(
+                    "CTYunToken",
+                    $"Access token response missing code field: topLevelProperties = {topLevelProperties}, alternateCode = {alternateCode ?? "none"}, alternateMessage = {alternateMessage ?? "none"}");
+                return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
+                    EmptyToken(),
+                    $"CTYun accessToken 响应缺少 code 字段（顶层字段：{topLevelProperties}，备用 CODE = {alternateCode ?? "none"}，MSG = {alternateMessage ?? "none"}）。");
+            }
+
+            var code = codeElement.GetInt32();
+            var message = root.TryGetProperty("msg", out var messageElement)
+                ? messageElement.GetString() ?? "未知错误"
+                : "未知错误";
             if (code != 0)
             {
                 MapPointSourceDiagnostics.Write(
-                    $"CTYun access token request failed: code={code}, grantType={grantType}, message={root.GetProperty("msg").GetString() ?? "unknown"}");
+                    "CTYunToken",
+                    $"Access token request failed: code = {code}, grantType = {grantType}, message = {message}");
                 return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
                     EmptyToken(),
-                    $"CTYun accessToken 获取失败：{root.GetProperty("msg").GetString() ?? "未知错误"}");
+                    $"CTYun accessToken 获取失败：{message}");
+            }
+
+            if (!root.TryGetProperty("data", out var dataElement)
+                || dataElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                MapPointSourceDiagnostics.Write("CTYunToken", "Access token response missing data field.");
+                return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
+                    EmptyToken(),
+                    "CTYun accessToken 响应缺少 data 字段。");
             }
 
             var data = JsonSerializer.Deserialize<CtyunAccessTokenDto>(
-                root.GetProperty("data").GetRawText(),
+                dataElement.GetRawText(),
                 SerializerOptions);
 
             if (data is null || string.IsNullOrWhiteSpace(data.AccessToken))
             {
+                MapPointSourceDiagnostics.Write("CTYunToken", "Access token response missing usable token payload.");
                 return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
                     EmptyToken(),
                     "CTYun accessToken 响应缺少有效 token。");
@@ -140,13 +174,16 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
                 acquiredAt.AddSeconds(data.ExpiresIn),
                 acquiredAt.AddSeconds(data.RefreshExpiresIn));
             MapPointSourceDiagnostics.Write(
-                $"CTYun access token acquired successfully: expiresAt={snapshot.ExpiresAt:yyyy-MM-dd HH:mm:ss}, refreshExpiresAt={snapshot.RefreshExpiresAt:yyyy-MM-dd HH:mm:ss}");
+                "CTYunToken",
+                $"Access token acquired successfully: expiresAt = {snapshot.ExpiresAt:yyyy-MM-dd HH:mm:ss}, refreshExpiresAt = {snapshot.RefreshExpiresAt:yyyy-MM-dd HH:mm:ss}");
 
             return ServiceResponse<CtyunAccessTokenSnapshot>.Success(snapshot, "已获取最新 accessToken。");
         }
         catch (Exception ex)
         {
-            MapPointSourceDiagnostics.Write($"CTYun access token request threw an exception: {ex.Message}");
+            MapPointSourceDiagnostics.Write(
+                "CTYunToken",
+                $"Access token request exception: type = {ex.GetType().Name}, message = {ex.Message}");
             return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
                 EmptyToken(),
                 $"CTYun accessToken 请求异常：{ex.Message}");
@@ -166,6 +203,31 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
     private static CtyunAccessTokenSnapshot EmptyToken()
     {
         return new CtyunAccessTokenSnapshot(string.Empty, string.Empty, DateTime.UtcNow, DateTime.UtcNow, DateTime.UtcNow);
+    }
+
+    private static string DescribeTopLevelProperties(JsonElement element)
+    {
+        return element.ValueKind == JsonValueKind.Object
+            ? string.Join(", ", element.EnumerateObject().Select(property => property.Name))
+            : element.ValueKind.ToString();
+    }
+
+    private static string? ReadOptionalText(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.ToString(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            _ => value.ToString()
+        };
     }
 }
 
@@ -190,6 +252,10 @@ public sealed class CtyunOpenPlatformClient
 
     public ServiceResponse<CtyunDeviceCatalogPageDto> GetDeviceCatalogPage(long lastId)
     {
+        MapPointSourceDiagnostics.Write(
+            "DeviceCatalog",
+            $"Calling device catalog API: path = {_settings.OpenPlatform.DeviceApi.DeviceListPath}, lastId = {lastId}, pageSize = {_settings.OpenPlatform.DeviceApi.PageSize}, hasChildDevices = {_settings.OpenPlatform.DeviceApi.HasChildDevices}");
+
         var response = SendProtectedRequest(
             _settings.OpenPlatform.DeviceApi.DeviceListPath,
             [
@@ -203,13 +269,50 @@ public sealed class CtyunOpenPlatformClient
 
         if (!response.IsSuccess)
         {
+            MapPointSourceDiagnostics.Write(
+                "DeviceCatalog",
+                $"Device catalog API failed: path = {_settings.OpenPlatform.DeviceApi.DeviceListPath}, reason = {response.Message}");
             return ServiceResponse<CtyunDeviceCatalogPageDto>.Failure(new CtyunDeviceCatalogPageDto(-1, null, []), response.Message);
         }
 
         try
         {
             using var document = JsonDocument.Parse(response.Data);
-            var data = document.RootElement.GetProperty("data");
+            var root = document.RootElement;
+            if (!root.TryGetProperty("data", out var data)
+                || data.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                var topLevelProperties = DescribeTopLevelProperties(root);
+                MapPointSourceDiagnostics.Write(
+                    "DeviceCatalog",
+                    $"Device catalog response missing data field: topLevelProperties = {topLevelProperties}");
+                return ServiceResponse<CtyunDeviceCatalogPageDto>.Failure(
+                    new CtyunDeviceCatalogPageDto(-1, null, []),
+                    $"CTYun 设备列表响应缺少 data 字段（顶层字段：{topLevelProperties}）。");
+            }
+
+            if (!data.TryGetProperty("list", out var listElement) || listElement.ValueKind != JsonValueKind.Array)
+            {
+                var dataProperties = DescribeTopLevelProperties(data);
+                MapPointSourceDiagnostics.Write(
+                    "DeviceCatalog",
+                    $"Device catalog response missing list array: dataProperties = {dataProperties}");
+                return ServiceResponse<CtyunDeviceCatalogPageDto>.Failure(
+                    new CtyunDeviceCatalogPageDto(-1, null, []),
+                    $"CTYun 设备列表响应缺少 list 数组（data 字段：{dataProperties}）。");
+            }
+
+            if (!data.TryGetProperty("lastId", out var lastIdElement) || lastIdElement.ValueKind != JsonValueKind.Number)
+            {
+                var dataProperties = DescribeTopLevelProperties(data);
+                MapPointSourceDiagnostics.Write(
+                    "DeviceCatalog",
+                    $"Device catalog response missing lastId: dataProperties = {dataProperties}");
+                return ServiceResponse<CtyunDeviceCatalogPageDto>.Failure(
+                    new CtyunDeviceCatalogPageDto(-1, null, []),
+                    $"CTYun 设备列表响应缺少 lastId 字段（data 字段：{dataProperties}）。");
+            }
+
             var items = data.GetProperty("list")
                 .EnumerateArray()
                 .Select(item => new CtyunDeviceCatalogItemDto(
@@ -221,14 +324,21 @@ public sealed class CtyunOpenPlatformClient
                 .ToList();
 
             var page = new CtyunDeviceCatalogPageDto(
-                data.GetProperty("lastId").GetInt64(),
+                lastIdElement.GetInt64(),
                 data.TryGetProperty("total", out var total) && total.ValueKind != JsonValueKind.Null ? total.GetInt64() : null,
                 items);
+
+            MapPointSourceDiagnostics.Write(
+                "DeviceCatalog",
+                $"Device catalog page loaded: returnedCount = {items.Count}, nextLastId = {page.LastId}, total = {(page.Total?.ToString(CultureInfo.InvariantCulture) ?? "unknown")}");
 
             return ServiceResponse<CtyunDeviceCatalogPageDto>.Success(page);
         }
         catch (Exception ex)
         {
+            MapPointSourceDiagnostics.Write(
+                "DeviceCatalog",
+                $"Device catalog response parse exception: type = {ex.GetType().Name}, message = {ex.Message}");
             return ServiceResponse<CtyunDeviceCatalogPageDto>.Failure(
                 new CtyunDeviceCatalogPageDto(-1, null, []),
                 $"CTYun 设备列表解析失败：{ex.Message}");
@@ -245,6 +355,9 @@ public sealed class CtyunOpenPlatformClient
 
         if (TryGetCachedDeviceDetail(normalizedDeviceCode, out var cachedDetail))
         {
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Using cached device detail: deviceCode = {normalizedDeviceCode}");
             return ServiceResponse<CtyunDeviceDetailDto>.Success(cachedDetail, "使用内存缓存设备详情。");
         }
 
@@ -267,6 +380,9 @@ public sealed class CtyunOpenPlatformClient
             if (HasUsableMapDetail(mergedDetail))
             {
                 CacheDeviceDetail(normalizedDeviceCode, mergedDetail);
+                MapPointSourceDiagnostics.Write(
+                    "PointDetail",
+                    $"Device detail resolved with usable coordinate: deviceCode = {normalizedDeviceCode}, path = {path}");
                 return ServiceResponse<CtyunDeviceDetailDto>.Success(mergedDetail, response.Message);
             }
         }
@@ -274,7 +390,17 @@ public sealed class CtyunOpenPlatformClient
         if (mergedDetail is not null)
         {
             CacheDeviceDetail(normalizedDeviceCode, mergedDetail);
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Device detail resolved without usable coordinate: deviceCode = {normalizedDeviceCode}, coordinateStatus = {PointCoordinateParser.FromRaw(mergedDetail.Longitude, mergedDetail.Latitude).Status}");
             return ServiceResponse<CtyunDeviceDetailDto>.Success(mergedDetail, "已合并设备详情接口返回。");
+        }
+
+        if (firstFailure is not null)
+        {
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Device detail resolution failed: deviceCode = {normalizedDeviceCode}, reason = {firstFailure.Message}");
         }
 
         return firstFailure
@@ -419,23 +545,46 @@ public sealed class CtyunOpenPlatformClient
 
             using var response = _httpClient.Send(request);
             var payload = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            MapPointSourceDiagnostics.Write(
+                "CTYunHttp",
+                $"Protected API responded: path = {path}, status = {(int)response.StatusCode} {response.StatusCode}");
             response.EnsureSuccessStatusCode();
 
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
-            var code = root.GetProperty("code").GetInt32();
-            if (code != 0)
+            if (!root.TryGetProperty("code", out var codeElement) || codeElement.ValueKind != JsonValueKind.Number)
             {
+                var topLevelProperties = DescribeTopLevelProperties(root);
+                MapPointSourceDiagnostics.Write(
+                    "CTYunHttp",
+                    $"Protected API response missing code field: path = {path}, topLevelProperties = {topLevelProperties}");
                 return ServiceResponse<string>.Failure(
                     string.Empty,
-                    $"CTYun 接口调用失败：{root.GetProperty("msg").GetString() ?? "未知错误"}");
+                    $"CTYun 接口响应缺少 code 字段：path = {path}，顶层字段 = {topLevelProperties}");
+            }
+
+            var code = codeElement.GetInt32();
+            var message = root.TryGetProperty("msg", out var messageElement)
+                ? messageElement.GetString() ?? "未知错误"
+                : "未知错误";
+            if (code != 0)
+            {
+                MapPointSourceDiagnostics.Write(
+                    "CTYunHttp",
+                    $"Protected API returned business failure: path = {path}, code = {code}, message = {message}");
+                return ServiceResponse<string>.Failure(
+                    string.Empty,
+                    $"CTYun 接口调用失败：path = {path}，message = {message}");
             }
 
             return ServiceResponse<string>.Success(payload);
         }
         catch (Exception ex)
         {
-            return ServiceResponse<string>.Failure(string.Empty, $"CTYun 接口请求异常：{ex.Message}");
+            MapPointSourceDiagnostics.Write(
+                "CTYunHttp",
+                $"Protected API exception: path = {path}, type = {ex.GetType().Name}, message = {ex.Message}");
+            return ServiceResponse<string>.Failure(string.Empty, $"CTYun 接口请求异常：path = {path}，{ex.Message}");
         }
     }
 
@@ -557,6 +706,10 @@ public sealed class CtyunOpenPlatformClient
 
     private ServiceResponse<CtyunDeviceDetailDto> GetDeviceDetailFromPath(string deviceCode, string path)
     {
+        MapPointSourceDiagnostics.Write(
+            "PointDetail",
+            $"Calling device detail API: deviceCode = {deviceCode}, path = {path}");
+
         var response = SendProtectedRequest(
             path,
             [
@@ -568,13 +721,28 @@ public sealed class CtyunOpenPlatformClient
 
         if (!response.IsSuccess)
         {
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Device detail API failed: deviceCode = {deviceCode}, path = {path}, reason = {response.Message}");
             return ServiceResponse<CtyunDeviceDetailDto>.Failure(EmptyDeviceDetail(deviceCode), response.Message);
         }
 
         try
         {
             using var document = JsonDocument.Parse(response.Data);
-            var data = document.RootElement.GetProperty("data");
+            var root = document.RootElement;
+            if (!root.TryGetProperty("data", out var data)
+                || data.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                var topLevelProperties = DescribeTopLevelProperties(root);
+                MapPointSourceDiagnostics.Write(
+                    "PointDetail",
+                    $"Device detail response missing data field: deviceCode = {deviceCode}, path = {path}, topLevelProperties = {topLevelProperties}");
+                return ServiceResponse<CtyunDeviceDetailDto>.Failure(
+                    EmptyDeviceDetail(deviceCode),
+                    $"CTYun 设备详情响应缺少 data 字段：path = {path}，顶层字段 = {topLevelProperties}");
+            }
+
             var detail = new CtyunDeviceDetailDto(
                 ReadPreferredString(data, "deviceCode") ?? deviceCode,
                 ReadPreferredString(data, "deviceName") ?? string.Empty,
@@ -590,10 +758,18 @@ public sealed class CtyunOpenPlatformClient
                 ReadPreferredString(data, "fwVersion", "firmwareVersion"),
                 TryReadInt32(data, "sourceTypeFlag"));
 
+            var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Device detail parsed: deviceCode = {deviceCode}, path = {path}, pointName = {(string.IsNullOrWhiteSpace(detail.DeviceName) ? "missing" : "present")}, coordinateStatus = {coordinate.Status}, canRender = {coordinate.CanRenderOnMap}");
+
             return ServiceResponse<CtyunDeviceDetailDto>.Success(detail, $"已获取设备详情：{path}");
         }
         catch (Exception ex)
         {
+            MapPointSourceDiagnostics.Write(
+                "PointDetail",
+                $"Device detail parse exception: deviceCode = {deviceCode}, path = {path}, type = {ex.GetType().Name}, message = {ex.Message}");
             return ServiceResponse<CtyunDeviceDetailDto>.Failure(
                 EmptyDeviceDetail(deviceCode),
                 $"CTYun 设备详情解析失败：{ex.Message}");
@@ -695,6 +871,13 @@ public sealed class CtyunOpenPlatformClient
             : null;
     }
 
+    private static string DescribeTopLevelProperties(JsonElement element)
+    {
+        return element.ValueKind == JsonValueKind.Object
+            ? string.Join(", ", element.EnumerateObject().Select(property => property.Name))
+            : element.ValueKind.ToString();
+    }
+
     private sealed record CachedDeviceDetailEntry(CtyunDeviceDetailDto Detail, DateTime ExpiresAt);
 }
 
@@ -721,6 +904,9 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
     {
         if (TryGetCachedCatalog(out var cachedDevices, out var cachedMessage))
         {
+            MapPointSourceDiagnostics.Write(
+                "DeviceCatalog",
+                $"Using cached device catalog: cachedDeviceCount = {cachedDevices.Count}");
             return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(cachedDevices, cachedMessage);
         }
 
@@ -735,11 +921,14 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             {
                 if (allCatalogItems.Count == 0)
                 {
-                    MapPointSourceDiagnostics.Write($"Device catalog request failed before any device was loaded: {pageResponse.Message}");
+                    MapPointSourceDiagnostics.Write("DeviceCatalog", $"Device catalog request failed before any device was loaded: {pageResponse.Message}");
                     return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"设备目录获取失败：{pageResponse.Message}");
                 }
 
                 pageMessage = pageResponse.Message;
+                MapPointSourceDiagnostics.Write(
+                    "DeviceCatalog",
+                    $"Device catalog paging stopped early: alreadyLoaded = {allCatalogItems.Count}, reason = {pageMessage}");
                 break;
             }
 
@@ -759,19 +948,20 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             .ToList();
         if (catalogItems.Count == 0)
         {
-            MapPointSourceDiagnostics.Write("Device catalog returned: 0 devices");
-            return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回任何设备。");
+            MapPointSourceDiagnostics.Write("DeviceCatalog", "Device catalog returned 0 devices after deduplication.");
+            return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "设备目录返回 0 条。");
         }
 
         var devices = new List<DeviceListItemDto>(catalogItems.Count);
-        var detailFailureCount = 0;
+        var detailFailureReasons = new Dictionary<string, int>(StringComparer.Ordinal);
 
         foreach (var item in catalogItems)
         {
             var detailResponse = _client.GetDeviceDetail(item.DeviceCode);
-            if (!detailResponse.IsSuccess)
+            if (!detailResponse.IsSuccess
+                || !HasUsableDetailPayload(detailResponse.Data))
             {
-                detailFailureCount++;
+                Increment(detailFailureReasons, ClassifyDetailFailureReason(detailResponse));
             }
 
             devices.Add(_adapter.MapDevice(item, detailResponse.IsSuccess ? detailResponse.Data : null));
@@ -779,21 +969,30 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
 
         if (devices.Count == 0)
         {
-            MapPointSourceDiagnostics.Write("Device detail enrichment produced: 0 devices");
+            MapPointSourceDiagnostics.Write("DeviceCatalog", "Device detail enrichment produced 0 devices.");
             return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回可用设备详情。");
         }
 
         var renderableCount = devices.Count(device => device.Coordinate.CanRenderOnMap);
         var unmappedCount = devices.Count - renderableCount;
-        MapPointSourceDiagnostics.Write($"Device catalog returned: {devices.Count} devices");
-        MapPointSourceDiagnostics.Write($"Renderable map points: {renderableCount}");
-        MapPointSourceDiagnostics.Write($"Unmapped devices: {unmappedCount}");
-        if (detailFailureCount > 0)
-        {
-            MapPointSourceDiagnostics.Write($"Device detail enrichment failures: {detailFailureCount}");
-        }
+        var coordinateFailureReasons = devices
+            .Where(device => !device.Coordinate.CanRenderOnMap)
+            .GroupBy(device => ClassifyCoordinateFailureReason(device.Coordinate), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
 
-        var message = BuildCatalogMessage(pageMessage, devices.Count, renderableCount, detailFailureCount);
+        MapPointSourceDiagnostics.WriteLines("DeviceCatalog", [
+            $"deviceCatalogApi = {_settings.OpenPlatform.DeviceApi.DeviceListPath}",
+            $"deviceCatalogTotal = {devices.Count}",
+            $"deviceCatalogIsEmpty = {devices.Count == 0}",
+            $"detailSuccessCount = {catalogItems.Count - detailFailureReasons.Values.Sum()}",
+            $"detailFailureCount = {detailFailureReasons.Values.Sum()}",
+            $"detailFailureReasons = {MapPointSourceDiagnostics.SummarizeCounts(detailFailureReasons)}",
+            $"renderablePointCount = {renderableCount}",
+            $"unrenderablePointCount = {unmappedCount}",
+            $"unrenderableReasons = {MapPointSourceDiagnostics.SummarizeCounts(coordinateFailureReasons)}"
+        ]);
+
+        var message = BuildCatalogMessage(pageMessage, devices.Count, renderableCount, detailFailureReasons.Values.Sum());
         CacheCatalog(devices, message);
         return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(devices, message);
     }
@@ -845,6 +1044,62 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
         }
 
         return string.Join(" ", messages);
+    }
+
+    private static bool HasUsableDetailPayload(CtyunDeviceDetailDto detail)
+    {
+        return !string.IsNullOrWhiteSpace(detail.DeviceName)
+            || !string.IsNullOrWhiteSpace(detail.Longitude)
+            || !string.IsNullOrWhiteSpace(detail.Latitude);
+    }
+
+    private static string ClassifyDetailFailureReason(ServiceResponse<CtyunDeviceDetailDto> response)
+    {
+        var message = response.Message?.Trim() ?? string.Empty;
+        if (message.Contains("接口异常", StringComparison.Ordinal)
+            || message.Contains("调用异常", StringComparison.Ordinal)
+            || message.Contains("请求异常", StringComparison.Ordinal))
+        {
+            return "接口异常";
+        }
+
+        if (message.Contains("解析失败", StringComparison.Ordinal))
+        {
+            return "解析失败";
+        }
+
+        if (message.Contains("未返回", StringComparison.Ordinal)
+            || message.Contains("缺少", StringComparison.Ordinal)
+            || message.Contains("为空", StringComparison.Ordinal))
+        {
+            return "无详情";
+        }
+
+        return HasUsableDetailPayload(response.Data) ? "字段缺失" : "无详情";
+    }
+
+    private static string ClassifyCoordinateFailureReason(PointCoordinateModel coordinate)
+    {
+        return coordinate.Status switch
+        {
+            PointCoordinateStatus.Missing => "空值",
+            PointCoordinateStatus.Incomplete => "空值",
+            PointCoordinateStatus.ZeroOrigin => "0/0",
+            PointCoordinateStatus.Invalid when coordinate.StatusText.Contains("范围", StringComparison.Ordinal) => "越界",
+            PointCoordinateStatus.Invalid => "格式异常",
+            _ => coordinate.StatusText
+        };
+    }
+
+    private static void Increment(IDictionary<string, int> counts, string key)
+    {
+        if (counts.TryGetValue(key, out var value))
+        {
+            counts[key] = value + 1;
+            return;
+        }
+
+        counts[key] = 1;
     }
 
     private sealed record CachedCatalogEntry(IReadOnlyList<DeviceListItemDto> Devices, string Message, DateTime ExpiresAt);

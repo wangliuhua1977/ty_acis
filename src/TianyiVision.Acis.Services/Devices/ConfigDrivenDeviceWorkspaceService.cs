@@ -1,4 +1,5 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
 
 namespace TianyiVision.Acis.Services.Devices;
 
@@ -20,6 +21,9 @@ public sealed class DeviceWorkspaceService : IDeviceWorkspaceService
         var response = _deviceCatalogService.GetDevices();
         if (!response.IsSuccess || response.Data.Count == 0)
         {
+            MapPointSourceDiagnostics.Write(
+                "DeviceWorkspace",
+                $"Device pool unavailable: reason = {NormalizeReason(response.Message, "设备目录返回 0 条")}");
             return ServiceResponse<IReadOnlyList<DevicePoolItemModel>>.Failure([], response.Message);
         }
 
@@ -34,8 +38,18 @@ public sealed class DeviceWorkspaceService : IDeviceWorkspaceService
                 device.Coordinate,
                 device.IsOnline,
                 device.IsOnline ? "在线" : "离线",
-                "设备目录"))
+                device.SourceTag))
             .ToList();
+
+        var sourceCounts = devices
+            .GroupBy(device => MapPointSourceDiagnostics.ClassifySourceTag(device.SourceTag), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        MapPointSourceDiagnostics.WriteLines("DeviceWorkspace", [
+            $"devicePoolCount = {devices.Count}",
+            $"devicePoolRenderableCount = {devices.Count(device => device.Coordinate.CanRenderOnMap)}",
+            $"devicePoolSourceBreakdown = {MapPointSourceDiagnostics.SummarizeCounts(sourceCounts)}"
+        ]);
 
         return ServiceResponse<IReadOnlyList<DevicePoolItemModel>>.Success(devices, response.Message);
     }
@@ -48,6 +62,11 @@ public sealed class DeviceWorkspaceService : IDeviceWorkspaceService
     private static string ResolveUnitName(string handlingUnit)
     {
         return string.IsNullOrWhiteSpace(handlingUnit) ? "待补齐所属单位" : handlingUnit;
+    }
+
+    private static string NormalizeReason(string? message, string fallbackReason)
+    {
+        return string.IsNullOrWhiteSpace(message) ? fallbackReason : message.Trim();
     }
 }
 
@@ -138,13 +157,13 @@ public sealed class FallbackDevicePointDetailService : IDevicePointDetailService
             return response;
         }
 
+        var reason = NormalizeReason(response.Message, "点位详情未返回有效数据");
+        MapPointSourceDiagnostics.Write("Fallback", $"PointDetail fallback triggered: pointId = {pointId}, reason = {reason}");
         var fallback = _fallback.GetPointDetail(pointId);
         return fallback.IsSuccess
             ? ServiceResponse<DevicePointDetailModel>.Success(
                 fallback.Data,
-                string.IsNullOrWhiteSpace(response.Message)
-                    ? "已回退到 demo 点位详情。"
-                    : $"{response.Message} 已回退到 demo 点位详情。")
+                $"{reason} 已回退到 demo 点位详情。")
             : fallback;
     }
 
@@ -165,5 +184,10 @@ public sealed class FallbackDevicePointDetailService : IDevicePointDetailService
             string.Empty,
             string.Empty,
             string.Empty);
+    }
+
+    private static string NormalizeReason(string? message, string fallbackReason)
+    {
+        return string.IsNullOrWhiteSpace(message) ? fallbackReason : message.Trim();
     }
 }
