@@ -12,12 +12,7 @@
 *.user
 *.userosscache
 *.sln.docstates
-* text=auto
-*.sln text eol=crlf
-*.cs text eol=crlf
-*.csproj text eol=crlf
-*.xaml text eol=crlf
-*.md text eol=lf
+
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -430,7 +425,6 @@ test-results/
 
 # Mac bundle stuff
 *.dmg
-*.app
 
 # content below from: https://github.com/github/gitignore/blob/main/Global/macOS.gitignore
 # General

@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TianyiVision.Acis.Core\TianyiVision.Acis.Core.csproj" />
+    <ProjectReference Include="..\TianyiVision.Acis.Infrastructure\TianyiVision.Acis.Infrastructure.csproj" />
+    <ProjectReference Include="..\TianyiVision.Acis.Services\TianyiVision.Acis.Services.csproj" />
+    <ProjectReference Include="..\TianyiVision.Acis.UI\TianyiVision.Acis.UI.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>
