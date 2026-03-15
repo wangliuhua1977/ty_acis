@@ -1,5 +1,6 @@
 using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Integrations;
@@ -32,6 +33,10 @@ public sealed class FallbackDeviceCatalogService : IDeviceCatalogService
             return response;
         }
 
+        MapPointSourceDiagnostics.Write(
+            string.IsNullOrWhiteSpace(response.Message)
+                ? "Map point source fallback triggered: real device catalog returned no data."
+                : $"Map point source fallback triggered: {response.Message}");
         var fallbackResponse = _fallback.GetDevices();
         return fallbackResponse.IsSuccess
             ? ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(

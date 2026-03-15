@@ -155,6 +155,31 @@ public partial class RealMapHost : UserControl
         set => SetValue(DefaultZoomProperty, value);
     }
 
+    public async Task<bool> CapturePreviewAsync(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return false;
+        }
+
+        await EnsureInitializedAsync();
+        if (!_isMapReady || MapWebView.CoreWebView2 is null)
+        {
+            return false;
+        }
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var stream = File.Create(filePath);
+        await MapWebView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+        await stream.FlushAsync();
+        return true;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         AttachItemsSource(ItemsSource);

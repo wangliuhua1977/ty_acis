@@ -162,7 +162,9 @@
                     </Grid>
                 </Border>
 
-                <ContentControl Grid.Row="1" Content="{Binding CurrentPageViewModel}" />
+                <ContentControl x:Name="CurrentPageHost"
+                                Grid.Row="1"
+                                Content="{Binding CurrentPageViewModel}" />
             </Grid>
         </Grid>
     </Border>

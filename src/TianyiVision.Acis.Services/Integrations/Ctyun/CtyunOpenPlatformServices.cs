@@ -4,6 +4,7 @@ using System.Text.Json;
 using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.Services.Integrations.Ctyun;
@@ -76,21 +77,31 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
     {
         try
         {
-            var parameters = new List<KeyValuePair<string, string>>
+            var businessParameters = new List<KeyValuePair<string, string>>
             {
                 new("grantType", grantType)
             };
 
             if (!string.IsNullOrWhiteSpace(refreshToken))
             {
-                parameters.Add(new("refreshToken", refreshToken));
+                businessParameters.Add(new("refreshToken", refreshToken));
             }
+
+            var requestParameters = new List<KeyValuePair<string, string>>
+            {
+                new("appId", _settings.OpenPlatform.AppId),
+                new("clientType", _settings.OpenPlatform.ClientType),
+                new("params", CtyunSecurity.EncryptParams(businessParameters, _settings.OpenPlatform.AppSecret)),
+                new("timestamp", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture)),
+                new("version", _settings.OpenPlatform.Version)
+            };
+            requestParameters.Add(new("signature", CtyunSecurity.BuildSignature(requestParameters, _settings.OpenPlatform.AppSecret)));
 
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
                 BuildUrl(_settings.OpenPlatform.BaseUrl, _settings.OpenPlatform.Token.AccessTokenPath))
             {
-                Content = new FormUrlEncodedContent(parameters)
+                Content = new FormUrlEncodedContent(requestParameters)
             };
             request.Headers.TryAddWithoutValidation("apiVersion", _settings.OpenPlatform.ApiVersion);
 
@@ -103,6 +114,8 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
             var code = root.GetProperty("code").GetInt32();
             if (code != 0)
             {
+                MapPointSourceDiagnostics.Write(
+                    $"CTYun access token request failed: code={code}, grantType={grantType}, message={root.GetProperty("msg").GetString() ?? "unknown"}");
                 return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
                     EmptyToken(),
                     $"CTYun accessToken 获取失败：{root.GetProperty("msg").GetString() ?? "未知错误"}");
@@ -126,11 +139,14 @@ public sealed class CtyunAccessTokenService : ICtyunAccessTokenService
                 acquiredAt,
                 acquiredAt.AddSeconds(data.ExpiresIn),
                 acquiredAt.AddSeconds(data.RefreshExpiresIn));
+            MapPointSourceDiagnostics.Write(
+                $"CTYun access token acquired successfully: expiresAt={snapshot.ExpiresAt:yyyy-MM-dd HH:mm:ss}, refreshExpiresAt={snapshot.RefreshExpiresAt:yyyy-MM-dd HH:mm:ss}");
 
             return ServiceResponse<CtyunAccessTokenSnapshot>.Success(snapshot, "已获取最新 accessToken。");
         }
         catch (Exception ex)
         {
+            MapPointSourceDiagnostics.Write($"CTYun access token request threw an exception: {ex.Message}");
             return ServiceResponse<CtyunAccessTokenSnapshot>.Failure(
                 EmptyToken(),
                 $"CTYun accessToken 请求异常：{ex.Message}");
@@ -719,6 +735,7 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             {
                 if (allCatalogItems.Count == 0)
                 {
+                    MapPointSourceDiagnostics.Write($"Device catalog request failed before any device was loaded: {pageResponse.Message}");
                     return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], $"设备目录获取失败：{pageResponse.Message}");
                 }
 
@@ -742,6 +759,7 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             .ToList();
         if (catalogItems.Count == 0)
         {
+            MapPointSourceDiagnostics.Write("Device catalog returned: 0 devices");
             return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回任何设备。");
         }
 
@@ -761,10 +779,20 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
 
         if (devices.Count == 0)
         {
+            MapPointSourceDiagnostics.Write("Device detail enrichment produced: 0 devices");
             return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Failure([], "CTYun 设备目录未返回可用设备详情。");
         }
 
         var renderableCount = devices.Count(device => device.Coordinate.CanRenderOnMap);
+        var unmappedCount = devices.Count - renderableCount;
+        MapPointSourceDiagnostics.Write($"Device catalog returned: {devices.Count} devices");
+        MapPointSourceDiagnostics.Write($"Renderable map points: {renderableCount}");
+        MapPointSourceDiagnostics.Write($"Unmapped devices: {unmappedCount}");
+        if (detailFailureCount > 0)
+        {
+            MapPointSourceDiagnostics.Write($"Device detail enrichment failures: {detailFailureCount}");
+        }
+
         var message = BuildCatalogMessage(pageMessage, devices.Count, renderableCount, detailFailureCount);
         CacheCatalog(devices, message);
         return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(devices, message);
