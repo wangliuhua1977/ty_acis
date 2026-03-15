@@ -27,6 +27,29 @@ namespace TianyiVision.Acis.App;
 
 public sealed class AppBootstrapper
 {
+    private static readonly string[] LegacyMapTechnicalMarkers =
+    [
+        "真实地图",
+        "地图 SDK",
+        "SDK",
+        "假数据",
+        "模拟底图",
+        "地图模式",
+        "已加载",
+        "开发态"
+    ];
+
+    private static readonly string[] MapUiTokensToSanitize =
+    [
+        TextTokens.HomeMapStageDescription,
+        TextTokens.HomeMapStageHint,
+        TextTokens.InspectionDescription,
+        TextTokens.InspectionWorkbenchDescription,
+        TextTokens.InspectionWorkbenchHint,
+        TextTokens.InspectionMapModeReal,
+        TextTokens.InspectionMapModeFallback
+    ];
+
     private readonly IClockService _clockService;
     private readonly IAppPreferencesService _appPreferencesService;
     private readonly IDispatchResponsibilitySettingsService _dispatchResponsibilitySettingsService;
@@ -165,6 +188,7 @@ public sealed class AppBootstrapper
         var snapshot = _localConfigurationBootstrapService.Initialize().Preferences;
         var bundledTerminologies = _textService.GetAvailableProfiles()
             .ToDictionary(profile => profile.Id, profile => profile, StringComparer.Ordinal);
+        snapshot = SanitizeLegacyMapTerminology(snapshot, bundledTerminologies, out var hasSanitizedTerminology);
 
         foreach (var theme in snapshot.Themes)
         {
@@ -210,6 +234,11 @@ public sealed class AppBootstrapper
         if (!string.IsNullOrWhiteSpace(snapshot.ActiveTerminologyId))
         {
             _textService.SetProfile(snapshot.ActiveTerminologyId);
+        }
+
+        if (hasSanitizedTerminology)
+        {
+            _appPreferencesService.Save(snapshot);
         }
     }
 
@@ -328,5 +357,80 @@ public sealed class AppBootstrapper
         }
 
         return new EnterpriseWeChatDispatchNotificationSender(new HttpClient(), notificationSettingsService);
+    }
+
+    private static AppPreferencesSnapshot SanitizeLegacyMapTerminology(
+        AppPreferencesSnapshot snapshot,
+        IReadOnlyDictionary<string, TerminologyProfile> bundledTerminologies,
+        out bool hasChanges)
+    {
+        hasChanges = false;
+        if (snapshot.Terminologies.Count == 0)
+        {
+            return snapshot;
+        }
+
+        bundledTerminologies.TryGetValue("telecom", out var fallbackProfile);
+        var sanitizedTerminologies = new List<StoredTerminologyPreference>(snapshot.Terminologies.Count);
+
+        foreach (var terminology in snapshot.Terminologies)
+        {
+            bundledTerminologies.TryGetValue(terminology.Id, out var bundledProfile);
+            bundledProfile ??= fallbackProfile;
+
+            if (bundledProfile is null)
+            {
+                sanitizedTerminologies.Add(terminology);
+                continue;
+            }
+
+            var textEntries = new Dictionary<string, string>(terminology.TextEntries, StringComparer.Ordinal);
+            var terminologyChanged = false;
+
+            foreach (var token in MapUiTokensToSanitize)
+            {
+                if (!textEntries.TryGetValue(token, out var currentValue)
+                    || !ContainsLegacyMapTechnicalMarker(currentValue))
+                {
+                    continue;
+                }
+
+                var bundledValue = bundledProfile.Resolve(token);
+                if (string.Equals(currentValue, bundledValue, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                textEntries[token] = bundledValue;
+                terminologyChanged = true;
+            }
+
+            if (!terminologyChanged)
+            {
+                sanitizedTerminologies.Add(terminology);
+                continue;
+            }
+
+            hasChanges = true;
+            sanitizedTerminologies.Add(terminology with
+            {
+                TextEntries = textEntries
+            });
+        }
+
+        return hasChanges
+            ? snapshot with { Terminologies = sanitizedTerminologies }
+            : snapshot;
+    }
+
+    private static bool ContainsLegacyMapTechnicalMarker(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return LegacyMapTechnicalMarkers.Any(marker =>
+            value.Contains(marker, StringComparison.OrdinalIgnoreCase));
     }
 }
