@@ -9,11 +9,13 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 using TianyiVision.Acis.UI.States;
+using DrawingColor = System.Drawing.Color;
 
 namespace TianyiVision.Acis.UI.Views.Controls;
 
 public partial class RealMapHost : UserControl
 {
+    private static readonly DrawingColor StageBackgroundColor = DrawingColor.FromArgb(0x07, 0x11, 0x1f);
     public static readonly DependencyProperty ItemsSourceProperty =
         DependencyProperty.Register(
             nameof(ItemsSource),
@@ -92,6 +94,7 @@ public partial class RealMapHost : UserControl
     public RealMapHost()
     {
         InitializeComponent();
+        MapWebView.DefaultBackgroundColor = StageBackgroundColor;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -234,6 +237,7 @@ public partial class RealMapHost : UserControl
         try
         {
             await MapWebView.EnsureCoreWebView2Async();
+            MapWebView.DefaultBackgroundColor = StageBackgroundColor;
             MapWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
             MapWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             MapWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;

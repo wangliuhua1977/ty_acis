@@ -74,7 +74,7 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             ?? (!detail.IsOnline ? "设备离线" : "无故障");
         var currentFaultSummary = fault?.FaultSummary
             ?? (!detail.IsOnline
-                ? "设备目录当前显示离线，待告警链路补充故障摘要。"
+                ? "设备当前离线，待补充故障摘要。"
                 : detail.DetailSummary);
 
         return new PointWorkspaceItemModel(
@@ -114,7 +114,7 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             device.OnlineStatusText,
             "待接视频巡检",
             "待接 AI 判定",
-            $"点位详情获取失败，当前回退到设备池摘要。来源：{device.SourceTag}。",
+            "当前点位详情暂未完整同步，先展示目录摘要信息。",
             device.SourceTag);
     }
 

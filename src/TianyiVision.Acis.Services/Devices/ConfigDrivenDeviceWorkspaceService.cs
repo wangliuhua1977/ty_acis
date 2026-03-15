@@ -84,7 +84,7 @@ public sealed class DemoDevicePointDetailService : IDevicePointDetailService
             device.IsOnline ? "在线" : "离线",
             device.IsOnline ? "可播放" : "待确认",
             "待确认",
-            "当前使用 demo 点位详情占位，保留页面结构稳定。",
+            "当前点位详情暂未完整同步，先展示目录摘要信息。",
             "Demo"));
     }
 

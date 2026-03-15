@@ -155,7 +155,7 @@
                               DefaultCenterLatitude="{Binding MapProvider.DefaultCenterLatitude}"
                               DefaultZoom="{Binding MapProvider.DefaultZoom}" />
 
-        <Grid x:Name="FallbackMapLayer" Panel.ZIndex="5">
+        <Grid x:Name="FallbackMapLayer" Panel.ZIndex="5" Visibility="Collapsed">
             <Canvas>
                 <Line X1="20" Y1="90" X2="1260" Y2="90" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
                 <Line X1="20" Y1="220" X2="1260" Y2="220" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />

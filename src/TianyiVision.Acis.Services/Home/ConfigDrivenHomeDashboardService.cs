@@ -56,12 +56,12 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             .ToList();
 
         var snapshot = new HomeDashboardSnapshot(
-            $"真实点位工作区已接入 · 当前加载 {pointCollectionResponse.Data.Count} 个点位",
+            $"当前巡检点位 {pointCollectionResponse.Data.Count} 个",
             $"{points.Count(point => point.IsOnline)} / {points.Count}",
-            recentFaults.Count == 0 ? "当前未聚合到活动故障点位。" : $"当前活动故障点位 {recentFaults.Count} 个。",
+            recentFaults.Count == 0 ? "当前未发现待跟进故障点位。" : $"当前故障点位 {recentFaults.Count} 个，优先关注最新告警。",
             points.Any(point => !point.Coordinate.CanRenderOnMap)
-                ? $"存在 {points.Count(point => !point.Coordinate.CanRenderOnMap)} 个不可落点设备，已保留待地图 SDK 接入时单独处理。"
-                : "当前可见点位均可直接承接真实地图落点。",
+                ? $"存在 {points.Count(point => !point.Coordinate.CanRenderOnMap)} 个未定位点位，可从未定位入口继续查看。"
+                : "当前点位均已具备地图落点。",
             mapPoints,
             visibleRecentFaults);
 

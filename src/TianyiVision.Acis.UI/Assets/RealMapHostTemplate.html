@@ -31,6 +31,15 @@
       font-family: "Microsoft YaHei UI", sans-serif;
     }
 
+    #map {
+      opacity: 0;
+      transition: opacity 160ms ease-out;
+    }
+
+    body.map-ready #map {
+      opacity: 1;
+    }
+
     .marker {
       position: relative;
       display: flex;
@@ -136,6 +145,7 @@
     const bootConfig = __BOOT_CONFIG__;
     let map = null;
     let mapReady = false;
+    let mapReadyPosted = false;
     let markerIndex = new Map();
     let lastPointSignature = "";
 
@@ -333,8 +343,19 @@
         mapStyle: "amap://styles/normal"
       });
 
-      mapReady = true;
-      post("ready", { message: "map_ready" });
+      const completeReady = () => {
+        if (mapReadyPosted) {
+          return;
+        }
+
+        mapReadyPosted = true;
+        mapReady = true;
+        document.body.classList.add("map-ready");
+        post("ready", { message: "map_ready" });
+      };
+
+      map.on("complete", completeReady);
+      window.setTimeout(completeReady, 1200);
     }
 
     window.chrome.webview.addEventListener("message", event => applyState(event.data));

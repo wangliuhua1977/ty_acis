@@ -53,9 +53,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             .ToList();
 
         var group = new InspectionGroupWorkspaceModel(
-            new InspectionGroupModel("g-ctyun-live", "CTYun 实时目录组", $"本轮加载 {points.Count} 个点位 · 工作区模型已统一", true),
+            new InspectionGroupModel("g-ctyun-live", "CTYun 实时目录组", $"本轮加载 {points.Count} 个点位 · 串行巡检", true),
             new InspectionStrategyModel("08:30", "配置驱动", "串行执行", "上墙复核", "按巡检组配置"),
-            new InspectionExecutionModel("1 / 1", "设备池已加载", DateTime.Now.AddHours(4).ToString("HH:mm"), "当前巡检页已优先使用真实设备池与点位详情入口。", true),
+            new InspectionExecutionModel("1 / 1", "待执行", DateTime.Now.AddHours(4).ToString("HH:mm"), "当前点位已同步到巡检工作区，可继续查看明细。", true),
             new InspectionRunSummaryModel("CTYun 实时目录组", DateTime.Now.ToString("yyyy-MM-dd HH:mm")),
             DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
             inspectionPoints,
