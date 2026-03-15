@@ -1,0 +1,48 @@
+# 项目级 Codex 配置：目标是减少自动压缩背景信息的耗时
+# 放置位置：仓库根目录 .codex/config.toml
+
+# 触发自动压缩的 token 阈值。不是关闭，而是适度后移。
+model_auto_compact_token_limit = 96000
+
+# 减少 AGENTS.md 被读取的最大字节数；当前建议配合精简版 AGENTS 使用。
+project_doc_max_bytes = 12288
+
+# 限制单次工具输出被写入历史的 token 量，显著减少构建日志/测试日志拖慢压缩。
+tool_output_token_limit = 4000
+
+# 让历史里少存不必要的总结与冗长输出。
+model_reasoning_summary = "none"
+model_verbosity = "low"
+
+# 体感速度优化。
+service_tier = "fast"
+personality = "pragmatic"
+
+# 重要：将压缩结果压得更短，避免“越压越肥”。
+compact_prompt = '''
+Compress aggressively.
+Keep only:
+1. current objective
+2. accepted decisions
+3. files/components involved
+4. exact pending tasks
+5. blockers that still matter
+6. only essential command outputs
+
+Drop repetition, abandoned ideas, verbose rationale, and long logs.
+Target a very short summary.
+'''
+
+# 如果你是在仓库某个子目录单独开工，可启用下面一行，阻止向父目录继续扫描更多规则文件。
+# 如果你就是在仓库根目录工作，这一行可以删掉。
+project_root_markers = []
+
+# 可选：项目专用 profile。需要时手动切换使用。
+[profiles.fastdev]
+model_auto_compact_token_limit = 96000
+project_doc_max_bytes = 12288
+tool_output_token_limit = 4000
+model_reasoning_summary = "none"
+model_verbosity = "low"
+service_tier = "fast"
+personality = "pragmatic"
