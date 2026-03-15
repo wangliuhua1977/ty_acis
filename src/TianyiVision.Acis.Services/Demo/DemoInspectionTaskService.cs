@@ -1,4 +1,5 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.Services.Inspection;
 
 namespace TianyiVision.Acis.Services.Demo;
@@ -59,5 +60,61 @@ public sealed class DemoInspectionTaskService : IInspectionTaskService
         ]);
 
         return ServiceResponse<InspectionWorkspaceSnapshot>.Success(snapshot);
+    }
+
+    public ServiceResponse<SingleInspectionTaskRecordModel> StartSinglePointInspection(string pointId)
+    {
+        var startedAt = DateTime.Now;
+        var point = GetWorkspace().Data.Groups
+            .SelectMany(group => group.Points)
+            .FirstOrDefault(candidate => string.Equals(candidate.Id, pointId, StringComparison.Ordinal));
+
+        if (point is null)
+        {
+            var failedRecord = CreateFailedRecord(pointId, pointId, pointId, startedAt);
+            MapPointSourceDiagnostics.Write(
+                "SingleInspection",
+                $"demo single point inspection failed before task creation: pointId = {pointId}, reason = 点位未找到");
+            return ServiceResponse<SingleInspectionTaskRecordModel>.Failure(failedRecord, $"未找到点位 {pointId}。");
+        }
+
+        var completedAt = DateTime.Now;
+        var taskId = BuildTaskId();
+        var completedRecord = new SingleInspectionTaskRecordModel(
+            taskId,
+            point.DeviceCode,
+            point.Name,
+            InspectionTaskStatusModel.Completed,
+            startedAt,
+            completedAt,
+            "待接入");
+
+        MapPointSourceDiagnostics.WriteLines("SingleInspection", [
+            $"demo single point inspection task created: taskId = {taskId}, pointId = {point.Id}, deviceCode = {point.DeviceCode}, deviceName = {point.Name}, status = {InspectionTaskStatusModel.Pending}",
+            $"demo single point inspection task started: taskId = {taskId}, pointId = {point.Id}, status = {InspectionTaskStatusModel.Running}",
+            $"demo single point inspection task completed: taskId = {taskId}, pointId = {point.Id}, status = {completedRecord.TaskStatus}, startedAt = {startedAt:yyyy-MM-dd HH:mm:ss}, finishedAt = {completedAt:yyyy-MM-dd HH:mm:ss}, resultSummary = {completedRecord.ResultSummary}"
+        ]);
+
+        return ServiceResponse<SingleInspectionTaskRecordModel>.Success(completedRecord);
+    }
+
+    private static string BuildTaskId()
+        => $"sip-{DateTime.Now:yyyyMMddHHmmssfff}";
+
+    private static SingleInspectionTaskRecordModel CreateFailedRecord(
+        string pointId,
+        string deviceCode,
+        string deviceName,
+        DateTime startedAt)
+    {
+        var taskId = $"{BuildTaskId()}-failed";
+        return new SingleInspectionTaskRecordModel(
+            taskId,
+            string.IsNullOrWhiteSpace(deviceCode) ? pointId : deviceCode,
+            string.IsNullOrWhiteSpace(deviceName) ? pointId : deviceName,
+            InspectionTaskStatusModel.Failed,
+            startedAt,
+            startedAt,
+            "待接入");
     }
 }

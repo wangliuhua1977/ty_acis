@@ -33,6 +33,23 @@ public sealed record InspectionExecutionModel(
     string SimulationNote,
     bool IsEnabled);
 
+public enum InspectionTaskStatusModel
+{
+    Pending,
+    Running,
+    Completed,
+    Failed
+}
+
+public sealed record SingleInspectionTaskRecordModel(
+    string TaskId,
+    string DeviceCode,
+    string DeviceName,
+    InspectionTaskStatusModel TaskStatus,
+    DateTime StartedAt,
+    DateTime? FinishedAt,
+    string ResultSummary);
+
 public sealed record InspectionRunSummaryModel(
     string GroupName,
     string StartedAt);
@@ -123,4 +140,6 @@ public sealed record InspectionWorkspaceSnapshot(
 public interface IInspectionTaskService
 {
     ServiceResponse<InspectionWorkspaceSnapshot> GetWorkspace();
+
+    ServiceResponse<SingleInspectionTaskRecordModel> StartSinglePointInspection(string pointId);
 }
