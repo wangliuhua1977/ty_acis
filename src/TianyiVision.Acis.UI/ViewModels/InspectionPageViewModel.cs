@@ -142,6 +142,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             {
                 SelectPoint(mapPoint.PointId);
             }
+            else if (parameter is string pointId)
+            {
+                SelectPoint(pointId);
+            }
         });
 
         SelectRecentFaultCommand = new RelayCommand(parameter =>
@@ -817,7 +821,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     private MapPointState CreateMapPoint(InspectionPointState point)
     {
-        return new MapPointState(
+        return MapPointStateFactory.Create(
             point.Id,
             point.DeviceCode,
             point.Name,
@@ -834,10 +838,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.FaultType,
             point.FaultDescription,
             point.LastFaultTime,
-            point.IsPreviewAvailable)
-        {
-            IsCurrent = point.IsCurrent
-        };
+            point.IsPreviewAvailable,
+            point.IsCurrent);
     }
 
     private void SyncMapPoint(InspectionPointState point, ObservableCollection<MapPointState> mapPoints)

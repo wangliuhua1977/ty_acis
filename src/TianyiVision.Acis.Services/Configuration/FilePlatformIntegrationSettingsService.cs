@@ -21,10 +21,11 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
     public PlatformIntegrationSettings Load()
     {
         var settings = _documentStore.LoadOrCreate(_paths.CtyunIntegrationFile, CreateDefaultSettings);
+        var bundledMapProvider = LoadBundledMapProviderDefaults();
         var normalized = settings with
         {
             OpenPlatform = Normalize(settings.OpenPlatform),
-            MapProvider = Normalize(settings.MapProvider)
+            MapProvider = Normalize(settings.MapProvider, bundledMapProvider)
         };
 
         _documentStore.Save(_paths.CtyunIntegrationFile, normalized);
@@ -206,25 +207,144 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         };
     }
 
-    private static MapProviderSettings Normalize(MapProviderSettings settings)
+    private MapProviderSettings LoadBundledMapProviderDefaults()
     {
-        var defaultLongitude = settings.DefaultCenterLongitude is >= -180d and <= 180d
-            ? settings.DefaultCenterLongitude
-            : DefaultMapCenterLongitude;
-        var defaultLatitude = settings.DefaultCenterLatitude is >= -90d and <= 90d
-            ? settings.DefaultCenterLatitude
-            : DefaultMapCenterLatitude;
+        var settings = CreateFallbackSettings().MapProvider;
+
+        var templatePath = FindBundledTemplateFile("appsettings.json");
+        if (!string.IsNullOrWhiteSpace(templatePath))
+        {
+            try
+            {
+                using var stream = File.OpenRead(templatePath);
+                var template = JsonSerializer.Deserialize<CtyunTemplateDocument>(stream);
+                if (template?.MapProvider is not null)
+                {
+                    settings = settings with
+                    {
+                        AmapWebJsApiKey = template.MapProvider.AmapWebJsApiKey ?? settings.AmapWebJsApiKey,
+                        AmapSecurityJsCode = template.MapProvider.AmapSecurityJsCode ?? settings.AmapSecurityJsCode,
+                        AmapJsApiVersion = template.MapProvider.AmapJsApiVersion ?? settings.AmapJsApiVersion,
+                        CoordinateSystem = template.MapProvider.CoordinateSystem ?? settings.CoordinateSystem,
+                        DefaultCenterLongitude = template.MapProvider.DefaultCenterLongitude ?? settings.DefaultCenterLongitude,
+                        DefaultCenterLatitude = template.MapProvider.DefaultCenterLatitude ?? settings.DefaultCenterLatitude,
+                        DefaultZoom = template.MapProvider.DefaultZoom ?? settings.DefaultZoom
+                    };
+                }
+            }
+            catch
+            {
+                // Keep fallback settings when the bundled template cannot be read.
+            }
+        }
+
+        var localOverridePath = FindBundledTemplateFile("appsettings.local.json");
+        if (!string.IsNullOrWhiteSpace(localOverridePath))
+        {
+            try
+            {
+                using var stream = File.OpenRead(localOverridePath);
+                var localOverride = JsonSerializer.Deserialize<LocalSettingsOverrideDocument>(stream);
+                if (localOverride?.Amap is not null)
+                {
+                    settings = settings with
+                    {
+                        AmapWebJsApiKey = localOverride.Amap.ApiKey ?? settings.AmapWebJsApiKey,
+                        AmapSecurityJsCode = localOverride.Amap.SecurityJsCode ?? settings.AmapSecurityJsCode,
+                        DefaultCenterLongitude = localOverride.Amap.DefaultCenterLongitude ?? settings.DefaultCenterLongitude,
+                        DefaultCenterLatitude = localOverride.Amap.DefaultCenterLatitude ?? settings.DefaultCenterLatitude,
+                        DefaultZoom = localOverride.Amap.DefaultZoom ?? settings.DefaultZoom
+                    };
+                }
+            }
+            catch
+            {
+                // Ignore invalid local overrides so persisted settings still load.
+            }
+        }
+
+        return settings;
+    }
+
+    private static MapProviderSettings Normalize(MapProviderSettings settings, MapProviderSettings bundledDefaults)
+    {
+        var defaultLongitude = ResolveDefaultLongitude(settings.DefaultCenterLongitude, settings.DefaultCenterLatitude, bundledDefaults.DefaultCenterLongitude);
+        var defaultLatitude = ResolveDefaultLatitude(settings.DefaultCenterLongitude, settings.DefaultCenterLatitude, bundledDefaults.DefaultCenterLatitude);
 
         return settings with
         {
-            AmapWebJsApiKey = settings.AmapWebJsApiKey?.Trim() ?? string.Empty,
-            AmapSecurityJsCode = settings.AmapSecurityJsCode?.Trim() ?? string.Empty,
-            AmapJsApiVersion = string.IsNullOrWhiteSpace(settings.AmapJsApiVersion) ? "2.0" : settings.AmapJsApiVersion.Trim(),
-            CoordinateSystem = string.IsNullOrWhiteSpace(settings.CoordinateSystem) ? "GCJ-02" : settings.CoordinateSystem.Trim(),
+            AmapWebJsApiKey = ResolveConfiguredValue(settings.AmapWebJsApiKey, bundledDefaults.AmapWebJsApiKey),
+            AmapSecurityJsCode = ResolveConfiguredValue(settings.AmapSecurityJsCode, bundledDefaults.AmapSecurityJsCode),
+            AmapJsApiVersion = ResolveOptionalValue(settings.AmapJsApiVersion, bundledDefaults.AmapJsApiVersion, "2.0"),
+            CoordinateSystem = ResolveOptionalValue(settings.CoordinateSystem, bundledDefaults.CoordinateSystem, "GCJ-02"),
             DefaultCenterLongitude = defaultLongitude,
             DefaultCenterLatitude = defaultLatitude,
-            DefaultZoom = settings.DefaultZoom <= 0 ? DefaultMapZoom : settings.DefaultZoom
+            DefaultZoom = settings.DefaultZoom <= 0
+                ? (bundledDefaults.DefaultZoom <= 0 ? DefaultMapZoom : bundledDefaults.DefaultZoom)
+                : settings.DefaultZoom
         };
+    }
+
+    private static string ResolveConfiguredValue(string? currentValue, string? fallbackValue)
+    {
+        var current = currentValue?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(current) && !LooksLikePlaceholder(current))
+        {
+            return current;
+        }
+
+        var fallback = fallbackValue?.Trim() ?? string.Empty;
+        return LooksLikePlaceholder(fallback) ? string.Empty : fallback;
+    }
+
+    private static string ResolveOptionalValue(string? currentValue, string? fallbackValue, string finalFallback)
+    {
+        var current = currentValue?.Trim();
+        if (!string.IsNullOrWhiteSpace(current))
+        {
+            return current;
+        }
+
+        var fallback = fallbackValue?.Trim();
+        return string.IsNullOrWhiteSpace(fallback) ? finalFallback : fallback;
+    }
+
+    private static double ResolveDefaultLongitude(double currentLongitude, double currentLatitude, double fallbackLongitude)
+    {
+        if (IsZeroOrigin(currentLongitude, currentLatitude))
+        {
+            return fallbackLongitude is >= -180d and <= 180d ? fallbackLongitude : DefaultMapCenterLongitude;
+        }
+
+        return currentLongitude is >= -180d and <= 180d
+            ? currentLongitude
+            : fallbackLongitude is >= -180d and <= 180d
+                ? fallbackLongitude
+                : DefaultMapCenterLongitude;
+    }
+
+    private static double ResolveDefaultLatitude(double currentLongitude, double currentLatitude, double fallbackLatitude)
+    {
+        if (IsZeroOrigin(currentLongitude, currentLatitude))
+        {
+            return fallbackLatitude is >= -90d and <= 90d ? fallbackLatitude : DefaultMapCenterLatitude;
+        }
+
+        return currentLatitude is >= -90d and <= 90d
+            ? currentLatitude
+            : fallbackLatitude is >= -90d and <= 90d
+                ? fallbackLatitude
+                : DefaultMapCenterLatitude;
+    }
+
+    private static bool LooksLikePlaceholder(string value)
+    {
+        return value.Contains("your-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsZeroOrigin(double longitude, double latitude)
+    {
+        return longitude == 0d && latitude == 0d;
     }
 
     private static PlatformIntegrationSettings ApplyLocalOverride(

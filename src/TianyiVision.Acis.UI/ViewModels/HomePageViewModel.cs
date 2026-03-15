@@ -113,7 +113,8 @@ public sealed class HomePageViewModel : PageViewModelBase
 
         SelectMapPointCommand = new RelayCommand(parameter =>
         {
-            if (parameter is MapPointState point)
+            var point = TryResolvePoint(parameter);
+            if (point is not null)
             {
                 SelectPoint(point);
             }
@@ -288,7 +289,7 @@ public sealed class HomePageViewModel : PageViewModelBase
 
     private MapPointState CreatePoint(HomeMapPointModel point)
     {
-        return new MapPointState(
+        return MapPointStateFactory.Create(
             point.Id,
             point.DeviceCode,
             point.Name,
@@ -306,6 +307,17 @@ public sealed class HomePageViewModel : PageViewModelBase
             point.Summary,
             point.LatestFaultTime,
             point.CanRenderOnMap);
+    }
+
+    private MapPointState? TryResolvePoint(object? parameter)
+    {
+        return parameter switch
+        {
+            MapPointState mapPoint => mapPoint,
+            string pointId => MapPoints.FirstOrDefault(item =>
+                string.Equals(item.PointId, pointId, StringComparison.Ordinal)),
+            _ => null
+        };
     }
 
     private static MapPointVisualKind MapPointKind(HomeMapPointKindModel kind)
