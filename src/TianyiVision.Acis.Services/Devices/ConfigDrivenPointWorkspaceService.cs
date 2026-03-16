@@ -77,6 +77,7 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             points.Add(point);
 
             var businessSummary = PointBusinessSummaryFactory.Create(point);
+            WriteCoordinateReconciliationLog(point, businessSummary);
             MapPointSourceDiagnostics.Write(
                 "PointStatus",
                 $"status field mapped: pointId = {businessSummary.PointId}, deviceCode = {businessSummary.DeviceCode}, online = {businessSummary.OnlineStatus}, coordinate = {businessSummary.CoordinateStatus}, fault = {businessSummary.FaultType}, lastSync = {(businessSummary.LastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}, lastSyncSource = {NormalizeLastSyncSource(point.LastSyncSource)}, summary = {businessSummary.StatusSummary}");
@@ -209,7 +210,7 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             string.Empty,
             string.Empty,
             string.Empty,
-            new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
+            PointCoordinateParser.Missing(),
             null,
             string.Empty,
             string.Empty,
@@ -294,6 +295,7 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             PointCoordinateStatus.Missing => "空值",
             PointCoordinateStatus.Incomplete => "空值",
             PointCoordinateStatus.ZeroOrigin => "0/0",
+            PointCoordinateStatus.ConversionFailed => "转换失败",
             PointCoordinateStatus.Invalid when coordinate.StatusText.Contains("格式", StringComparison.Ordinal) => "格式异常",
             PointCoordinateStatus.Invalid when coordinate.StatusText.Contains("范围", StringComparison.Ordinal) => "越界",
             PointCoordinateStatus.Invalid => "格式异常",
@@ -335,6 +337,28 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
     private static string NormalizeLastSyncSource(string? lastSyncSource)
     {
         return string.IsNullOrWhiteSpace(lastSyncSource) ? "待接入" : lastSyncSource.Trim();
+    }
+
+    private static void WriteCoordinateReconciliationLog(
+        PointWorkspaceItemModel point,
+        PointBusinessSummaryModel businessSummary)
+    {
+        var coordinate = point.Coordinate;
+        MapPointSourceDiagnostics.Write(
+            "PointCoordinateAudit",
+            $"pointId = {NormalizeLogValue(point.PointId)}, deviceCode = {NormalizeLogValue(point.DeviceCode)}, rawLongitude = {NormalizeLogValue(coordinate.RawLongitude)}, rawLatitude = {NormalizeLogValue(coordinate.RawLatitude)}, coordinateSystem = {coordinate.RegisteredCoordinateSystem}, parsedLongitude = {FormatNullableDouble(coordinate.RegisteredCoordinate?.Longitude)}, parsedLatitude = {FormatNullableDouble(coordinate.RegisteredCoordinate?.Latitude)}, coordinateStatusEnum = {coordinate.Status}, coordinateStatusText = {NormalizeLogValue(coordinate.StatusText)}, canRenderOnMap = {coordinate.CanRenderOnMap}, mapLongitude = {FormatNullableDouble(coordinate.MapCoordinate?.Longitude)}, mapLatitude = {FormatNullableDouble(coordinate.MapCoordinate?.Latitude)}, mapSource = {NormalizeLogValue(coordinate.MapSource)}, businessSummaryCoordinateStatus = {NormalizeLogValue(businessSummary.CoordinateStatus)}, finalRenderable = {coordinate.CanRenderOnMap}, sourceTag = {NormalizeLogValue(point.SourceTag)}, mapCoordinateSystem = {coordinate.MapCoordinateSystem}, diagnostics = {NormalizeLogValue(coordinate.DiagnosticsText)}");
+    }
+
+    private static string FormatNullableDouble(double? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+    }
+
+    private static string NormalizeLogValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
     }
 
     private static string NormalizeReason(string? message, string fallbackReason)

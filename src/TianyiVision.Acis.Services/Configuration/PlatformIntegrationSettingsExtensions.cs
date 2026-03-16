@@ -25,6 +25,11 @@ public static class PlatformIntegrationSettingsExtensions
             && !IsPlaceholderValue(settings.MapProvider.AmapSecurityJsCode);
     }
 
+    public static bool HasUsableAmapWebServiceKey(this PlatformIntegrationSettings settings)
+    {
+        return !IsPlaceholderValue(settings.MapProvider.AmapWebServiceApiKey);
+    }
+
     public static IReadOnlyList<string> GetAmapConfigurationIssues(this PlatformIntegrationSettings settings)
     {
         var issues = new List<string>();

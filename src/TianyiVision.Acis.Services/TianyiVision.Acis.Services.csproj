@@ -5,6 +5,10 @@
     <ProjectReference Include="..\TianyiVision.Acis.Infrastructure\TianyiVision.Acis.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Maps\AmapCoordinateConverter.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -8,6 +8,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
+using TianyiVision.Acis.Services.Devices;
+using TianyiVision.Acis.Services.Diagnostics;
 using TianyiVision.Acis.UI.States;
 using DrawingColor = System.Drawing.Color;
 
@@ -16,6 +18,18 @@ namespace TianyiVision.Acis.UI.Views.Controls;
 public partial class RealMapHost : UserControl
 {
     private static readonly DrawingColor StageBackgroundColor = DrawingColor.FromArgb(0x07, 0x11, 0x1f);
+    private static readonly object ColorRuleSyncRoot = new();
+    private static readonly Dictionary<string, string> ColorRuleSignatures = new(StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<MapPointVisualKind, MapVisualColorRule> VisualColorRules =
+        new Dictionary<MapPointVisualKind, MapVisualColorRule>
+        {
+            [MapPointVisualKind.Normal] = new("Theme.SuccessBrush", "map.point.online", "#34D6A2"),
+            [MapPointVisualKind.Inspecting] = new("Theme.SuccessBrush", "map.point.online", "#34D6A2"),
+            [MapPointVisualKind.Fault] = new("Theme.DangerBrush", "map.point.fault", "#FF6C7A"),
+            [MapPointVisualKind.Key] = new("Theme.WarningBrush", "map.point.pending", "#F3B45B"),
+            [MapPointVisualKind.Silent] = new("Theme.TextSecondaryBrush", "map.point.neutral", "#9FB9D2"),
+            [MapPointVisualKind.Paused] = new("Theme.TextSecondaryBrush", "map.point.neutral", "#9FB9D2")
+        };
     public static readonly DependencyProperty ItemsSourceProperty =
         DependencyProperty.Register(
             nameof(ItemsSource),
@@ -79,6 +93,13 @@ public partial class RealMapHost : UserControl
             typeof(RealMapHost),
             new PropertyMetadata(11, OnConfigurationChanged));
 
+    public static readonly DependencyProperty HostContextProperty =
+        DependencyProperty.Register(
+            nameof(HostContext),
+            typeof(string),
+            typeof(RealMapHost),
+            new PropertyMetadata("Unknown"));
+
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -87,6 +108,7 @@ public partial class RealMapHost : UserControl
 
     private INotifyCollectionChanged? _collectionChangedSource;
     private readonly Dictionary<MapPointState, PropertyChangedEventHandler> _itemHandlers = [];
+    private readonly Dictionary<string, string> _pointAuditSignatures = new(StringComparer.Ordinal);
     private bool _isInitialized;
     private bool _isMapReady;
     private bool _isReloading;
@@ -153,6 +175,12 @@ public partial class RealMapHost : UserControl
     {
         get => (int)GetValue(DefaultZoomProperty);
         set => SetValue(DefaultZoomProperty, value);
+    }
+
+    public string HostContext
+    {
+        get => (string)GetValue(HostContextProperty);
+        set => SetValue(HostContextProperty, value);
     }
 
     public async Task<bool> CapturePreviewAsync(string filePath)
@@ -274,7 +302,8 @@ public partial class RealMapHost : UserControl
                 string.IsNullOrWhiteSpace(ApiVersion) ? "2.0" : ApiVersion,
                 DefaultCenterLongitude,
                 DefaultCenterLatitude,
-                DefaultZoom <= 0 ? 11 : DefaultZoom)));
+                DefaultZoom <= 0 ? 11 : DefaultZoom,
+                NormalizeHostContext())));
             _isInitialized = true;
         }
         catch (Exception ex)
@@ -297,6 +326,7 @@ public partial class RealMapHost : UserControl
             case "ready":
                 _isMapReady = true;
                 MapWebView.Visibility = Visibility.Visible;
+                MapPointSourceDiagnostics.Write("MapRender", $"{NormalizeHostContext()} map_ready");
                 NotifyAvailability(true, "map_ready");
                 QueueStateSync();
                 break;
@@ -312,9 +342,14 @@ public partial class RealMapHost : UserControl
                 break;
             case "error":
                 _isMapReady = false;
-                NotifyAvailability(false, message.RootElement.TryGetProperty("payload", out var errorElement)
+                var mapError = message.RootElement.TryGetProperty("payload", out var errorElement)
                     ? errorElement.GetString()
-                    : "map_error");
+                    : "map_error";
+                MapPointSourceDiagnostics.Write("MapRender", $"{NormalizeHostContext()} error = {mapError}");
+                NotifyAvailability(false, mapError);
+                break;
+            case "diagnostic":
+                HandleDiagnosticMessage(message.RootElement);
                 break;
         }
     }
@@ -336,39 +371,87 @@ public partial class RealMapHost : UserControl
             return;
         }
 
+        var points = (ItemsSource ?? []).ToList();
+        var stageBackground = ResolveColor("Theme.WorkbenchBackgroundBrush", "#07111f");
+        var textPrimary = ResolveColor("Theme.TextPrimaryBrush", "#e8eef9");
+        var labelBackground = ResolveColor("Theme.PanelBackgroundBrush", "#162235");
+        var online = ResolveColorRule(MapPointVisualKind.Normal);
+        var fault = ResolveColorRule(MapPointVisualKind.Fault);
+        var pending = ResolveColorRule(MapPointVisualKind.Key);
+        var neutral = ResolveColorRule(MapPointVisualKind.Silent);
+        var selected = ResolveColor("Theme.TextPrimaryBrush", "#ffffff");
+
+        MapPointSourceDiagnostics.Write("MapRender", $"{NormalizeHostContext()} incomingPointCount = {points.Count}");
+        LogColorRuleUsage(stageBackground, textPrimary, labelBackground, online.ColorValue, fault.ColorValue, pending.ColorValue, neutral.ColorValue, selected);
+        LogPointRenderAudit(points);
+
         var payload = new
         {
             type = "state",
+            hostContext = NormalizeHostContext(),
             selectedPointId = SelectedPointId,
-            points = (ItemsSource ?? [])
-                .Where(point => point.CanRenderOnMap)
+            points = points
                 .Select(point => new
                 {
                     pointId = point.PointId,
                     pointName = point.PointName,
-                    longitude = point.Longitude,
-                    latitude = point.Latitude,
+                    mapLongitude = point.MapLongitude,
+                    mapLatitude = point.MapLatitude,
+                    rawLongitude = point.RawLongitude,
+                    rawLatitude = point.RawLatitude,
+                    registeredLongitude = point.RegisteredLongitude,
+                    registeredLatitude = point.RegisteredLatitude,
+                    coordinateSystem = point.RegisteredCoordinateSystem.ToString(),
+                    mapCoordinateSystem = point.MapCoordinateSystem.ToString(),
+                    coordinateStatusEnum = point.CoordinateStatus.ToString(),
+                    canRenderOnMap = point.CanRenderOnMap,
+                    coordinateStatusText = point.CoordinateStatusText,
+                    mapSource = point.MapSource,
+                    businessSummaryCoordinateStatus = point.BusinessSummaryCoordinateStatus,
+                    finalRenderable = ResolveFinalRenderable(point),
                     visualKind = point.VisualKind.ToString(),
+                    colorRuleKey = ResolveColorRule(point.VisualKind).ColorRuleKey,
                     isSelected = point.IsSelected || string.Equals(point.PointId, SelectedPointId, StringComparison.Ordinal),
                     isCurrent = point.IsCurrent
                 })
                 .ToList(),
             theme = new
             {
-                stageBackground = ResolveColor("Theme.WorkbenchBackgroundBrush", "#07111f"),
-                textPrimary = ResolveColor("Theme.TextPrimaryBrush", "#e8eef9"),
-                panelBackground = ResolveColor("Theme.PanelBackgroundBrush", "#162235"),
-                normal = ResolveColor("Theme.SuccessBrush", "#5fbf87"),
-                fault = ResolveColor("Theme.DangerBrush", "#ff6b6b"),
-                key = ResolveColor("Theme.WarningBrush", "#f7b955"),
-                inspecting = ResolveColor("Theme.InspectionActiveBrush", "#4db2ff"),
-                silent = ResolveColor("Theme.TextSecondaryBrush", "#94a7bd"),
-                paused = ResolveColor("Theme.WarningBrush", "#f08b62"),
-                selected = ResolveColor("Theme.TextPrimaryBrush", "#ffffff")
+                stageBackground,
+                textPrimary,
+                labelBackground,
+                online = online.ColorValue,
+                fault = fault.ColorValue,
+                pending = pending.ColorValue,
+                neutral = neutral.ColorValue,
+                selected
             }
         };
 
         MapWebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(payload, _jsonOptions));
+    }
+
+    private void HandleDiagnosticMessage(JsonElement rootElement)
+    {
+        if (!rootElement.TryGetProperty("payload", out var payloadElement)
+            || payloadElement.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var stage = payloadElement.TryGetProperty("stage", out var stageElement)
+            ? stageElement.GetString()
+            : "MapRender";
+        var message = payloadElement.TryGetProperty("message", out var messageElement)
+            ? messageElement.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        MapPointSourceDiagnostics.Write(stage ?? "MapRender", $"{NormalizeHostContext()} {message}");
     }
 
     private void AttachItemsSource(IEnumerable<MapPointState>? items)
@@ -473,13 +556,121 @@ public partial class RealMapHost : UserControl
         return fallback;
     }
 
+    private void LogColorRuleUsage(
+        string stageBackground,
+        string textPrimary,
+        string labelBackground,
+        string online,
+        string fault,
+        string pending,
+        string neutral,
+        string selected)
+    {
+        var signature = string.Join(
+            "|",
+            [
+                stageBackground,
+                textPrimary,
+                labelBackground,
+                online,
+                fault,
+                pending,
+                neutral,
+                selected
+            ]);
+
+        lock (ColorRuleSyncRoot)
+        {
+            ColorRuleSignatures[NormalizeHostContext()] = signature;
+            var sharedAcrossContexts = ColorRuleSignatures.Count < 2
+                || ColorRuleSignatures.Values.Distinct(StringComparer.Ordinal).Count() == 1;
+            MapPointSourceDiagnostics.Write(
+                "MapRender",
+                $"{NormalizeHostContext()} sharedColorRule = {sharedAcrossContexts}, contexts = {string.Join(", ", ColorRuleSignatures.Keys.OrderBy(keyName => keyName, StringComparer.Ordinal))}");
+        }
+    }
+
+    private string NormalizeHostContext()
+    {
+        return string.IsNullOrWhiteSpace(HostContext) ? "Unknown" : HostContext.Trim();
+    }
+
+    private static MapVisualColorRule ResolveColorRule(MapPointVisualKind visualKind)
+    {
+        return VisualColorRules.TryGetValue(visualKind, out var rule)
+            ? rule with { ColorValue = ResolveColor(rule.ResourceKey, rule.FallbackColor) }
+            : new MapVisualColorRule("Theme.SuccessBrush", "map.point.online", "#34D6A2", ResolveColor("Theme.SuccessBrush", "#34D6A2"));
+    }
+
+    private void LogPointRenderAudit(IEnumerable<MapPointState> points)
+    {
+        foreach (var point in points)
+        {
+            var colorRule = ResolveColorRule(point.VisualKind);
+            var signature = string.Join(
+                "|",
+                [
+                    NormalizeLogValue(point.RawLongitude),
+                    NormalizeLogValue(point.RawLatitude),
+                    point.CoordinateStatus.ToString(),
+                    NormalizeLogValue(point.CoordinateStatusText),
+                    point.CanRenderOnMap.ToString(),
+                    FormatNullableDouble(point.MapLongitude),
+                    FormatNullableDouble(point.MapLatitude),
+                    NormalizeLogValue(point.MapSource),
+                    NormalizeLogValue(point.BusinessSummaryCoordinateStatus),
+                    ResolveFinalRenderable(point).ToString(),
+                    point.VisualKind.ToString(),
+                    colorRule.ColorRuleKey
+                ]);
+
+            var auditKey = $"{NormalizeHostContext()}::{point.PointId}";
+            if (_pointAuditSignatures.TryGetValue(auditKey, out var previousSignature)
+                && string.Equals(previousSignature, signature, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _pointAuditSignatures[auditKey] = signature;
+            MapPointSourceDiagnostics.Write(
+                "MapRenderPoint",
+                $"{NormalizeHostContext()} pointId = {NormalizeLogValue(point.PointId)}, deviceCode = {NormalizeLogValue(point.DeviceCode)}, rawLongitude = {NormalizeLogValue(point.RawLongitude)}, rawLatitude = {NormalizeLogValue(point.RawLatitude)}, coordinateSystem = {point.RegisteredCoordinateSystem}, parsedLongitude = {FormatNullableDouble(point.RegisteredLongitude)}, parsedLatitude = {FormatNullableDouble(point.RegisteredLatitude)}, coordinateStatusEnum = {point.CoordinateStatus}, coordinateStatusText = {NormalizeLogValue(point.CoordinateStatusText)}, canRenderOnMap = {point.CanRenderOnMap}, mapLongitude = {FormatNullableDouble(point.MapLongitude)}, mapLatitude = {FormatNullableDouble(point.MapLatitude)}, mapSource = {NormalizeLogValue(point.MapSource)}, businessSummaryCoordinateStatus = {NormalizeLogValue(point.BusinessSummaryCoordinateStatus)}, finalRenderable = {ResolveFinalRenderable(point)}, visualState = {point.VisualKind}, colorRuleKey = {colorRule.ColorRuleKey}");
+        }
+    }
+
+    private static bool ResolveFinalRenderable(MapPointState point)
+    {
+        return point.CanRenderOnMap
+            && ((point.MapLongitude.HasValue && point.MapLatitude.HasValue)
+                || (point.RegisteredLongitude.HasValue && point.RegisteredLatitude.HasValue));
+    }
+
+    private static string FormatNullableDouble(double? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+    }
+
+    private static string NormalizeLogValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
+    }
+
     private sealed record MapHostBootSettings(
         string ApiKey,
         string SecurityJsCode,
         string ApiVersion,
         double DefaultCenterLongitude,
         double DefaultCenterLatitude,
-        int DefaultZoom);
+        int DefaultZoom,
+        string HostContext);
+
+    private sealed record MapVisualColorRule(
+        string ResourceKey,
+        string ColorRuleKey,
+        string FallbackColor,
+        string ColorValue = "");
 
     private static class MapHostHtmlBuilder
     {

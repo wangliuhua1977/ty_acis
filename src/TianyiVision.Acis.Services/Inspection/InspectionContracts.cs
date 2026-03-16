@@ -64,6 +64,10 @@ public sealed record InspectionPointModel(
     double Latitude,
     bool CanRenderOnMap,
     string CoordinateStatusText,
+    string? RawLongitude,
+    string? RawLatitude,
+    PointCoordinateStatus CoordinateStatus,
+    string MapSource,
     double X,
     double Y,
     InspectionPointStatusModel Status,
@@ -75,7 +79,13 @@ public sealed record InspectionPointModel(
     string FaultSummary,
     string LastFaultTime,
     bool EntersDispatchPool,
-    PointBusinessSummaryModel? BusinessSummary = null)
+    PointBusinessSummaryModel? BusinessSummary = null,
+    double? MapLongitude = null,
+    double? MapLatitude = null,
+    double? RegisteredLongitude = null,
+    double? RegisteredLatitude = null,
+    CoordinateSystemKind RegisteredCoordinateSystem = CoordinateSystemKind.Unknown,
+    CoordinateSystemKind MapCoordinateSystem = CoordinateSystemKind.Unknown)
 {
     public InspectionPointModel(
         string id,
@@ -103,6 +113,10 @@ public sealed record InspectionPointModel(
             0d,
             false,
             "待地图坐标",
+            null,
+            null,
+            PointCoordinateStatus.Missing,
+            "unavailable",
             x,
             y,
             status,
@@ -114,7 +128,13 @@ public sealed record InspectionPointModel(
             string.Empty,
             lastFaultTime,
             entersDispatchPool,
-            businessSummary)
+            businessSummary,
+            null,
+            null,
+            null,
+            null,
+            CoordinateSystemKind.Unknown,
+            CoordinateSystemKind.Unknown)
     {
     }
 }

@@ -8,12 +8,12 @@ C:\ty_acis\src\TianyiVision.Acis.UI\obj\Debug\net8.0-windows\
 TianyiVision.Acis.UI
 none
 false
-TRACE;DEBUG;NET;NET8_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
+TRACE;DEBUG;NET;NET8_0;NETCOREAPP
 
 111075631129
-41840419484
+4-851879208
 76-830366771
-204-1262072488
+204-1197724992
 Resources\Styles\CoreControlStyles.xaml;Resources\Styles\GlobalStyles.xaml;Resources\Templates\ViewTemplates.xaml;Views\Controls\RealMapHost.xaml;Views\Pages\DispatchPageView.xaml;Views\Pages\HomePageView.xaml;Views\Pages\InspectionPageView.xaml;Views\Pages\InspectionReviewWallView.xaml;Views\Pages\ReportsPageView.xaml;Views\Pages\SettingsPageView.xaml;Views\ShellWindow.xaml;
 
 False

@@ -874,10 +874,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.Name,
             point.UnitName,
             point.CurrentHandlingUnit,
-            point.Longitude,
-            point.Latitude,
+            point.MapLongitude,
+            point.MapLatitude,
+            point.RegisteredLongitude,
+            point.RegisteredLatitude,
+            point.RegisteredCoordinateSystem,
+            point.MapCoordinateSystem,
             point.CanRenderOnMap,
             point.CoordinateStatusText,
+            point.RawLongitude,
+            point.RawLatitude,
+            point.CoordinateStatus,
+            point.MapSource,
             point.X,
             point.Y,
             MapPointStatus(point.Status),
@@ -898,10 +906,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         string name,
         string unitName,
         string currentHandlingUnit,
-        double longitude,
-        double latitude,
+        double? mapLongitude,
+        double? mapLatitude,
+        double? registeredLongitude,
+        double? registeredLatitude,
+        CoordinateSystemKind registeredCoordinateSystem,
+        CoordinateSystemKind mapCoordinateSystem,
         bool canRenderOnMap,
         string coordinateStatusText,
+        string? rawLongitude,
+        string? rawLatitude,
+        PointCoordinateStatus coordinateStatus,
+        string mapSource,
         double x,
         double y,
         InspectionPointStatus status,
@@ -922,8 +938,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 id,
                 deviceCode,
                 name,
-                canRenderOnMap ? longitude : null,
-                canRenderOnMap ? latitude : null,
+                canRenderOnMap ? mapLongitude ?? registeredLongitude : null,
+                canRenderOnMap ? mapLatitude ?? registeredLatitude : null,
                 "demo",
                 coordinateStatusText,
                 ResolveOnlineStatus(isOnline),
@@ -950,10 +966,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             name,
             unitName,
             currentHandlingUnit,
-            longitude,
-            latitude,
+            mapLongitude,
+            mapLatitude,
+            registeredLongitude,
+            registeredLatitude,
+            registeredCoordinateSystem,
+            mapCoordinateSystem,
             canRenderOnMap,
             coordinateStatusText,
+            rawLongitude,
+            rawLatitude,
+            coordinateStatus,
+            mapSource,
             x,
             y,
             status,
@@ -1141,13 +1165,22 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.Name,
             point.UnitName,
             point.CurrentHandlingUnit,
-            point.Longitude,
-            point.Latitude,
+            point.MapLongitude,
+            point.MapLatitude,
+            point.RegisteredLongitude,
+            point.RegisteredLatitude,
+            point.RegisteredCoordinateSystem,
+            point.MapCoordinateSystem,
             point.CanRenderOnMap,
             point.CoordinateStatusText,
+            point.RawLongitude,
+            point.RawLatitude,
+            point.CoordinateStatus,
+            point.MapSource,
+            point.BusinessSummary.CoordinateStatus,
             point.X,
             point.Y,
-            ToMapVisualKind(point.Status),
+            ResolveMapVisualKind(point),
             ResolvePointStatus(point.Status),
             point.FaultType,
             point.FaultDescription,
@@ -1164,7 +1197,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
-        mapPoint.VisualKind = ToMapVisualKind(point.Status);
+        mapPoint.VisualKind = ResolveMapVisualKind(point);
         mapPoint.StatusText = ResolvePointStatus(point.Status);
         mapPoint.FaultType = point.FaultType;
         mapPoint.Summary = point.FaultDescription;
@@ -1172,14 +1205,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         mapPoint.IsCurrent = point.IsCurrent;
     }
 
-    private static MapPointVisualKind ToMapVisualKind(InspectionPointStatus status)
+    private static MapPointVisualKind ResolveMapVisualKind(InspectionPointState point)
     {
-        return status switch
+        return point.Status switch
         {
             InspectionPointStatus.Inspecting => MapPointVisualKind.Inspecting,
             InspectionPointStatus.Fault => MapPointVisualKind.Fault,
+            InspectionPointStatus.PausedUntilRecovery => MapPointVisualKind.Fault,
             InspectionPointStatus.Silent => MapPointVisualKind.Silent,
-            InspectionPointStatus.PausedUntilRecovery => MapPointVisualKind.Paused,
             _ => MapPointVisualKind.Normal
         };
     }

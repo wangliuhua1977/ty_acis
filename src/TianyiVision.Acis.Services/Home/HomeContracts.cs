@@ -20,6 +20,10 @@ public sealed record HomeMapPointModel(
     double Latitude,
     bool CanRenderOnMap,
     string CoordinateStatusText,
+    string? RawLongitude,
+    string? RawLatitude,
+    PointCoordinateStatus CoordinateStatus,
+    string MapSource,
     HomeMapPointKindModel Kind,
     double X,
     double Y,
@@ -28,7 +32,13 @@ public sealed record HomeMapPointModel(
     string Summary,
     string LatestFaultTime,
     bool IsInRecentFaultList,
-    PointBusinessSummaryModel? BusinessSummary = null)
+    PointBusinessSummaryModel? BusinessSummary = null,
+    double? MapLongitude = null,
+    double? MapLatitude = null,
+    double? RegisteredLongitude = null,
+    double? RegisteredLatitude = null,
+    CoordinateSystemKind RegisteredCoordinateSystem = CoordinateSystemKind.Unknown,
+    CoordinateSystemKind MapCoordinateSystem = CoordinateSystemKind.Unknown)
 {
     public HomeMapPointModel(
         string id,
@@ -52,6 +62,10 @@ public sealed record HomeMapPointModel(
             0d,
             false,
             "待地图坐标",
+            null,
+            null,
+            PointCoordinateStatus.Missing,
+            "unavailable",
             kind,
             x,
             y,
@@ -60,7 +74,13 @@ public sealed record HomeMapPointModel(
             summary,
             latestFaultTime,
             isInRecentFaultList,
-            businessSummary)
+            businessSummary,
+            null,
+            null,
+            null,
+            null,
+            CoordinateSystemKind.Unknown,
+            CoordinateSystemKind.Unknown)
     {
     }
 }

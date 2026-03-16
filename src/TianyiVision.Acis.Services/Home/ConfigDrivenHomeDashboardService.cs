@@ -131,10 +131,14 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             point.DeviceCode,
             point.PointName,
             point.UnitName,
-            point.Coordinate.Longitude,
-            point.Coordinate.Latitude,
+            businessSummary.Longitude ?? point.Coordinate.Longitude,
+            businessSummary.Latitude ?? point.Coordinate.Latitude,
             point.Coordinate.CanRenderOnMap,
-            point.Coordinate.StatusText,
+            businessSummary.CoordinateStatus,
+            point.Coordinate.RawLongitude,
+            point.Coordinate.RawLatitude,
+            point.Coordinate.Status,
+            point.Coordinate.MapSource,
             kind,
             placement.X,
             placement.Y,
@@ -143,7 +147,13 @@ public sealed class ConfigDrivenHomeDashboardService : IHomeDashboardService
             businessSummary.StatusSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
             point.HasFault,
-            businessSummary);
+            businessSummary,
+            point.Coordinate.MapCoordinate?.Longitude,
+            point.Coordinate.MapCoordinate?.Latitude,
+            point.Coordinate.RegisteredCoordinate?.Longitude,
+            point.Coordinate.RegisteredCoordinate?.Latitude,
+            point.Coordinate.RegisteredCoordinateSystem,
+            point.Coordinate.MapCoordinateSystem);
     }
 
     private static HomeHeaderMetricsModel BuildHeaderMetrics(

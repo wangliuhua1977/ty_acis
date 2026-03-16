@@ -9,13 +9,11 @@
       color-scheme: dark;
       --stage-bg: #07111f;
       --text: #e8eef9;
-      --panel: rgba(7, 17, 31, 0.72);
-      --normal: #5fbf87;
-      --fault: #ff6b6b;
-      --key: #f7b955;
-      --inspecting: #4db2ff;
-      --silent: #94a7bd;
-      --paused: #f08b62;
+      --label-bg: rgba(16, 35, 56, 0.88);
+      --state-online: #34d6a2;
+      --state-fault: #ff6c7a;
+      --state-pending: #f3b45b;
+      --state-neutral: #9fb9d2;
       --selected: #ffffff;
     }
 
@@ -49,93 +47,64 @@
       pointer-events: none;
     }
 
-    .marker-chip {
-      position: relative;
-      min-width: 14px;
-      min-height: 14px;
+    .marker-dot {
+      width: 16px;
+      height: 16px;
       border-radius: 999px;
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+      border: 2px solid rgba(255, 255, 255, 0.85);
       background: var(--tone);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08), 0 10px 18px rgba(0, 0, 0, 0.4);
       pointer-events: auto;
     }
 
     .marker-label {
       margin-top: 8px;
       padding: 4px 10px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 999px;
-      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--label-bg);
       color: var(--text);
       font-size: 12px;
       line-height: 1.2;
       white-space: nowrap;
-      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
       pointer-events: auto;
     }
 
-    .marker-ring {
-      position: absolute;
-      inset: -8px;
-      border-radius: 999px;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .marker-selection {
-      position: absolute;
-      inset: -14px;
-      border: 2px solid rgba(255, 255, 255, 0.82);
-      border-radius: 999px;
-      opacity: 0;
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
-      pointer-events: none;
-    }
-
-    .marker.selected .marker-chip {
-      border-color: var(--selected);
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 12px 30px rgba(0, 0, 0, 0.25);
-    }
-
-    .marker.selected .marker-selection {
-      opacity: 1;
+    .marker.selected .marker-dot {
+      box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22), 0 10px 18px rgba(0, 0, 0, 0.4);
     }
 
     .marker.selected .marker-label {
-      border-color: color-mix(in srgb, var(--selected) 32%, transparent);
-      background: color-mix(in srgb, var(--panel) 82%, var(--selected) 18%);
       font-weight: 700;
+      border-color: rgba(255, 255, 255, 0.26);
     }
 
-    .marker.current .marker-chip,
-    .marker.inspecting .marker-chip {
+    .marker.current .marker-dot,
+    .marker.inspecting .marker-dot {
       width: 18px;
       height: 18px;
     }
 
-    .marker.fault .marker-ring {
-      background: color-mix(in srgb, var(--fault) 28%, transparent);
-      opacity: 0.8;
-      animation: fault-pulse 1.6s infinite ease-in-out;
+    .marker.fault .marker-dot {
+      animation: fault-blink 1.05s infinite ease-in-out;
     }
 
-    .marker.inspecting .marker-ring,
-    .marker.current .marker-ring {
-      background: color-mix(in srgb, var(--inspecting) 28%, transparent);
-      opacity: 0.78;
-      animation: inspect-pulse 1.3s infinite ease-in-out;
+    .marker.inspecting .marker-dot,
+    .marker.current .marker-dot {
+      animation: active-pulse 1.1s infinite ease-in-out;
     }
 
-    @keyframes fault-pulse {
-      0% { transform: scale(0.82); opacity: 0.28; }
-      60% { transform: scale(1.22); opacity: 0.92; }
-      100% { transform: scale(1.34); opacity: 0; }
+    @keyframes fault-blink {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.14); opacity: 0.88; }
+      100% { transform: scale(1); opacity: 1; }
     }
 
-    @keyframes inspect-pulse {
-      0% { transform: scale(0.72); opacity: 0.18; }
-      60% { transform: scale(1.18); opacity: 0.76; }
-      100% { transform: scale(1.3); opacity: 0; }
+    @keyframes active-pulse {
+      0% { transform: scale(0.96); }
+      50% { transform: scale(1.16); }
+      100% { transform: scale(0.96); }
     }
   </style>
 </head>
@@ -146,6 +115,7 @@
     let map = null;
     let mapReady = false;
     let mapReadyPosted = false;
+    let renderToken = 0;
     let markerIndex = new Map();
     let lastPointSignature = "";
 
@@ -153,6 +123,13 @@
       if (window.chrome && window.chrome.webview) {
         window.chrome.webview.postMessage({ type, payload });
       }
+    }
+
+    function logMapRender(message) {
+      post("diagnostic", {
+        stage: "MapRender",
+        message
+      });
     }
 
     function escapeHtml(value) {
@@ -164,6 +141,60 @@
         .replace(/'/g, "&#39;");
     }
 
+    function hasFiniteCoordinate(longitude, latitude) {
+      return Number.isFinite(longitude)
+        && Number.isFinite(latitude)
+        && longitude >= -180
+        && longitude <= 180
+        && latitude >= -90
+        && latitude <= 90;
+    }
+
+    function normalizeCoordinateValue(value) {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : null;
+    }
+
+    function formatCoordinate(longitude, latitude) {
+      if (!hasFiniteCoordinate(longitude, latitude)) {
+        return "none";
+      }
+
+      return `${longitude.toFixed(6)},${latitude.toFixed(6)}`;
+    }
+
+    function resolveLngLat(location) {
+      if (!location) {
+        return null;
+      }
+
+      const longitude = normalizeCoordinateValue(
+        typeof location.lng === "number"
+          ? location.lng
+          : typeof location.getLng === "function"
+            ? location.getLng()
+            : Array.isArray(location)
+              ? location[0]
+              : null);
+      const latitude = normalizeCoordinateValue(
+        typeof location.lat === "number"
+          ? location.lat
+          : typeof location.getLat === "function"
+            ? location.getLat()
+            : Array.isArray(location)
+              ? location[1]
+              : null);
+
+      if (!hasFiniteCoordinate(longitude, latitude)) {
+        return null;
+      }
+
+      return {
+        longitude,
+        latitude
+      };
+    }
+
     function setTheme(theme) {
       if (!theme) {
         return;
@@ -172,35 +203,30 @@
       const root = document.documentElement;
       root.style.setProperty("--stage-bg", theme.stageBackground || "#07111f");
       root.style.setProperty("--text", theme.textPrimary || "#e8eef9");
-      root.style.setProperty("--panel", theme.panelBackground || "rgba(7, 17, 31, 0.72)");
-      root.style.setProperty("--normal", theme.normal || "#5fbf87");
-      root.style.setProperty("--fault", theme.fault || "#ff6b6b");
-      root.style.setProperty("--key", theme.key || "#f7b955");
-      root.style.setProperty("--inspecting", theme.inspecting || "#4db2ff");
-      root.style.setProperty("--silent", theme.silent || "#94a7bd");
-      root.style.setProperty("--paused", theme.paused || "#f08b62");
+      root.style.setProperty("--label-bg", theme.labelBackground || "rgba(16, 35, 56, 0.88)");
+      root.style.setProperty("--state-online", theme.online || "#34d6a2");
+      root.style.setProperty("--state-fault", theme.fault || "#ff6c7a");
+      root.style.setProperty("--state-pending", theme.pending || "#f3b45b");
+      root.style.setProperty("--state-neutral", theme.neutral || "#9fb9d2");
       root.style.setProperty("--selected", theme.selected || "#ffffff");
     }
 
     function toneByKind(point) {
       switch (point.visualKind) {
         case "Fault":
-          return "var(--fault)";
+          return "var(--state-fault)";
         case "Key":
-          return "var(--key)";
-        case "Inspecting":
-          return "var(--inspecting)";
+          return "var(--state-pending)";
         case "Silent":
-          return "var(--silent)";
         case "Paused":
-          return "var(--paused)";
+          return "var(--state-neutral)";
         default:
-          return "var(--normal)";
+          return "var(--state-online)";
       }
     }
 
     function markerClass(point) {
-      const classes = ["marker", point.visualKind.toLowerCase()];
+      const classes = ["marker", String(point.visualKind || "Normal").toLowerCase()];
       if (point.isSelected) {
         classes.push("selected");
       }
@@ -213,11 +239,21 @@
     function buildMarkerContent(point) {
       return `
         <div class="${markerClass(point)}" style="--tone:${toneByKind(point)};">
-          <div class="marker-selection"></div>
-          <div class="marker-ring"></div>
-          <div class="marker-chip"></div>
+          <div class="marker-dot"></div>
           <div class="marker-label">${escapeHtml(point.pointName)}</div>
         </div>`;
+    }
+
+    function buildPointSignature(points) {
+      return points
+        .map(point => `${point.pointId}:${formatCoordinate(point.mapLongitude, point.mapLatitude)}`)
+        .join("|");
+    }
+
+    function logSampleLines(prefix, points, formatter) {
+      for (const point of points.slice(0, 3)) {
+        logMapRender(`${prefix} ${formatter(point)}`);
+      }
     }
 
     function fitOrFocus(points, selectedPointId) {
@@ -247,14 +283,125 @@
       map.setFitView(visibleMarkers, false, [60, 60, 60, 60]);
     }
 
-    function applyState(message) {
-      if (!mapReady || !message || message.type !== "state") {
-        return;
+    function prepareRenderBatches(points) {
+      const directRenderablePoints = [];
+      const baiduConvertiblePoints = [];
+      const skippedPoints = [];
+
+      for (const point of points) {
+        const mapLongitude = normalizeCoordinateValue(point.mapLongitude);
+        const mapLatitude = normalizeCoordinateValue(point.mapLatitude);
+        const rawLongitude = normalizeCoordinateValue(point.rawLongitude);
+        const rawLatitude = normalizeCoordinateValue(point.rawLatitude);
+        const registeredLongitude = normalizeCoordinateValue(point.registeredLongitude);
+        const registeredLatitude = normalizeCoordinateValue(point.registeredLatitude);
+        const source = point.mapSource || "unavailable";
+
+        if ((source === "registered_gcj02" || source === "resolved_gcj02") && hasFiniteCoordinate(mapLongitude, mapLatitude)) {
+          directRenderablePoints.push({
+            ...point,
+            mapLongitude,
+            mapLatitude,
+            rawLongitude,
+            rawLatitude,
+            registeredLongitude,
+            registeredLatitude
+          });
+          continue;
+        }
+
+        if (source === "amap_js_convert_from_baidu" && hasFiniteCoordinate(registeredLongitude, registeredLatitude)) {
+          baiduConvertiblePoints.push({
+            ...point,
+            mapLongitude,
+            mapLatitude,
+            rawLongitude,
+            rawLatitude,
+            registeredLongitude,
+            registeredLatitude
+          });
+          continue;
+        }
+
+        skippedPoints.push({
+          ...point,
+          mapLongitude,
+          mapLatitude,
+          rawLongitude,
+          rawLatitude,
+          registeredLongitude,
+          registeredLatitude
+        });
       }
 
-      const points = Array.isArray(message.points) ? message.points : [];
-      setTheme(message.theme);
+      logMapRender(`directPointCount = ${directRenderablePoints.length}`);
+      logMapRender(`baiduConvertPointCount = ${baiduConvertiblePoints.length}`);
+      logMapRender(`skippedPointCount = ${skippedPoints.length}`);
 
+      logSampleLines("direct sample =", directRenderablePoints, point =>
+        `pointId=${point.pointId}, source=${point.mapSource}, raw=${formatCoordinate(point.registeredLongitude, point.registeredLatitude)}, map=${formatCoordinate(point.mapLongitude, point.mapLatitude)}, finalRenderable=${point.finalRenderable}, colorRuleKey=${point.colorRuleKey}`);
+      logSampleLines("baidu sample before =", baiduConvertiblePoints, point =>
+        `pointId=${point.pointId}, source=${point.mapSource}, raw=${formatCoordinate(point.registeredLongitude, point.registeredLatitude)}, currentMap=${formatCoordinate(point.mapLongitude, point.mapLatitude)}, finalRenderable=${point.finalRenderable}, colorRuleKey=${point.colorRuleKey}`);
+      logSampleLines("skipped sample =", skippedPoints, point =>
+        `pointId=${point.pointId}, source=${point.mapSource}, raw=${formatCoordinate(point.registeredLongitude, point.registeredLatitude)}, map=${formatCoordinate(point.mapLongitude, point.mapLatitude)}, status=${point.coordinateStatusText || "none"}, finalRenderable=${point.finalRenderable}, colorRuleKey=${point.colorRuleKey}`);
+
+      return {
+        directRenderablePoints,
+        baiduConvertiblePoints,
+        skippedPoints
+      };
+    }
+
+    function convertBaiduBatch(points) {
+      if (!points || points.length === 0) {
+        return Promise.resolve([]);
+      }
+
+      return new Promise(resolve => {
+        const sourceLocations = points.map(point => [point.registeredLongitude, point.registeredLatitude]);
+        try {
+          AMap.convertFrom(sourceLocations, "baidu", (status, result) => {
+            const locations = result && Array.isArray(result.locations) ? result.locations : [];
+            if (status !== "complete" || locations.length === 0) {
+              logMapRender(`convertedPointCount = 0`);
+              logMapRender(`baidu convert failed = status:${status || "unknown"}, resultInfo:${result && result.info ? result.info : "none"}`);
+              resolve([]);
+              return;
+            }
+
+            const convertedRenderablePoints = [];
+            for (let index = 0; index < points.length; index += 1) {
+              const point = points[index];
+              const resolved = resolveLngLat(locations[index]);
+              if (!resolved) {
+                continue;
+              }
+
+              const convertedPoint = {
+                ...point,
+                mapLongitude: resolved.longitude,
+                mapLatitude: resolved.latitude
+              };
+              convertedRenderablePoints.push(convertedPoint);
+
+              if (index < 3) {
+                logMapRender(
+                  `converted sample = pointId=${point.pointId}, source=${point.mapSource}, before=${formatCoordinate(point.registeredLongitude, point.registeredLatitude)}, after=${formatCoordinate(convertedPoint.mapLongitude, convertedPoint.mapLatitude)}, finalRenderable=${point.finalRenderable}, colorRuleKey=${point.colorRuleKey}`);
+              }
+            }
+
+            logMapRender(`convertedPointCount = ${convertedRenderablePoints.length}`);
+            resolve(convertedRenderablePoints);
+          });
+        } catch (error) {
+          logMapRender(`convertedPointCount = 0`);
+          logMapRender(`baidu convert exception = ${error && error.message ? error.message : "unknown"}`);
+          resolve([]);
+        }
+      });
+    }
+
+    function syncMarkers(points) {
       const incomingIds = new Set(points.map(point => point.pointId));
       for (const [pointId, marker] of markerIndex.entries()) {
         if (!incomingIds.has(pointId)) {
@@ -263,22 +410,23 @@
         }
       }
 
+      let markerCreatedCount = 0;
       for (const point of points) {
-        const position = [point.longitude, point.latitude];
+        const position = [point.mapLongitude, point.mapLatitude];
         let marker = markerIndex.get(point.pointId);
 
         if (!marker) {
-            marker = new AMap.Marker({
-              position,
-              anchor: "center",
-              title: point.pointName,
-              content: buildMarkerContent(point),
-              zIndex: point.isCurrent ? 260 : point.isSelected ? 240 : 120
-            });
-
+          marker = new AMap.Marker({
+            position,
+            anchor: "center",
+            title: point.pointName,
+            content: buildMarkerContent(point),
+            zIndex: point.isCurrent ? 260 : point.isSelected ? 240 : 120
+          });
           marker.on("click", () => post("pointSelected", point.pointId));
           marker.setMap(map);
           markerIndex.set(point.pointId, marker);
+          markerCreatedCount += 1;
         } else {
           marker.setPosition(position);
           marker.setContent(buildMarkerContent(point));
@@ -286,16 +434,48 @@
         }
       }
 
-      const pointSignature = points.map(point => point.pointId).join("|");
-      if (pointSignature !== lastPointSignature) {
-        lastPointSignature = pointSignature;
-        fitOrFocus(points, message.selectedPointId);
+      logMapRender(`markerCreatedCount = ${markerCreatedCount}`);
+      logMapRender(`layerAttached = ${markerIndex.size > 0}`);
+    }
+
+    function applyState(message) {
+      if (!mapReady || !message || message.type !== "state") {
         return;
       }
 
-      if (message.selectedPointId) {
-        fitOrFocus(points, message.selectedPointId);
+      const points = Array.isArray(message.points) ? message.points : [];
+      const currentToken = ++renderToken;
+      setTheme(message.theme);
+
+      const batches = prepareRenderBatches(points);
+      const finalizeRender = convertedRenderablePoints => {
+        if (currentToken !== renderToken) {
+          return;
+        }
+
+        const finalRenderablePoints = batches.directRenderablePoints.concat(convertedRenderablePoints);
+        logMapRender(`finalRenderablePointCount = ${finalRenderablePoints.length}`);
+        syncMarkers(finalRenderablePoints);
+
+        const pointSignature = buildPointSignature(finalRenderablePoints);
+        if (pointSignature !== lastPointSignature) {
+          lastPointSignature = pointSignature;
+          fitOrFocus(finalRenderablePoints, message.selectedPointId);
+          return;
+        }
+
+        if (message.selectedPointId) {
+          fitOrFocus(finalRenderablePoints, message.selectedPointId);
+        }
+      };
+
+      if (batches.baiduConvertiblePoints.length === 0) {
+        logMapRender("convertedPointCount = 0");
+        finalizeRender([]);
+        return;
       }
+
+      convertBaiduBatch(batches.baiduConvertiblePoints).then(finalizeRender);
     }
 
     function loadAmap() {
@@ -358,7 +538,13 @@
       window.setTimeout(completeReady, 1200);
     }
 
-    window.chrome.webview.addEventListener("message", event => applyState(event.data));
+    window.chrome.webview.addEventListener("message", event => {
+      try {
+        applyState(event.data);
+      } catch (error) {
+        post("error", error && error.message ? error.message : "map_state_apply_failed");
+      }
+    });
 
     loadAmap()
       .then(initMap)

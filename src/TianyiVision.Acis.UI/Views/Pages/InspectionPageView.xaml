@@ -492,6 +492,7 @@
 
                             <Grid Grid.Row="2" Margin="0,14,0,0" ClipToBounds="True">
                                 <controls:RealMapHost x:Name="RealMapHost"
+                                                      HostContext="InspectionMap"
                                                       ItemsSource="{Binding MapPoints}"
                                                       SelectedPointId="{Binding SelectedMapPointId}"
                                                       PointSelectedCommand="{Binding SelectPointCommand}"

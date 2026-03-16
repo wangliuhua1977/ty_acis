@@ -30,8 +30,8 @@ public static class PointBusinessSummaryFactory
             point.PointId,
             Normalize(point.DeviceCode, point.PointId),
             Normalize(point.PointName, point.PointId),
-            ResolveCoordinateValue(point.Coordinate, point.Coordinate.Longitude),
-            ResolveCoordinateValue(point.Coordinate, point.Coordinate.Latitude),
+            ResolveCoordinateValue(point.Coordinate, isLongitude: true),
+            ResolveCoordinateValue(point.Coordinate, isLongitude: false),
             sourceType,
             coordinateStatus,
             onlineStatus,
@@ -42,9 +42,23 @@ public static class PointBusinessSummaryFactory
             BuildAvailableActions(point));
     }
 
-    private static double? ResolveCoordinateValue(PointCoordinateModel coordinate, double value)
+    public static double? ResolveCoordinateValue(PointCoordinateModel coordinate, bool isLongitude)
     {
-        return coordinate.Status == PointCoordinateStatus.Valid ? value : null;
+        if (coordinate.CanRenderOnMap)
+        {
+            return isLongitude
+                ? coordinate.MapCoordinate?.Longitude ?? coordinate.Longitude
+                : coordinate.MapCoordinate?.Latitude ?? coordinate.Latitude;
+        }
+
+        if (!coordinate.HasRenderableCoordinateCandidate)
+        {
+            return null;
+        }
+
+        return isLongitude
+            ? coordinate.RegisteredCoordinate?.Longitude
+            : coordinate.RegisteredCoordinate?.Latitude;
     }
 
     private static string ResolveOnlineStatus(bool? isOnline)
@@ -57,11 +71,15 @@ public static class PointBusinessSummaryFactory
         };
     }
 
-    private static string ResolveCoordinateStatus(PointCoordinateModel coordinate)
+    public static string ResolveCoordinateStatus(PointCoordinateModel coordinate)
     {
+        if (coordinate.CanRenderOnMap)
+        {
+            return "坐标可落点";
+        }
+
         return coordinate.Status switch
         {
-            PointCoordinateStatus.Valid => "坐标可落点",
             PointCoordinateStatus.Missing or PointCoordinateStatus.Incomplete => "待校验",
             _ => "坐标异常"
         };

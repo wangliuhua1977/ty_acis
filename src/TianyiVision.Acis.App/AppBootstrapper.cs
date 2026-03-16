@@ -93,6 +93,7 @@ public sealed class AppBootstrapper
             $"diagnosticLogFile = {MapPointSourceDiagnostics.LogFilePath}",
             $"serviceMode = {PlatformIntegrationSettingsExtensions.NormalizeMode(platformSettings.OpenPlatform.ServiceMode)}",
             $"enableDemoFallback = {platformSettings.OpenPlatform.EnableDemoFallback}",
+            "mapCoordinateConversionPath = amap-js-convertFrom(baidu)",
             $"ctyunConfiguration = {(ctyunConfigurationIssues.Count == 0 ? "complete" : "missing")}",
             $"ctyunConfigurationIssues = {(ctyunConfigurationIssues.Count == 0 ? "none" : string.Join("; ", ctyunConfigurationIssues.Select(ExtractConfigurationIssueField)))}"
         ]);

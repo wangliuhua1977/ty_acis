@@ -88,7 +88,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                             template.MapProvider.CoordinateSystem ?? "GCJ-02",
                             template.MapProvider.DefaultCenterLongitude ?? DefaultMapCenterLongitude,
                             template.MapProvider.DefaultCenterLatitude ?? DefaultMapCenterLatitude,
-                            template.MapProvider.DefaultZoom ?? DefaultMapZoom));
+                            template.MapProvider.DefaultZoom ?? DefaultMapZoom,
+                            template.MapProvider.AmapWebServiceApiKey ?? string.Empty,
+                            template.MapProvider.EnableCoordinateConversion ?? true,
+                            template.MapProvider.EnableJsCoordinateFallback ?? false));
                 }
             }
             catch
@@ -160,7 +163,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                 "GCJ-02",
                 DefaultMapCenterLongitude,
                 DefaultMapCenterLatitude,
-                DefaultMapZoom));
+                DefaultMapZoom,
+                string.Empty,
+                true,
+                false));
     }
 
     private static OpenPlatformSettings Normalize(OpenPlatformSettings settings)
@@ -228,7 +234,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                         CoordinateSystem = template.MapProvider.CoordinateSystem ?? settings.CoordinateSystem,
                         DefaultCenterLongitude = template.MapProvider.DefaultCenterLongitude ?? settings.DefaultCenterLongitude,
                         DefaultCenterLatitude = template.MapProvider.DefaultCenterLatitude ?? settings.DefaultCenterLatitude,
-                        DefaultZoom = template.MapProvider.DefaultZoom ?? settings.DefaultZoom
+                        DefaultZoom = template.MapProvider.DefaultZoom ?? settings.DefaultZoom,
+                        AmapWebServiceApiKey = template.MapProvider.AmapWebServiceApiKey ?? settings.AmapWebServiceApiKey,
+                        EnableCoordinateConversion = template.MapProvider.EnableCoordinateConversion ?? settings.EnableCoordinateConversion,
+                        EnableJsCoordinateFallback = template.MapProvider.EnableJsCoordinateFallback ?? settings.EnableJsCoordinateFallback
                     };
                 }
             }
@@ -253,7 +262,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                         AmapSecurityJsCode = localOverride.Amap.SecurityJsCode ?? settings.AmapSecurityJsCode,
                         DefaultCenterLongitude = localOverride.Amap.DefaultCenterLongitude ?? settings.DefaultCenterLongitude,
                         DefaultCenterLatitude = localOverride.Amap.DefaultCenterLatitude ?? settings.DefaultCenterLatitude,
-                        DefaultZoom = localOverride.Amap.DefaultZoom ?? settings.DefaultZoom
+                        DefaultZoom = localOverride.Amap.DefaultZoom ?? settings.DefaultZoom,
+                        AmapWebServiceApiKey = localOverride.Amap.WebServiceApiKey ?? settings.AmapWebServiceApiKey,
+                        EnableCoordinateConversion = localOverride.Amap.EnableCoordinateConversion ?? settings.EnableCoordinateConversion,
+                        EnableJsCoordinateFallback = localOverride.Amap.EnableJsCoordinateFallback ?? settings.EnableJsCoordinateFallback
                     };
                 }
             }
@@ -281,7 +293,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
             DefaultCenterLatitude = defaultLatitude,
             DefaultZoom = settings.DefaultZoom <= 0
                 ? (bundledDefaults.DefaultZoom <= 0 ? DefaultMapZoom : bundledDefaults.DefaultZoom)
-                : settings.DefaultZoom
+                : settings.DefaultZoom,
+            AmapWebServiceApiKey = ResolveConfiguredValue(settings.AmapWebServiceApiKey, bundledDefaults.AmapWebServiceApiKey),
+            EnableCoordinateConversion = settings.EnableCoordinateConversion,
+            EnableJsCoordinateFallback = settings.EnableJsCoordinateFallback
         };
     }
 
@@ -391,7 +406,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
                 AmapSecurityJsCode = localOverride.Amap.SecurityJsCode ?? mapProvider.AmapSecurityJsCode,
                 DefaultCenterLongitude = localOverride.Amap.DefaultCenterLongitude ?? mapProvider.DefaultCenterLongitude,
                 DefaultCenterLatitude = localOverride.Amap.DefaultCenterLatitude ?? mapProvider.DefaultCenterLatitude,
-                DefaultZoom = localOverride.Amap.DefaultZoom ?? mapProvider.DefaultZoom
+                DefaultZoom = localOverride.Amap.DefaultZoom ?? mapProvider.DefaultZoom,
+                AmapWebServiceApiKey = localOverride.Amap.WebServiceApiKey ?? mapProvider.AmapWebServiceApiKey,
+                EnableCoordinateConversion = localOverride.Amap.EnableCoordinateConversion ?? mapProvider.EnableCoordinateConversion,
+                EnableJsCoordinateFallback = localOverride.Amap.EnableJsCoordinateFallback ?? mapProvider.EnableJsCoordinateFallback
             };
         }
 
@@ -468,7 +486,10 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         string? CoordinateSystem,
         double? DefaultCenterLongitude,
         double? DefaultCenterLatitude,
-        int? DefaultZoom);
+        int? DefaultZoom,
+        string? AmapWebServiceApiKey,
+        bool? EnableCoordinateConversion,
+        bool? EnableJsCoordinateFallback);
 
     private sealed record LocalSettingsOverrideDocument(
         LocalTylinkApiTemplate? TylinkApi,
@@ -492,5 +513,8 @@ public sealed class FilePlatformIntegrationSettingsService : IPlatformIntegratio
         string? SecurityJsCode,
         double? DefaultCenterLongitude,
         double? DefaultCenterLatitude,
-        int? DefaultZoom);
+        int? DefaultZoom,
+        string? WebServiceApiKey,
+        bool? EnableCoordinateConversion,
+        bool? EnableJsCoordinateFallback);
 }

@@ -52,7 +52,10 @@ public sealed record MapProviderSettings(
     string CoordinateSystem,
     double DefaultCenterLongitude,
     double DefaultCenterLatitude,
-    int DefaultZoom);
+    int DefaultZoom,
+    string AmapWebServiceApiKey = "",
+    bool EnableCoordinateConversion = true,
+    bool EnableJsCoordinateFallback = false);
 
 public sealed record PlatformIntegrationSettings(
     OpenPlatformSettings OpenPlatform,

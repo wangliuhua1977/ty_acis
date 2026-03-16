@@ -41,7 +41,7 @@
       "TianyiVision.Acis.Core/1.0.0": {
         "runtime": {
           "TianyiVision.Acis.Core.dll": {
-            "assemblyVersion": "1.0.0.0",
+            "assemblyVersion": "1.0.0",
             "fileVersion": "1.0.0.0"
           }
         }
@@ -52,7 +52,7 @@
         },
         "runtime": {
           "TianyiVision.Acis.Infrastructure.dll": {
-            "assemblyVersion": "1.0.0.0",
+            "assemblyVersion": "1.0.0",
             "fileVersion": "1.0.0.0"
           }
         }
@@ -64,7 +64,7 @@
         },
         "runtime": {
           "TianyiVision.Acis.Services.dll": {
-            "assemblyVersion": "1.0.0.0",
+            "assemblyVersion": "1.0.0",
             "fileVersion": "1.0.0.0"
           }
         }

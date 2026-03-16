@@ -1,4 +1,5 @@
 using TianyiVision.Acis.UI.Mvvm;
+using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.UI.States;
 
@@ -18,10 +19,19 @@ public sealed class MapPointState : ViewModelBase
         string pointName,
         string unitName,
         string currentHandlingUnit,
-        double longitude,
-        double latitude,
+        double? mapLongitude,
+        double? mapLatitude,
+        double? registeredLongitude,
+        double? registeredLatitude,
+        CoordinateSystemKind registeredCoordinateSystem,
+        CoordinateSystemKind mapCoordinateSystem,
         bool canRenderOnMap,
         string coordinateStatusText,
+        string? rawLongitude,
+        string? rawLatitude,
+        PointCoordinateStatus coordinateStatus,
+        string mapSource,
+        string businessSummaryCoordinateStatus,
         double x,
         double y,
         MapPointVisualKind visualKind,
@@ -36,10 +46,19 @@ public sealed class MapPointState : ViewModelBase
         PointName = pointName;
         UnitName = unitName;
         CurrentHandlingUnit = currentHandlingUnit;
-        Longitude = longitude;
-        Latitude = latitude;
+        MapLongitude = mapLongitude;
+        MapLatitude = mapLatitude;
+        RegisteredLongitude = registeredLongitude;
+        RegisteredLatitude = registeredLatitude;
+        RegisteredCoordinateSystem = registeredCoordinateSystem;
+        MapCoordinateSystem = mapCoordinateSystem;
         CanRenderOnMap = canRenderOnMap;
         CoordinateStatusText = coordinateStatusText;
+        RawLongitude = rawLongitude;
+        RawLatitude = rawLatitude;
+        CoordinateStatus = coordinateStatus;
+        MapSource = mapSource;
+        BusinessSummaryCoordinateStatus = businessSummaryCoordinateStatus;
         X = x;
         Y = y;
         _visualKind = visualKind;
@@ -60,13 +79,35 @@ public sealed class MapPointState : ViewModelBase
 
     public string CurrentHandlingUnit { get; }
 
-    public double Longitude { get; }
+    public double Longitude => MapLongitude ?? RegisteredLongitude ?? 0d;
 
-    public double Latitude { get; }
+    public double Latitude => MapLatitude ?? RegisteredLatitude ?? 0d;
+
+    public double? MapLongitude { get; }
+
+    public double? MapLatitude { get; }
+
+    public double? RegisteredLongitude { get; }
+
+    public double? RegisteredLatitude { get; }
+
+    public CoordinateSystemKind RegisteredCoordinateSystem { get; }
+
+    public CoordinateSystemKind MapCoordinateSystem { get; }
 
     public bool CanRenderOnMap { get; }
 
     public string CoordinateStatusText { get; }
+
+    public string? RawLongitude { get; }
+
+    public string? RawLatitude { get; }
+
+    public PointCoordinateStatus CoordinateStatus { get; }
+
+    public string MapSource { get; }
+
+    public string BusinessSummaryCoordinateStatus { get; }
 
     public double X { get; }
 

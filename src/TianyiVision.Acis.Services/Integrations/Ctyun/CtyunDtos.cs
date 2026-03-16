@@ -69,7 +69,7 @@ public sealed record CtyunDeviceAlertDto(
 
 public interface ICtyunDeviceListAdapter
 {
-    DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details);
+    DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details, PointCoordinateModel coordinate);
 }
 
 public interface ICtyunAiAlertAdapter
@@ -84,7 +84,7 @@ public interface ICtyunDeviceAlertAdapter
 
 public sealed class CtyunDeviceListAdapter : ICtyunDeviceListAdapter
 {
-    public DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details)
+    public DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details, PointCoordinateModel coordinate)
     {
         return new DeviceListItemDto(
             PointIdentity.CreatePointId(catalogItem.DeviceCode),
@@ -92,7 +92,7 @@ public sealed class CtyunDeviceListAdapter : ICtyunDeviceListAdapter
             string.IsNullOrWhiteSpace(details?.DeviceName) ? catalogItem.DeviceName : details.DeviceName,
             details?.DeviceType ?? "CTYun设备",
             details?.Location ?? string.Empty,
-            PointCoordinateParser.FromRaw(details?.Longitude, details?.Latitude),
+            coordinate,
             details?.IsOnline,
             "CTYun");
     }

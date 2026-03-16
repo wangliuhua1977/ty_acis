@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TianyiVision.Acis.Services")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce2bf9d9758bf5fff3fa2d8cedf95f3a6726e00b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+04292c8d538d930104cfe0038fd8846d80a0086b")]
 [assembly: System.Reflection.AssemblyProductAttribute("TianyiVision.Acis.Services")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TianyiVision.Acis.Services")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

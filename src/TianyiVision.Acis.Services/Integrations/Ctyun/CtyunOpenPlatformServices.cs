@@ -377,12 +377,12 @@ public sealed class CtyunOpenPlatformClient
                 ? response.Data
                 : MergeDeviceDetail(mergedDetail, response.Data);
 
-            if (HasUsableMapDetail(mergedDetail))
+            if (HasUsableRegisteredCoordinate(mergedDetail))
             {
                 CacheDeviceDetail(normalizedDeviceCode, mergedDetail);
                 MapPointSourceDiagnostics.Write(
                     "PointDetail",
-                    $"Device detail resolved with usable coordinate: deviceCode = {normalizedDeviceCode}, path = {path}");
+                    $"Device detail resolved with usable registered coordinate: deviceCode = {normalizedDeviceCode}, path = {path}");
                 return ServiceResponse<CtyunDeviceDetailDto>.Success(mergedDetail, response.Message);
             }
         }
@@ -390,9 +390,10 @@ public sealed class CtyunOpenPlatformClient
         if (mergedDetail is not null)
         {
             CacheDeviceDetail(normalizedDeviceCode, mergedDetail);
+            var parsedCoordinate = PointCoordinateParser.ParseRegistered(mergedDetail.Longitude, mergedDetail.Latitude, CoordinateSystemKind.BD09);
             MapPointSourceDiagnostics.Write(
                 "PointDetail",
-                $"Device detail resolved without usable coordinate: deviceCode = {normalizedDeviceCode}, coordinateStatus = {PointCoordinateParser.FromRaw(mergedDetail.Longitude, mergedDetail.Latitude).Status}");
+                $"Device detail resolved without usable registered coordinate: deviceCode = {normalizedDeviceCode}, coordinateStatus = {parsedCoordinate.Status}");
             return ServiceResponse<CtyunDeviceDetailDto>.Success(mergedDetail, "已合并设备详情接口返回。");
         }
 
@@ -786,7 +787,7 @@ public sealed class CtyunOpenPlatformClient
                 ParseNullableDateTime(ReadPreferredString(data, "reportTime")),
                 ParseNullableDateTime(ReadPreferredString(data, "importTime")));
 
-            var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
+            var coordinate = PointCoordinateParser.ParseRegistered(detail.Longitude, detail.Latitude, CoordinateSystemKind.BD09);
             var lastSyncTime = detail.ReportTime ?? detail.ImportTime;
             var lastSyncSource = detail.ReportTime.HasValue
                 ? "reportTime"
@@ -795,7 +796,10 @@ public sealed class CtyunOpenPlatformClient
                     : "待接入";
             MapPointSourceDiagnostics.Write(
                 "PointDetail",
-                $"Device detail parsed: deviceCode = {deviceCode}, path = {path}, pointName = {(string.IsNullOrWhiteSpace(detail.DeviceName) ? "missing" : "present")}, coordinateStatus = {coordinate.Status}, canRender = {coordinate.CanRenderOnMap}, online = {(detail.IsOnline.HasValue ? detail.IsOnline.Value.ToString() : "null")}, lastSyncSource = {lastSyncSource}, lastSyncTime = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}");
+                $"Device detail parsed: deviceCode = {deviceCode}, path = {path}, pointName = {(string.IsNullOrWhiteSpace(detail.DeviceName) ? "missing" : "present")}, registeredCoordinateStatus = {coordinate.Status}, registeredCoordinateSystem = {(coordinate.Coordinate?.CoordinateSystem.ToString() ?? "Unknown")}, online = {(detail.IsOnline.HasValue ? detail.IsOnline.Value.ToString() : "null")}, lastSyncSource = {lastSyncSource}, lastSyncTime = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}");
+            MapPointSourceDiagnostics.Write(
+                "PointDetailRaw",
+                $"deviceCode = {deviceCode}, path = {path}, rawLongitude = {NormalizeCoordinateLogValue(detail.Longitude)}, rawLatitude = {NormalizeCoordinateLogValue(detail.Latitude)}, parsedLongitude = {FormatCoordinateLogValue(coordinate.Coordinate?.Longitude)}, parsedLatitude = {FormatCoordinateLogValue(coordinate.Coordinate?.Latitude)}, coordinateStatusEnum = {coordinate.Status}, coordinateStatusText = {NormalizeCoordinateLogValue(coordinate.StatusText)}");
 
             return ServiceResponse<CtyunDeviceDetailDto>.Success(detail, $"已获取设备详情：{path}");
         }
@@ -830,10 +834,10 @@ public sealed class CtyunOpenPlatformClient
             primary.ImportTime ?? candidate.ImportTime);
     }
 
-    private static bool HasUsableMapDetail(CtyunDeviceDetailDto detail)
+    private static bool HasUsableRegisteredCoordinate(CtyunDeviceDetailDto detail)
     {
         return !string.IsNullOrWhiteSpace(detail.DeviceName)
-            && PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude).CanRenderOnMap;
+            && PointCoordinateParser.ParseRegistered(detail.Longitude, detail.Latitude, CoordinateSystemKind.BD09).IsValid;
     }
 
     private bool TryGetCachedDeviceDetail(string deviceCode, out CtyunDeviceDetailDto detail)
@@ -914,6 +918,18 @@ public sealed class CtyunOpenPlatformClient
             : element.ValueKind.ToString();
     }
 
+    private static string NormalizeCoordinateLogValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
+    }
+
+    private static string FormatCoordinateLogValue(double? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.######", CultureInfo.InvariantCulture)
+            : "null";
+    }
+
     private sealed record CachedDeviceDetailEntry(CtyunDeviceDetailDto Detail, DateTime ExpiresAt);
 }
 
@@ -990,17 +1006,32 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
 
         var devices = new List<DeviceListItemDto>(catalogItems.Count);
         var detailFailureReasons = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        foreach (var item in catalogItems)
-        {
-            var detailResponse = _client.GetDeviceDetail(item.DeviceCode);
-            if (!detailResponse.IsSuccess
-                || !HasUsableDetailPayload(detailResponse.Data))
+        var detailContexts = catalogItems
+            .Select(item =>
             {
-                Increment(detailFailureReasons, ClassifyDetailFailureReason(detailResponse));
-            }
+                var detailResponse = _client.GetDeviceDetail(item.DeviceCode);
+                if (!detailResponse.IsSuccess
+                    || !HasUsableDetailPayload(detailResponse.Data))
+                {
+                    Increment(detailFailureReasons, ClassifyDetailFailureReason(detailResponse));
+                }
 
-            devices.Add(_adapter.MapDevice(item, detailResponse.IsSuccess ? detailResponse.Data : null));
+                return new CatalogItemDetailContext(
+                    item,
+                    detailResponse,
+                    detailResponse.IsSuccess
+                        ? PointCoordinateParser.ParseRegistered(
+                            detailResponse.Data.Longitude,
+                            detailResponse.Data.Latitude,
+                            CoordinateSystemKind.BD09)
+                        : PointCoordinateParser.ParseRegistered(null, null, CoordinateSystemKind.BD09));
+            })
+            .ToList();
+        foreach (var context in detailContexts)
+        {
+            var detail = context.DetailResponse.IsSuccess ? context.DetailResponse.Data : null;
+            var coordinate = ResolveCatalogCoordinate(context);
+            devices.Add(_adapter.MapDevice(context.Item, detail, coordinate));
         }
 
         if (devices.Count == 0)
@@ -1031,6 +1062,17 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
         var message = BuildCatalogMessage(pageMessage, devices.Count, renderableCount, detailFailureReasons.Values.Sum());
         CacheCatalog(devices, message);
         return ServiceResponse<IReadOnlyList<DeviceListItemDto>>.Success(devices, message);
+    }
+
+    private static PointCoordinateModel ResolveCatalogCoordinate(
+        CatalogItemDetailContext context)
+    {
+        if (!context.DetailResponse.IsSuccess)
+        {
+            return PointCoordinateParser.Missing();
+        }
+
+        return PointCoordinateParser.FromParsedRegistered(context.RegisteredCoordinate);
     }
 
     private bool TryGetCachedCatalog(out IReadOnlyList<DeviceListItemDto> devices, out string message)
@@ -1121,6 +1163,7 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
             PointCoordinateStatus.Missing => "空值",
             PointCoordinateStatus.Incomplete => "空值",
             PointCoordinateStatus.ZeroOrigin => "0/0",
+            PointCoordinateStatus.ConversionFailed => "转换失败",
             PointCoordinateStatus.Invalid when coordinate.StatusText.Contains("范围", StringComparison.Ordinal) => "越界",
             PointCoordinateStatus.Invalid => "格式异常",
             _ => coordinate.StatusText
@@ -1139,6 +1182,11 @@ public sealed class CtyunDeviceCatalogService : IDeviceCatalogService
     }
 
     private sealed record CachedCatalogEntry(IReadOnlyList<DeviceListItemDto> Devices, string Message, DateTime ExpiresAt);
+
+    private sealed record CatalogItemDetailContext(
+        CtyunDeviceCatalogItemDto Item,
+        ServiceResponse<CtyunDeviceDetailDto> DetailResponse,
+        ParsedRegisteredCoordinateModel RegisteredCoordinate);
 }
 
 public sealed class CtyunAlertQueryService : IAlertQueryService
@@ -1206,7 +1254,8 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             false => "离线",
             _ => "未知"
         };
-        var coordinate = PointCoordinateParser.FromRaw(detail.Longitude, detail.Latitude);
+        var parsedCoordinate = PointCoordinateParser.ParseRegistered(detail.Longitude, detail.Latitude, CoordinateSystemKind.BD09);
+        var coordinate = ResolveDetailCoordinate(parsedCoordinate);
         var lastSyncTime = detail.ReportTime ?? detail.ImportTime;
         var lastSyncSource = detail.ReportTime.HasValue
             ? "reportTime"
@@ -1217,7 +1266,10 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
 
         MapPointSourceDiagnostics.Write(
             "PointStatus",
-            $"ctyun status mapped: pointId = {pointId}, online = {onlineText}, coordinate = {coordinate.StatusText}, lastSync = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}, lastSyncSource = {lastSyncSource}");
+            $"ctyun status mapped: pointId = {pointId}, online = {onlineText}, coordinate = {coordinate.StatusText}, registeredSystem = {coordinate.RegisteredCoordinateSystem}, mapSystem = {coordinate.MapCoordinateSystem}, converted = {coordinate.IsConverted}, mapSource = {coordinate.MapSource}, lastSync = {(lastSyncTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "待接入")}, lastSyncSource = {lastSyncSource}");
+        MapPointSourceDiagnostics.Write(
+            "PointDetailRaw",
+            $"pointId = {pointId}, rawLongitude = {NormalizeCoordinateLogValue(detail.Longitude)}, rawLatitude = {NormalizeCoordinateLogValue(detail.Latitude)}, parsedLongitude = {FormatCoordinateLogValue(parsedCoordinate.Coordinate?.Longitude)}, parsedLatitude = {FormatCoordinateLogValue(parsedCoordinate.Coordinate?.Latitude)}, mapLongitude = {FormatCoordinateLogValue(coordinate.MapCoordinate?.Longitude)}, mapLatitude = {FormatCoordinateLogValue(coordinate.MapCoordinate?.Latitude)}, coordinateStatusEnum = {coordinate.Status}, coordinateStatusText = {NormalizeCoordinateLogValue(coordinate.StatusText)}, canRenderOnMap = {coordinate.CanRenderOnMap}");
 
         return ServiceResponse<DevicePointDetailModel>.Success(new DevicePointDetailModel(
             PointIdentity.CreatePointId(pointId),
@@ -1238,6 +1290,24 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             "CTYun"));
     }
 
+    private static PointCoordinateModel ResolveDetailCoordinate(
+        ParsedRegisteredCoordinateModel parsedCoordinate)
+    {
+        return PointCoordinateParser.FromParsedRegistered(parsedCoordinate);
+    }
+
+    private static string NormalizeCoordinateLogValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
+    }
+
+    private static string FormatCoordinateLogValue(double? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+    }
+
     private static DevicePointDetailModel Empty(string pointId)
     {
         return new DevicePointDetailModel(
@@ -1248,7 +1318,7 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             string.Empty,
             string.Empty,
             string.Empty,
-            new PointCoordinateModel(0d, 0d, PointCoordinateStatus.Missing, false, "未配置经纬度"),
+            PointCoordinateParser.Missing(),
             null,
             string.Empty,
             string.Empty,
@@ -1268,12 +1338,7 @@ public sealed class CtyunDevicePointDetailService : IDevicePointDetailService
             _ => "未知"
         };
 
-        var coordinateStatus = coordinate.Status switch
-        {
-            PointCoordinateStatus.Valid => "坐标可落点",
-            PointCoordinateStatus.Missing or PointCoordinateStatus.Incomplete => "待校验",
-            _ => "坐标异常"
-        };
+        var coordinateStatus = PointBusinessSummaryFactory.ResolveCoordinateStatus(coordinate);
 
         return $"{onlineStatus} / {coordinateStatus} / 待接入";
     }

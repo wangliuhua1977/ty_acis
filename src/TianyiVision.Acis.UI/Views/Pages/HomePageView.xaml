@@ -145,6 +145,7 @@
     <Grid x:Name="RootMapStage" ClipToBounds="True" Background="{DynamicResource Theme.WorkbenchBackgroundBrush}">
         <controls:RealMapHost x:Name="RealMapHost"
                               Panel.ZIndex="0"
+                              HostContext="HomeMap"
                               ItemsSource="{Binding MapPoints}"
                               SelectedPointId="{Binding SelectedMapPointId}"
                               PointSelectedCommand="{Binding SelectMapPointCommand}"
