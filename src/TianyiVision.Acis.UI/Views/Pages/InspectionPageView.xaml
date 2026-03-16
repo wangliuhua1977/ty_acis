@@ -240,6 +240,67 @@
 
                     <Border Style="{StaticResource InspectionSectionCardStyle}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TasksSectionTitle}" />
+                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TasksSectionDescription}" />
+                            <Border Style="{StaticResource MutedPanelStyle}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskNameLabel}" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskName}" />
+                                    <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTypeLabel}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskTypeText}" />
+                                    <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTriggerLabel}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TriggerText}" />
+                                    <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionTaskStatusLabel}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.StatusText}" />
+                                    <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskScopeLabel}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.ScopePlanText}" />
+                                    <TextBlock Grid.Row="5" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskCurrentPointLabel}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.CurrentPointText}" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskSummaryLabel}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary}" />
+                            <TextBlock Margin="0,18,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskRecentListLabel}" />
+                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding RecentTasks}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource MutedPanelStyle}" Margin="0,0,0,12">
+                                            <StackPanel>
+                                                <DockPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding TaskName}" />
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StatusText}" />
+                                                </DockPanel>
+                                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Summary}" />
+                                                <WrapPanel Margin="0,10,0,0">
+                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskTypeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    <TextBlock Margin="8,0,16,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding TaskTypeText}" />
+                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    <TextBlock Margin="8,0,16,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding TimeText}" />
+                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskCurrentPointLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                    <TextBlock Margin="8,0,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentPointText}" />
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource InspectionSectionCardStyle}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ExecutionSectionTitle}" />
                             <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ExecutionSectionDescription}" />
                             <Grid>
@@ -248,6 +309,7 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -261,6 +323,8 @@
                                 <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.NextRunTime}" />
                                 <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionProgressLabel}" />
                                 <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentProgressText}" />
+                                <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding RunSummaryCurrentPointLabel}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentPointName}" />
                             </Grid>
                             <ProgressBar Margin="0,14,0,0" Height="10" Maximum="100" Value="{Binding ExecutionState.CurrentProgressValue}" />
                             <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ExecutionSimulationLabel}" />

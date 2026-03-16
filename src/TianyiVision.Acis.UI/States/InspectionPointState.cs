@@ -120,7 +120,13 @@ public sealed class InspectionPointState : ViewModelBase
     public InspectionPointStatus Status
     {
         get => _status;
-        set => SetProperty(ref _status, value);
+        set
+        {
+            if (SetProperty(ref _status, value))
+            {
+                OnPropertyChanged(nameof(MapColorCategory));
+            }
+        }
     }
 
     public InspectionPointStatus CompletionStatus { get; }
@@ -145,6 +151,9 @@ public sealed class InspectionPointState : ViewModelBase
 
     public PointBusinessSummaryState BusinessSummary { get; }
 
+    public MapPointColorCategory MapColorCategory
+        => ResolveMapColorCategory(Status, CompletionStatus);
+
     public bool IsSelected
     {
         get => _isSelected;
@@ -155,5 +164,20 @@ public sealed class InspectionPointState : ViewModelBase
     {
         get => _isCurrent;
         set => SetProperty(ref _isCurrent, value);
+    }
+
+    public static MapPointColorCategory ResolveMapColorCategory(
+        InspectionPointStatus status,
+        InspectionPointStatus completionStatus)
+    {
+        _ = completionStatus;
+
+        return status switch
+        {
+            InspectionPointStatus.Fault or InspectionPointStatus.PausedUntilRecovery => MapPointColorCategory.Fault,
+            InspectionPointStatus.Pending or InspectionPointStatus.Inspecting => MapPointColorCategory.Warning,
+            InspectionPointStatus.Silent => MapPointColorCategory.Neutral,
+            _ => MapPointColorCategory.Online
+        };
     }
 }

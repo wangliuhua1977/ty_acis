@@ -9,6 +9,7 @@ public sealed class InspectionTaskExecutionState : ViewModelBase
     private string _nextRunTime = string.Empty;
     private string _currentProgressText = string.Empty;
     private double _currentProgressValue;
+    private string _currentPointName = string.Empty;
     private string _simulationNote = string.Empty;
     private bool _isEnabled;
 
@@ -40,6 +41,12 @@ public sealed class InspectionTaskExecutionState : ViewModelBase
     {
         get => _currentProgressValue;
         set => SetProperty(ref _currentProgressValue, value);
+    }
+
+    public string CurrentPointName
+    {
+        get => _currentPointName;
+        set => SetProperty(ref _currentPointName, value);
     }
 
     public string SimulationNote

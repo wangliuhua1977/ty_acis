@@ -20,15 +20,13 @@ public partial class RealMapHost : UserControl
     private static readonly DrawingColor StageBackgroundColor = DrawingColor.FromArgb(0x07, 0x11, 0x1f);
     private static readonly object ColorRuleSyncRoot = new();
     private static readonly Dictionary<string, string> ColorRuleSignatures = new(StringComparer.Ordinal);
-    private static readonly IReadOnlyDictionary<MapPointVisualKind, MapVisualColorRule> VisualColorRules =
-        new Dictionary<MapPointVisualKind, MapVisualColorRule>
+    private static readonly IReadOnlyDictionary<MapPointColorCategory, MapVisualColorRule> VisualColorRules =
+        new Dictionary<MapPointColorCategory, MapVisualColorRule>
         {
-            [MapPointVisualKind.Normal] = new("Theme.SuccessBrush", "map.point.online", "#34D6A2"),
-            [MapPointVisualKind.Inspecting] = new("Theme.SuccessBrush", "map.point.online", "#34D6A2"),
-            [MapPointVisualKind.Fault] = new("Theme.DangerBrush", "map.point.fault", "#FF6C7A"),
-            [MapPointVisualKind.Key] = new("Theme.WarningBrush", "map.point.pending", "#F3B45B"),
-            [MapPointVisualKind.Silent] = new("Theme.TextSecondaryBrush", "map.point.neutral", "#9FB9D2"),
-            [MapPointVisualKind.Paused] = new("Theme.TextSecondaryBrush", "map.point.neutral", "#9FB9D2")
+            [MapPointColorCategory.Online] = new("Theme.SuccessBrush", "map.point.online", "#34D6A2"),
+            [MapPointColorCategory.Fault] = new("Theme.DangerBrush", "map.point.fault", "#FF4D4F"),
+            [MapPointColorCategory.Warning] = new("Theme.WarningBrush", "map.point.warning", "#C99026"),
+            [MapPointColorCategory.Neutral] = new("Theme.TextSecondaryBrush", "map.point.neutral", "#7F8EA3")
         };
     public static readonly DependencyProperty ItemsSourceProperty =
         DependencyProperty.Register(
@@ -375,10 +373,10 @@ public partial class RealMapHost : UserControl
         var stageBackground = ResolveColor("Theme.WorkbenchBackgroundBrush", "#07111f");
         var textPrimary = ResolveColor("Theme.TextPrimaryBrush", "#e8eef9");
         var labelBackground = ResolveColor("Theme.PanelBackgroundBrush", "#162235");
-        var online = ResolveColorRule(MapPointVisualKind.Normal);
-        var fault = ResolveColorRule(MapPointVisualKind.Fault);
-        var pending = ResolveColorRule(MapPointVisualKind.Key);
-        var neutral = ResolveColorRule(MapPointVisualKind.Silent);
+        var online = ResolveColorRule(MapPointColorCategory.Online);
+        var fault = ResolveColorRule(MapPointColorCategory.Fault);
+        var pending = ResolveColorRule(MapPointColorCategory.Warning);
+        var neutral = ResolveColorRule(MapPointColorCategory.Neutral);
         var selected = ResolveColor("Theme.TextPrimaryBrush", "#ffffff");
 
         MapPointSourceDiagnostics.Write("MapRender", $"{NormalizeHostContext()} incomingPointCount = {points.Count}");
@@ -410,7 +408,8 @@ public partial class RealMapHost : UserControl
                     businessSummaryCoordinateStatus = point.BusinessSummaryCoordinateStatus,
                     finalRenderable = ResolveFinalRenderable(point),
                     visualKind = point.VisualKind.ToString(),
-                    colorRuleKey = ResolveColorRule(point.VisualKind).ColorRuleKey,
+                    colorCategory = point.ColorCategory.ToString(),
+                    colorRuleKey = ResolveColorRule(point.ColorCategory).ColorRuleKey,
                     isSelected = point.IsSelected || string.Equals(point.PointId, SelectedPointId, StringComparison.Ordinal),
                     isCurrent = point.IsCurrent
                 })
@@ -595,18 +594,18 @@ public partial class RealMapHost : UserControl
         return string.IsNullOrWhiteSpace(HostContext) ? "Unknown" : HostContext.Trim();
     }
 
-    private static MapVisualColorRule ResolveColorRule(MapPointVisualKind visualKind)
+    private static MapVisualColorRule ResolveColorRule(MapPointColorCategory colorCategory)
     {
-        return VisualColorRules.TryGetValue(visualKind, out var rule)
-            ? rule with { ColorValue = ResolveColor(rule.ResourceKey, rule.FallbackColor) }
-            : new MapVisualColorRule("Theme.SuccessBrush", "map.point.online", "#34D6A2", ResolveColor("Theme.SuccessBrush", "#34D6A2"));
+        return VisualColorRules.TryGetValue(colorCategory, out var rule)
+            ? rule with { ColorValue = rule.FallbackColor }
+            : new MapVisualColorRule("Theme.SuccessBrush", "map.point.online", "#34D6A2", "#34D6A2");
     }
 
     private void LogPointRenderAudit(IEnumerable<MapPointState> points)
     {
         foreach (var point in points)
         {
-            var colorRule = ResolveColorRule(point.VisualKind);
+            var colorRule = ResolveColorRule(point.ColorCategory);
             var signature = string.Join(
                 "|",
                 [
@@ -621,6 +620,7 @@ public partial class RealMapHost : UserControl
                     NormalizeLogValue(point.BusinessSummaryCoordinateStatus),
                     ResolveFinalRenderable(point).ToString(),
                     point.VisualKind.ToString(),
+                    point.ColorCategory.ToString(),
                     colorRule.ColorRuleKey
                 ]);
 
@@ -634,7 +634,7 @@ public partial class RealMapHost : UserControl
             _pointAuditSignatures[auditKey] = signature;
             MapPointSourceDiagnostics.Write(
                 "MapRenderPoint",
-                $"{NormalizeHostContext()} pointId = {NormalizeLogValue(point.PointId)}, deviceCode = {NormalizeLogValue(point.DeviceCode)}, rawLongitude = {NormalizeLogValue(point.RawLongitude)}, rawLatitude = {NormalizeLogValue(point.RawLatitude)}, coordinateSystem = {point.RegisteredCoordinateSystem}, parsedLongitude = {FormatNullableDouble(point.RegisteredLongitude)}, parsedLatitude = {FormatNullableDouble(point.RegisteredLatitude)}, coordinateStatusEnum = {point.CoordinateStatus}, coordinateStatusText = {NormalizeLogValue(point.CoordinateStatusText)}, canRenderOnMap = {point.CanRenderOnMap}, mapLongitude = {FormatNullableDouble(point.MapLongitude)}, mapLatitude = {FormatNullableDouble(point.MapLatitude)}, mapSource = {NormalizeLogValue(point.MapSource)}, businessSummaryCoordinateStatus = {NormalizeLogValue(point.BusinessSummaryCoordinateStatus)}, finalRenderable = {ResolveFinalRenderable(point)}, visualState = {point.VisualKind}, colorRuleKey = {colorRule.ColorRuleKey}");
+                $"{NormalizeHostContext()} pointId = {NormalizeLogValue(point.PointId)}, deviceCode = {NormalizeLogValue(point.DeviceCode)}, rawLongitude = {NormalizeLogValue(point.RawLongitude)}, rawLatitude = {NormalizeLogValue(point.RawLatitude)}, coordinateSystem = {point.RegisteredCoordinateSystem}, parsedLongitude = {FormatNullableDouble(point.RegisteredLongitude)}, parsedLatitude = {FormatNullableDouble(point.RegisteredLatitude)}, coordinateStatusEnum = {point.CoordinateStatus}, coordinateStatusText = {NormalizeLogValue(point.CoordinateStatusText)}, canRenderOnMap = {point.CanRenderOnMap}, mapLongitude = {FormatNullableDouble(point.MapLongitude)}, mapLatitude = {FormatNullableDouble(point.MapLatitude)}, mapSource = {NormalizeLogValue(point.MapSource)}, businessSummaryCoordinateStatus = {NormalizeLogValue(point.BusinessSummaryCoordinateStatus)}, finalRenderable = {ResolveFinalRenderable(point)}, visualState = {point.VisualKind}, colorCategory = {point.ColorCategory}, colorRuleKey = {colorRule.ColorRuleKey}");
         }
     }
 

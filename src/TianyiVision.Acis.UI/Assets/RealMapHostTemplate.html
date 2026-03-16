@@ -11,9 +11,9 @@
       --text: #e8eef9;
       --label-bg: rgba(16, 35, 56, 0.88);
       --state-online: #34d6a2;
-      --state-fault: #ff6c7a;
-      --state-pending: #f3b45b;
-      --state-neutral: #9fb9d2;
+      --state-fault: #ff4d4f;
+      --state-warning: #c99026;
+      --state-neutral: #7f8ea3;
       --selected: #ffffff;
     }
 
@@ -72,7 +72,7 @@
     }
 
     .marker.selected .marker-dot {
-      box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22), 0 10px 18px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18), 0 0 0 7px rgba(255, 255, 255, 0.10), 0 10px 18px rgba(0, 0, 0, 0.4);
     }
 
     .marker.selected .marker-label {
@@ -205,20 +205,19 @@
       root.style.setProperty("--text", theme.textPrimary || "#e8eef9");
       root.style.setProperty("--label-bg", theme.labelBackground || "rgba(16, 35, 56, 0.88)");
       root.style.setProperty("--state-online", theme.online || "#34d6a2");
-      root.style.setProperty("--state-fault", theme.fault || "#ff6c7a");
-      root.style.setProperty("--state-pending", theme.pending || "#f3b45b");
-      root.style.setProperty("--state-neutral", theme.neutral || "#9fb9d2");
+      root.style.setProperty("--state-fault", theme.fault || "#ff4d4f");
+      root.style.setProperty("--state-warning", theme.pending || "#c99026");
+      root.style.setProperty("--state-neutral", theme.neutral || "#7f8ea3");
       root.style.setProperty("--selected", theme.selected || "#ffffff");
     }
 
-    function toneByKind(point) {
-      switch (point.visualKind) {
+    function toneByCategory(point) {
+      switch (point.colorCategory) {
         case "Fault":
           return "var(--state-fault)";
-        case "Key":
-          return "var(--state-pending)";
-        case "Silent":
-        case "Paused":
+        case "Warning":
+          return "var(--state-warning)";
+        case "Neutral":
           return "var(--state-neutral)";
         default:
           return "var(--state-online)";
@@ -238,7 +237,7 @@
 
     function buildMarkerContent(point) {
       return `
-        <div class="${markerClass(point)}" style="--tone:${toneByKind(point)};">
+        <div class="${markerClass(point)}" style="--tone:${toneByCategory(point)};">
           <div class="marker-dot"></div>
           <div class="marker-label">${escapeHtml(point.pointName)}</div>
         </div>`;

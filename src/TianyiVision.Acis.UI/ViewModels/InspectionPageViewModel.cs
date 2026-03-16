@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
@@ -17,7 +18,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly IInspectionTaskService _inspectionTaskService;
-    private readonly Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
+    private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _startSinglePointInspectionCommand;
     private readonly RelayCommand _openDispatchWorkspaceCommand;
@@ -34,6 +35,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private ObservableCollection<MapPointState> _mapPoints = [];
     private ObservableCollection<MapPointState> _unmappedPoints = [];
     private ObservableCollection<RecentFaultSummaryState> _recentFaults = [];
+    private InspectionTaskSummaryState? _currentTask;
+    private ObservableCollection<InspectionTaskSummaryState> _recentTasks = [];
     private PointBusinessSummaryState? _selectedPointSummary;
     private InspectionPointDetailState? _selectedPointDetail;
     private InspectionPointState? _selectedPoint;
@@ -74,6 +77,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         StrategyIntervalLabel = textService.Resolve(TextTokens.InspectionStrategyIntervalLabel);
         StrategyResultModeLabel = textService.Resolve(TextTokens.InspectionStrategyResultModeLabel);
         StrategyDispatchModeLabel = textService.Resolve(TextTokens.InspectionStrategyDispatchModeLabel);
+
+        TasksSectionTitle = textService.Resolve(TextTokens.InspectionTasksTitle);
+        TasksSectionDescription = textService.Resolve(TextTokens.InspectionTasksDescription);
+        TaskNameLabel = textService.Resolve(TextTokens.InspectionTaskNameLabel);
+        TaskTypeLabel = textService.Resolve(TextTokens.InspectionTaskTypeLabel);
+        TaskTriggerLabel = textService.Resolve(TextTokens.InspectionTaskTriggerLabel);
+        TaskScopeLabel = textService.Resolve(TextTokens.InspectionTaskScopeLabel);
+        TaskCurrentPointLabel = textService.Resolve(TextTokens.InspectionTaskCurrentPointLabel);
+        TaskSummaryLabel = textService.Resolve(TextTokens.InspectionTaskSummaryLabel);
+        TaskRecentListLabel = textService.Resolve(TextTokens.InspectionTaskRecentListLabel);
+        TaskTimeLabel = textService.Resolve(TextTokens.InspectionTaskTimeLabel);
+        TaskEmptyText = textService.Resolve(TextTokens.InspectionTaskEmptyText);
 
         ExecutionSectionTitle = textService.Resolve(TextTokens.InspectionExecutionTitle);
         ExecutionSectionDescription = textService.Resolve(TextTokens.InspectionExecutionDescription);
@@ -150,6 +165,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         SinglePointInspectionTaskStatusLabel = "当前任务状态";
         SinglePointInspectionLastTimeLabel = "最近一次巡检时间";
         SinglePointInspectionResultSummaryLabel = "最近一次结果摘要";
+        SinglePointInspectionTitle = textService.Resolve(TextTokens.InspectionSinglePointTitle);
+        SinglePointInspectionActionText = textService.Resolve(TextTokens.InspectionSinglePointActionText);
+        SinglePointInspectionPointNameLabel = textService.Resolve(TextTokens.InspectionSinglePointPointNameLabel);
+        SinglePointInspectionTaskStatusLabel = textService.Resolve(TextTokens.InspectionSinglePointTaskStatusLabel);
+        SinglePointInspectionLastTimeLabel = textService.Resolve(TextTokens.InspectionSinglePointLastTimeLabel);
+        SinglePointInspectionResultSummaryLabel = textService.Resolve(TextTokens.InspectionSinglePointResultSummaryLabel);
         InitializeReviewText(textService);
 
         SelectGroupCommand = new RelayCommand(parameter =>
@@ -188,7 +209,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             }
         });
 
-        _executeInspectionCommand = new RelayCommand(_ => SimulateInspectionExecution(), _ => ExecutionState?.IsEnabled == true);
+        _executeInspectionCommand = new RelayCommand(_ => StartGroupInspection(), _ => ExecutionState?.IsEnabled == true);
         _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspection(), _ => CanStartSinglePointInspection);
         _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
         _openReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
@@ -209,16 +230,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         SelectFirstUnmappedPointCommand = _selectFirstUnmappedPointCommand;
         ViewHistoryCommand = new RelayCommand(_ =>
         {
-            if (ExecutionState is not null)
-            {
-                ExecutionState.SimulationNote = _textService.Resolve(TextTokens.InspectionHistoryPlaceholder);
-            }
+            RequestRefreshWorkspace(SelectedGroup?.Id, SelectedPoint?.Id);
         });
         ToggleGroupCommand = new RelayCommand(_ => ToggleGroupEnabled());
         InitializeReviewCommands();
 
         _workspaceByGroupId = CreateWorkspaces(inspectionTaskService.GetWorkspace().Data);
         Groups = new ObservableCollection<InspectionGroupSummaryState>(_workspaceByGroupId.Values.Select(workspace => workspace.Group));
+        _inspectionTaskService.TaskBoardChanged += HandleTaskBoardChanged;
         LoadGroup(Groups.First(), _pointSelectionContext.CurrentSummary?.PointId);
     }
 
@@ -233,6 +252,17 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string StrategyIntervalLabel { get; }
     public string StrategyResultModeLabel { get; }
     public string StrategyDispatchModeLabel { get; }
+    public string TasksSectionTitle { get; }
+    public string TasksSectionDescription { get; }
+    public string TaskNameLabel { get; }
+    public string TaskTypeLabel { get; }
+    public string TaskTriggerLabel { get; }
+    public string TaskScopeLabel { get; }
+    public string TaskCurrentPointLabel { get; }
+    public string TaskSummaryLabel { get; }
+    public string TaskRecentListLabel { get; }
+    public string TaskTimeLabel { get; }
+    public string TaskEmptyText { get; }
     public string ExecutionSectionTitle { get; }
     public string ExecutionSectionDescription { get; }
     public string ExecutionExecutedTodayLabel { get; }
@@ -368,6 +398,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         get => _recentFaults;
         private set => SetProperty(ref _recentFaults, value);
+    }
+
+    public InspectionTaskSummaryState? CurrentTask
+    {
+        get => _currentTask;
+        private set => SetProperty(ref _currentTask, value);
+    }
+
+    public ObservableCollection<InspectionTaskSummaryState> RecentTasks
+    {
+        get => _recentTasks;
+        private set => SetProperty(ref _recentTasks, value);
     }
 
     public InspectionPointDetailState? SelectedPointDetail
@@ -526,6 +568,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         MapPoints = workspace.MapPoints;
         UnmappedPoints = new ObservableCollection<MapPointState>(workspace.MapPoints.Where(point => !point.CanRenderOnMap));
         RecentFaults = workspace.RecentFaults;
+        CurrentTask = workspace.CurrentTask;
+        RecentTasks = workspace.RecentTasks;
         _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
 
         ToggleGroupActionText = group.IsEnabled
@@ -553,6 +597,48 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         RefreshSummary(workspace);
         LoadReviewState(workspace, refreshFromPoints: false);
+    }
+
+    private void HandleTaskBoardChanged(object? sender, InspectionTaskBoardChangedEventArgs e)
+    {
+        if (Application.Current?.Dispatcher is { } dispatcher)
+        {
+            if (dispatcher.CheckAccess())
+            {
+                RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id);
+                return;
+            }
+
+            dispatcher.Invoke(() => RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id));
+            return;
+        }
+
+        RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id);
+    }
+
+    private void RequestRefreshWorkspace(string? preferredGroupId = null, string? preferredPointId = null)
+    {
+        var snapshot = _inspectionTaskService.GetWorkspace().Data;
+        _workspaceByGroupId = CreateWorkspaces(snapshot);
+
+        Groups.Clear();
+        foreach (var workspace in _workspaceByGroupId.Values)
+        {
+            Groups.Add(workspace.Group);
+        }
+
+        var targetGroup = !string.IsNullOrWhiteSpace(preferredGroupId)
+            ? Groups.FirstOrDefault(group => group.Id == preferredGroupId)
+            : null;
+        targetGroup ??= SelectedGroup is not null
+            ? Groups.FirstOrDefault(group => group.Id == SelectedGroup.Id)
+            : null;
+        targetGroup ??= Groups.FirstOrDefault();
+
+        if (targetGroup is not null)
+        {
+            LoadGroup(targetGroup, preferredPointId);
+        }
     }
 
     public void UpdateMapAvailability(bool isAvailable)
@@ -611,55 +697,32 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
-        var response = _inspectionTaskService.StartSinglePointInspection(SelectedPoint.Id);
-        workspace.SinglePointInspectionTasks[SelectedPoint.Id] = response.Data;
-        RefreshSinglePointInspectionSummary(workspace, SelectedPoint);
+        var response = _inspectionTaskService.StartSinglePointInspection(workspace.Group.Id, SelectedPoint.Id);
+        if (!response.IsSuccess)
+        {
+            ApplySinglePointInspectionRecord(response.Data, SelectedPoint);
+            return;
+        }
+
+        RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint.Id);
     }
 
-    private void SimulateInspectionExecution()
+    private void StartGroupInspection()
     {
         if (SelectedGroup is null || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
         {
             return;
         }
 
-        var activePoint = workspace.Points.FirstOrDefault(point => point.IsCurrent);
-        if (activePoint is not null)
+        var response = _inspectionTaskService.StartDefaultScopeInspection(workspace.Group.Id);
+        if (!response.IsSuccess)
         {
-            activePoint.IsCurrent = false;
-            if (activePoint.Status == InspectionPointStatus.Inspecting)
-            {
-                activePoint.Status = activePoint.CompletionStatus;
-                activePoint.IsSelected = false;
-                EnsureFaultSummary(activePoint, workspace.RecentFaults);
-            }
-
-            SyncMapPoint(activePoint, workspace.MapPoints);
+            workspace.ExecutionState.CurrentTaskStatus = ResolveTaskStatusText(response.Data.Status);
+            workspace.ExecutionState.SimulationNote = response.Data.Summary;
+            return;
         }
 
-        var nextPoint = workspace.Points.FirstOrDefault(point => point.Status == InspectionPointStatus.Pending);
-        if (nextPoint is not null)
-        {
-            nextPoint.Status = InspectionPointStatus.Inspecting;
-            nextPoint.IsCurrent = true;
-            workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
-            workspace.ExecutionState.SimulationNote = _textService.Resolve(TextTokens.InspectionSimulationTriggered);
-            SyncMapPoint(nextPoint, workspace.MapPoints);
-            SelectPoint(nextPoint);
-        }
-        else
-        {
-            workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusCompleted);
-            workspace.ExecutionState.SimulationNote = _textService.Resolve(TextTokens.InspectionSimulationCompleted);
-
-            if (activePoint is not null)
-            {
-                SelectPoint(activePoint);
-            }
-        }
-
-        RefreshSummary(workspace);
-        RefreshReviewStateAfterSimulation(workspace);
+        RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint?.Id);
     }
 
     private void ToggleGroupEnabled()
@@ -684,60 +747,74 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         RefreshSinglePointInspectionSummary(workspace, SelectedPoint);
     }
 
-    private void EnsureFaultSummary(InspectionPointState point, ObservableCollection<RecentFaultSummaryState> recentFaults)
-    {
-        if (point.Status != InspectionPointStatus.Fault && point.Status != InspectionPointStatus.PausedUntilRecovery)
-        {
-            return;
-        }
-
-        if (recentFaults.Any(item => item.PointId == point.Id))
-        {
-            return;
-        }
-
-        recentFaults.Insert(0, new RecentFaultSummaryState(point.Id, point.Name, point.FaultType, point.LastFaultTime));
-    }
-
     private void RefreshSummary(GroupWorkspaceState workspace)
     {
-        var totalPoints = workspace.Points.Count;
-        var normalCount = workspace.Points.Count(point => point.Status == InspectionPointStatus.Normal);
-        var faultCount = workspace.Points.Count(point => point.Status == InspectionPointStatus.Fault);
-        var inspectedCount = workspace.Points.Count(point =>
-            point.Status is InspectionPointStatus.Normal or InspectionPointStatus.Fault or InspectionPointStatus.Inspecting);
-        var inspectableCount = Math.Max(1, workspace.Points.Count(point =>
-            point.Status is not InspectionPointStatus.Silent and not InspectionPointStatus.PausedUntilRecovery));
+        var currentTask = workspace.TaskBoard.CurrentTask;
+        var totalPoints = currentTask?.TotalPointCount > 0 ? currentTask.TotalPointCount : workspace.Points.Count;
+        var normalCount = currentTask?.SuccessCount ?? workspace.Points.Count(point => point.Status == InspectionPointStatus.Normal);
+        var faultCount = currentTask?.FailureCount ?? workspace.Points.Count(point => point.Status == InspectionPointStatus.Fault);
+        var inspectedCount = currentTask is null
+            ? workspace.Points.Count(point => point.Status is InspectionPointStatus.Normal or InspectionPointStatus.Fault or InspectionPointStatus.Inspecting)
+            : currentTask.SuccessCount
+                + currentTask.FailureCount
+                + currentTask.SkippedCount
+                + (currentTask.Status == InspectionTaskStatusModel.Running ? 1 : 0);
+        var inspectableCount = Math.Max(1, totalPoints);
 
         workspace.RunSummary.GroupName = workspace.Group.Name;
+        workspace.RunSummary.StartedAt = currentTask?.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")
+            ?? currentTask?.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+            ?? workspace.RunSummary.StartedAt;
         workspace.RunSummary.TotalPoints = totalPoints.ToString();
         workspace.RunSummary.InspectedPoints = inspectedCount.ToString();
         workspace.RunSummary.NormalCount = normalCount.ToString();
         workspace.RunSummary.FaultCount = faultCount.ToString();
-        workspace.RunSummary.CurrentPointName = workspace.Points.FirstOrDefault(point => point.IsCurrent)?.Name ?? "--";
+        workspace.RunSummary.CurrentPointName = currentTask?.CurrentPointName ?? "--";
 
         workspace.ExecutionState.CurrentProgressValue = Math.Round(inspectedCount * 100d / inspectableCount, 0);
         workspace.ExecutionState.CurrentProgressText = $"{inspectedCount} / {inspectableCount}";
+        workspace.ExecutionState.CurrentPointName = currentTask?.CurrentPointName ?? "--";
+        workspace.ExecutionState.CurrentTaskStatus = currentTask is null
+            ? workspace.ExecutionState.CurrentTaskStatus
+            : ResolveTaskStatusText(currentTask.Status);
+        workspace.ExecutionState.SimulationNote = currentTask?.Summary ?? workspace.ExecutionState.SimulationNote;
     }
 
     private void RefreshSinglePointInspectionSummary(GroupWorkspaceState? workspace, InspectionPointState? point)
     {
-        SinglePointInspectionPointName = point?.Name ?? "暂无记录";
+        SinglePointInspectionPointName = point?.Name ?? TaskEmptyText;
 
-        if (workspace is null || point is null || !workspace.SinglePointInspectionTasks.TryGetValue(point.Id, out var record))
+        if (workspace is null || point is null)
         {
-            SinglePointInspectionTaskStatus = "暂无记录";
-            SinglePointInspectionLastTime = "暂无记录";
-            SinglePointInspectionResultSummary = "暂无记录";
+            SinglePointInspectionTaskStatus = TaskEmptyText;
+            SinglePointInspectionLastTime = TaskEmptyText;
+            SinglePointInspectionResultSummary = TaskEmptyText;
             return;
         }
 
-        SinglePointInspectionTaskStatus = record.TaskStatus.ToString();
+        var record = workspace.TaskBoard.RecentTasks
+            .FirstOrDefault(task => task.PointExecutions.Any(candidate => candidate.PointId == point.Id));
+        if (record is null)
+        {
+            SinglePointInspectionTaskStatus = TaskEmptyText;
+            SinglePointInspectionLastTime = TaskEmptyText;
+            SinglePointInspectionResultSummary = TaskEmptyText;
+            return;
+        }
+
+        ApplySinglePointInspectionRecord(record, point);
+    }
+
+    private void ApplySinglePointInspectionRecord(InspectionTaskRecordModel record, InspectionPointState point)
+    {
+        SinglePointInspectionPointName = point.Name;
+        SinglePointInspectionTaskStatus = ResolveTaskStatusText(record.Status);
         SinglePointInspectionLastTime = record.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss")
-            ?? record.StartedAt.ToString("yyyy-MM-dd HH:mm:ss");
-        SinglePointInspectionResultSummary = string.IsNullOrWhiteSpace(record.ResultSummary)
-            ? "待接入"
-            : record.ResultSummary;
+            ?? record.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")
+            ?? record.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
+        SinglePointInspectionResultSummary = string.IsNullOrWhiteSpace(record.Summary)
+            ? TaskEmptyText
+            : record.Summary;
     }
 
     private InspectionPointDetailState CreatePointDetail(
@@ -777,6 +854,37 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         };
     }
 
+    private string ResolveTaskTypeText(InspectionTaskTypeModel taskType)
+    {
+        return taskType switch
+        {
+            InspectionTaskTypeModel.SinglePoint => _textService.Resolve(TextTokens.InspectionTaskTypeSinglePoint),
+            InspectionTaskTypeModel.Batch => _textService.Resolve(TextTokens.InspectionTaskTypeBatch),
+            _ => _textService.Resolve(TextTokens.InspectionTaskTypeScopePlan)
+        };
+    }
+
+    private string ResolveTaskTriggerText(InspectionTaskTriggerModel triggerMode)
+    {
+        return triggerMode == InspectionTaskTriggerModel.Scheduled
+            ? _textService.Resolve(TextTokens.InspectionTaskTriggerScheduled)
+            : _textService.Resolve(TextTokens.InspectionTaskTriggerManual);
+    }
+
+    private string ResolveTaskStatusText(InspectionTaskStatusModel status)
+    {
+        return status switch
+        {
+            InspectionTaskStatusModel.Pending => _textService.Resolve(TextTokens.InspectionTaskStatusPending),
+            InspectionTaskStatusModel.Running => _textService.Resolve(TextTokens.InspectionTaskStatusExecuting),
+            InspectionTaskStatusModel.Completed => _textService.Resolve(TextTokens.InspectionTaskStatusCompletedBusiness),
+            InspectionTaskStatusModel.PartialFailure => _textService.Resolve(TextTokens.InspectionTaskStatusPartialFailure),
+            InspectionTaskStatusModel.Failed => _textService.Resolve(TextTokens.InspectionTaskStatusFailed),
+            InspectionTaskStatusModel.Cancelled => _textService.Resolve(TextTokens.InspectionTaskStatusCancelled),
+            _ => TaskEmptyText
+        };
+    }
+
     private Dictionary<string, GroupWorkspaceState> CreateWorkspaces(InspectionWorkspaceSnapshot snapshot)
     {
         return snapshot.Groups
@@ -784,6 +892,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             {
                 var inspectionPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Select(CreatePoint));
                 var mapPoints = new ObservableCollection<MapPointState>(inspectionPoints.Select(CreateMapPoint));
+                var taskBoard = workspace.TaskBoard;
+                var currentTask = taskBoard.CurrentTask is null
+                    ? null
+                    : CreateTaskSummaryState(taskBoard.CurrentTask);
+                var recentTasks = new ObservableCollection<InspectionTaskSummaryState>(taskBoard.RecentTasks.Select(CreateTaskSummaryState));
 
                 return new GroupWorkspaceState(
                     new InspectionGroupSummaryState(
@@ -800,6 +913,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                     CreateExecutionState(workspace.Execution),
                     CreateRunSummary(workspace.RunSummary),
                     workspace.TaskFinishedAt,
+                    taskBoard,
+                    currentTask,
+                    recentTasks,
                     inspectionPoints,
                     mapPoints,
                     new ObservableCollection<RecentFaultSummaryState>(workspace.RecentFaults.Select(CreateRecentFault)));
@@ -816,6 +932,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             NextRunTime = execution.NextRunTime,
             CurrentProgressText = "0 / 0",
             CurrentProgressValue = 0,
+            CurrentPointName = "--",
             SimulationNote = execution.SimulationNote,
             IsEnabled = execution.IsEnabled
         };
@@ -847,8 +964,27 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             NextRunTime = nextRunTime,
             CurrentProgressText = "0 / 0",
             CurrentProgressValue = 0,
+            CurrentPointName = "--",
             SimulationNote = _textService.Resolve(TextTokens.InspectionHistoryPlaceholder),
             IsEnabled = isEnabled
+        };
+    }
+
+    private InspectionTaskSummaryState CreateTaskSummaryState(InspectionTaskRecordModel task)
+    {
+        return new InspectionTaskSummaryState
+        {
+            TaskId = task.TaskId,
+            TaskName = task.TaskName,
+            TaskTypeText = ResolveTaskTypeText(task.TaskType),
+            TriggerText = ResolveTaskTriggerText(task.TriggerMode),
+            StatusText = ResolveTaskStatusText(task.Status),
+            ScopePlanText = string.IsNullOrWhiteSpace(task.ScopePlanName) ? TaskEmptyText : task.ScopePlanName,
+            CurrentPointText = string.IsNullOrWhiteSpace(task.CurrentPointName) ? "--" : task.CurrentPointName,
+            TimeText = task.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss")
+                ?? task.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")
+                ?? task.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+            Summary = string.IsNullOrWhiteSpace(task.Summary) ? TaskEmptyText : task.Summary
         };
     }
 
@@ -1181,6 +1317,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.X,
             point.Y,
             ResolveMapVisualKind(point),
+            point.MapColorCategory,
             ResolvePointStatus(point.Status),
             point.FaultType,
             point.FaultDescription,
@@ -1198,6 +1335,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         mapPoint.VisualKind = ResolveMapVisualKind(point);
+        mapPoint.ColorCategory = point.MapColorCategory;
         mapPoint.StatusText = ResolvePointStatus(point.Status);
         mapPoint.FaultType = point.FaultType;
         mapPoint.Summary = point.FaultDescription;
@@ -1225,6 +1363,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             InspectionTaskExecutionState executionState,
             InspectionRunSummaryState runSummary,
             string taskFinishedAt,
+            InspectionTaskBoardModel taskBoard,
+            InspectionTaskSummaryState? currentTask,
+            ObservableCollection<InspectionTaskSummaryState> recentTasks,
             ObservableCollection<InspectionPointState> points,
             ObservableCollection<MapPointState> mapPoints,
             ObservableCollection<RecentFaultSummaryState> recentFaults)
@@ -1234,10 +1375,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ExecutionState = executionState;
             RunSummary = runSummary;
             TaskFinishedAt = taskFinishedAt;
+            TaskBoard = taskBoard;
+            CurrentTask = currentTask;
+            RecentTasks = recentTasks;
             Points = points;
             MapPoints = mapPoints;
             RecentFaults = recentFaults;
-            SinglePointInspectionTasks = new Dictionary<string, SingleInspectionTaskRecordModel>(StringComparer.Ordinal);
         }
 
         public InspectionGroupSummaryState Group { get; }
@@ -1245,10 +1388,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         public InspectionTaskExecutionState ExecutionState { get; }
         public InspectionRunSummaryState RunSummary { get; }
         public string TaskFinishedAt { get; }
+        public InspectionTaskBoardModel TaskBoard { get; }
+        public InspectionTaskSummaryState? CurrentTask { get; }
+        public ObservableCollection<InspectionTaskSummaryState> RecentTasks { get; }
         public ObservableCollection<InspectionPointState> Points { get; }
         public ObservableCollection<MapPointState> MapPoints { get; }
         public ObservableCollection<RecentFaultSummaryState> RecentFaults { get; }
-        public Dictionary<string, SingleInspectionTaskRecordModel> SinglePointInspectionTasks { get; }
         public InspectionReviewTaskSummaryState? ReviewSummary { get; set; }
         public ObservableCollection<InspectionReviewCardState>? ReviewCards { get; set; }
         public InspectionReviewFilterState? ReviewFilter { get; set; }

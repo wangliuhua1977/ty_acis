@@ -5,6 +5,11 @@ namespace TianyiVision.Acis.UI.States;
 
 public enum SettingsSectionKey
 {
+    InspectionScopePlans,
+    InspectionAlertStrategy,
+    InspectionDispatchStrategy,
+    InspectionVideoStrategy,
+    InspectionTaskExecution,
     InspectionGroups,
     PointManagement,
     ResponsibilityMapping,

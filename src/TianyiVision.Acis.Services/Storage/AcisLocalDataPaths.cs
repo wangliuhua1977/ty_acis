@@ -36,4 +36,10 @@ public sealed class AcisLocalDataPaths
     public string DispatchNotificationHistoryFile => Path.Combine(DispatchDirectory, "dispatch-notification-history.json");
 
     public string DispatchWorkOrderSnapshotFile => Path.Combine(DispatchDirectory, "dispatch-workorders.json");
+
+    public string InspectionDirectory => Path.Combine(ConfigDirectory, "inspection");
+
+    public string InspectionSettingsFile => Path.Combine(InspectionDirectory, "inspection-settings.json");
+
+    public string InspectionTaskHistoryFile => Path.Combine(InspectionDirectory, "inspection-task-history.json");
 }

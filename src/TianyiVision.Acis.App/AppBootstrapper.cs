@@ -58,6 +58,7 @@ public sealed class AppBootstrapper
     private readonly ILocalConfigurationBootstrapService _localConfigurationBootstrapService;
     private readonly IHomeDashboardService _homeDashboardService;
     private readonly IInspectionTaskService _inspectionTaskService;
+    private readonly IInspectionSettingsService _inspectionSettingsService;
     private readonly IDispatchNotificationService _dispatchNotificationService;
     private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
     private readonly INotificationSettingsService _notificationSettingsService;
@@ -78,12 +79,14 @@ public sealed class AppBootstrapper
         var responsibilitySettings = responsibilitySettingsService.Load();
         var notificationHistoryService = new FileDispatchNotificationHistoryService(paths, documentStore);
         var workOrderSnapshotService = new FileDispatchWorkOrderSnapshotService(paths, documentStore);
+        var inspectionSettingsService = new FileInspectionSettingsService(paths, documentStore);
+        var inspectionTaskHistoryStore = new FileInspectionTaskHistoryStore(paths, documentStore);
+        var inspectionPointCheckExecutor = new ReservedInspectionPointCheckExecutor();
         var platformSettings = platformIntegrationSettingsService.Load();
         var ctyunConfigurationIssues = platformSettings.GetCtyunConfigurationIssues();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
         var demoAlertQueryService = new DemoAlertQueryService();
         var demoHomeDashboardService = new DemoHomeDashboardService();
-        var demoInspectionTaskService = new DemoInspectionTaskService();
         var demoDispatchNotificationService = new DemoDispatchNotificationService();
         var demoDispatchResponsibilityService = new DemoDispatchResponsibilityService(demoDispatchNotificationService);
         var demoReportDataService = new DemoReportDataService();
@@ -104,6 +107,7 @@ public sealed class AppBootstrapper
         _pointSelectionContext = new PointSelectionContext();
         _notificationSettingsService = notificationSettingsService;
         _dispatchResponsibilitySettingsService = responsibilitySettingsService;
+        _inspectionSettingsService = inspectionSettingsService;
         _homeOverlayLayoutService = new FileHomeOverlayLayoutService(paths, documentStore);
         _appPreferencesService = new FileAppPreferencesService(paths, documentStore);
         _localConfigurationBootstrapService = new LocalConfigurationBootstrapService(
@@ -131,7 +135,11 @@ public sealed class AppBootstrapper
         var pointWorkspaceService = new ConfigDrivenPointWorkspaceService(deviceWorkspaceService, faultPoolService);
         var dispatchNotificationSender = BuildDispatchNotificationSender(notificationSettings, notificationSettingsService);
         _homeDashboardService = new ConfigDrivenHomeDashboardService(pointWorkspaceService, demoHomeDashboardService);
-        _inspectionTaskService = new ConfigDrivenInspectionTaskService(pointWorkspaceService, demoInspectionTaskService);
+        _inspectionTaskService = new ConfigDrivenInspectionTaskService(
+            pointWorkspaceService,
+            inspectionSettingsService,
+            inspectionTaskHistoryStore,
+            inspectionPointCheckExecutor);
         _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
             faultPoolService,
             dispatchNotificationSender,
@@ -207,6 +215,7 @@ public sealed class AppBootstrapper
                 _textService,
                 _themeService,
                 _appPreferencesService,
+                _inspectionSettingsService,
                 _dispatchResponsibilitySettingsService,
                 _notificationSettingsService,
                 theme => ApplyTheme(applicationResources, theme))

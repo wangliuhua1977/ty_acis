@@ -5,6 +5,7 @@ using System.Windows.Media;
 using TianyiVision.Acis.Core.Localization;
 using TianyiVision.Acis.Core.Theming;
 using TianyiVision.Acis.Services.Configuration;
+using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.Services.Settings;
 using TianyiVision.Acis.Services.Theming;
@@ -33,6 +34,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
 
     private readonly Action<ThemeDefinition> _applyThemeToApplication;
     private readonly IAppPreferencesService _appPreferencesService;
+    private readonly IInspectionSettingsService _inspectionSettingsService;
     private readonly IDispatchResponsibilitySettingsService _dispatchResponsibilitySettingsService;
     private readonly INotificationSettingsService _notificationSettingsService;
     private readonly Dictionary<string, ThemeEditorFieldState> _themeFields = new(StringComparer.Ordinal);
@@ -54,6 +56,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         ITextService textService,
         IThemeService themeService,
         IAppPreferencesService appPreferencesService,
+        IInspectionSettingsService inspectionSettingsService,
         IDispatchResponsibilitySettingsService dispatchResponsibilitySettingsService,
         INotificationSettingsService notificationSettingsService,
         Action<ThemeDefinition> applyThemeToApplication)
@@ -64,6 +67,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         _textService = textService;
         _themeService = themeService;
         _appPreferencesService = appPreferencesService;
+        _inspectionSettingsService = inspectionSettingsService;
         _dispatchResponsibilitySettingsService = dispatchResponsibilitySettingsService;
         _notificationSettingsService = notificationSettingsService;
         _applyThemeToApplication = applyThemeToApplication;
@@ -121,7 +125,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
         TerminologyItems = CreateTerminologySchemes();
         TerminologyGroups = CreateTerminologyGroups();
         TerminologyPreview = new TerminologyPreviewState();
-        InitializeConfigSelections();
+        InitializeInspectionSettings();
 
         HookThemeEditor();
         HookTerminologyEditor();
@@ -138,7 +142,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
             item.IsApplied = item.Id == textService.ActiveProfile.Id;
         }
 
-        SelectSection(SettingsSectionKey.ThemeCenter);
+        SelectSection(SettingsSectionKey.InspectionScopePlans);
     }
 
     public ObservableCollection<SettingsSectionState> SectionItems { get; }
@@ -237,7 +241,7 @@ public sealed partial class SettingsPageViewModel : PageViewModelBase
 
     public bool IsPlaceholderSectionVisible => false;
 
-    public SettingsSectionKey SelectedSectionKey => SelectedSection?.Key ?? SettingsSectionKey.ThemeCenter;
+    public SettingsSectionKey SelectedSectionKey => SelectedSection?.Key ?? SettingsSectionKey.InspectionScopePlans;
 
     public void ActivateSection(SettingsSectionKey key)
         => SelectSection(key);

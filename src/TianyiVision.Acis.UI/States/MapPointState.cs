@@ -3,9 +3,18 @@ using TianyiVision.Acis.Services.Devices;
 
 namespace TianyiVision.Acis.UI.States;
 
+public enum MapPointColorCategory
+{
+    Online = 0,
+    Fault = 1,
+    Warning = 2,
+    Neutral = 3
+}
+
 public sealed class MapPointState : ViewModelBase
 {
     private MapPointVisualKind _visualKind;
+    private MapPointColorCategory _colorCategory;
     private string _statusText;
     private string _faultType;
     private string _summary;
@@ -35,6 +44,7 @@ public sealed class MapPointState : ViewModelBase
         double x,
         double y,
         MapPointVisualKind visualKind,
+        MapPointColorCategory colorCategory,
         string statusText,
         string faultType,
         string summary,
@@ -62,6 +72,7 @@ public sealed class MapPointState : ViewModelBase
         X = x;
         Y = y;
         _visualKind = visualKind;
+        _colorCategory = colorCategory;
         _statusText = statusText;
         _faultType = faultType;
         _summary = summary;
@@ -119,6 +130,12 @@ public sealed class MapPointState : ViewModelBase
     {
         get => _visualKind;
         set => SetProperty(ref _visualKind, value);
+    }
+
+    public MapPointColorCategory ColorCategory
+    {
+        get => _colorCategory;
+        set => SetProperty(ref _colorCategory, value);
     }
 
     public string StatusText

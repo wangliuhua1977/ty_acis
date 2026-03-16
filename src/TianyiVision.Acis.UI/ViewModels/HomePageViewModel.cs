@@ -339,6 +339,7 @@ public sealed class HomePageViewModel : PageViewModelBase
             point.X,
             point.Y,
             MapPointKind(point.Kind),
+            ResolveMapColorCategory(point),
             point.StatusText,
             point.FaultType,
             point.Summary,
@@ -390,6 +391,16 @@ public sealed class HomePageViewModel : PageViewModelBase
             HomeMapPointKindModel.Inspecting => MapPointVisualKind.Inspecting,
             HomeMapPointKindModel.Key => MapPointVisualKind.Key,
             _ => MapPointVisualKind.Normal
+        };
+    }
+
+    private static MapPointColorCategory ResolveMapColorCategory(HomeMapPointModel point)
+    {
+        return point.Kind switch
+        {
+            HomeMapPointKindModel.Fault => MapPointColorCategory.Fault,
+            HomeMapPointKindModel.Inspecting => MapPointColorCategory.Warning,
+            _ => MapPointColorCategory.Online
         };
     }
 

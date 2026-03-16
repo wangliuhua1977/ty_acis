@@ -55,7 +55,7 @@ public sealed class TerminologyCatalogProvider : ITerminologyCatalogProvider
 
     private static IReadOnlyDictionary<string, string> CreateBaseTextEntries()
     {
-        return new Dictionary<string, string>(StringComparer.Ordinal)
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [TextTokens.ApplicationName] = "天翼视联 AI 智能巡检系统",
             [TextTokens.ShellCurrentUserLabel] = "当前用户",
@@ -676,5 +676,98 @@ public sealed class TerminologyCatalogProvider : ITerminologyCatalogProvider
             [TextTokens.SettingsTerminologySaveAsFeedbackPattern] = "已另存为新术语方案“{0}”。",
             [TextTokens.SettingsTerminologyRestoreFeedbackPattern] = "已恢复默认术语方案“{0}”。"
         };
+
+        AppendInspectionSettingsTextEntries(entries);
+        return entries;
+    }
+
+    private static void AppendInspectionSettingsTextEntries(IDictionary<string, string> entries)
+    {
+        entries[TextTokens.ApplicationName] = "AI智能巡检中心";
+        entries[TextTokens.SettingsSectionInspectionScopePlansTitle] = "巡检范围方案";
+        entries[TextTokens.SettingsSectionInspectionScopePlansDescription] = "管理纳管范围、排除点位和重点关注点位。";
+        entries[TextTokens.SettingsSectionInspectionAlertStrategyTitle] = "AI告警与巡检策略";
+        entries[TextTokens.SettingsSectionInspectionAlertStrategyDescription] = "管理启用的 AI 告警类型、全局策略和点位覆盖策略。";
+        entries[TextTokens.SettingsSectionInspectionDispatchStrategyTitle] = "派单策略";
+        entries[TextTokens.SettingsSectionInspectionDispatchStrategyDescription] = "管理自动派单、人工确认派单及点位级覆盖策略。";
+        entries[TextTokens.SettingsSectionInspectionVideoStrategyTitle] = "视频巡检与截图策略";
+        entries[TextTokens.SettingsSectionInspectionVideoStrategyDescription] = "管理播放超时、截图取证、复检和证据留存策略。";
+        entries[TextTokens.SettingsSectionInspectionTaskExecutionTitle] = "任务执行设置";
+        entries[TextTokens.SettingsSectionInspectionTaskExecutionDescription] = "管理单点、批量、定时预留、并发预留和任务命名规则。";
+        entries[TextTokens.SettingsActionNew] = "新建";
+        entries[TextTokens.SettingsActionSave] = "保存";
+        entries[TextTokens.SettingsActionDelete] = "删除";
+        entries[TextTokens.SettingsActionReload] = "重新读取";
+        entries[TextTokens.SettingsInspectionScopePlansPageTitle] = "AI智能巡检中心范围方案";
+        entries[TextTokens.SettingsInspectionScopePlansPageDescription] = "支持按区域、目录、点位纳管，并可排除指定点位和标记重点关注点位。";
+        entries[TextTokens.SettingsInspectionAlertStrategyPageTitle] = "AI告警与巡检策略设置";
+        entries[TextTokens.SettingsInspectionAlertStrategyPageDescription] = "在线状态作为基础必选项，统一承接接口判定和本地截图分析策略。";
+        entries[TextTokens.SettingsInspectionDispatchStrategyPageTitle] = "派单策略设置";
+        entries[TextTokens.SettingsInspectionDispatchStrategyPageDescription] = "支持全局策略与点位覆盖策略，为后续故障闭环直接提供派单规则。";
+        entries[TextTokens.SettingsInspectionVideoStrategyPageTitle] = "视频巡检与截图策略设置";
+        entries[TextTokens.SettingsInspectionVideoStrategyPageDescription] = "为视频播放、截图取证、播放失败重试和证据保留提供统一基础配置。";
+        entries[TextTokens.SettingsInspectionTaskExecutionPageTitle] = "任务执行设置";
+        entries[TextTokens.SettingsInspectionTaskExecutionPageDescription] = "为单点巡检、批量巡检和后续定时任务骨架提供可持久化执行参数。";
+        entries[TextTokens.SettingsInspectionScopeNameLabel] = "方案名称";
+        entries[TextTokens.SettingsInspectionScopeDescriptionLabel] = "方案说明";
+        entries[TextTokens.SettingsInspectionScopeIncludedRegionsLabel] = "纳管区域";
+        entries[TextTokens.SettingsInspectionScopeIncludedDirectoriesLabel] = "纳管目录";
+        entries[TextTokens.SettingsInspectionScopeIncludedPointsLabel] = "纳管点位";
+        entries[TextTokens.SettingsInspectionScopeExcludedPointsLabel] = "排除点位";
+        entries[TextTokens.SettingsInspectionScopeFocusPointsLabel] = "重点关注点位";
+        entries[TextTokens.SettingsInspectionScopeEnabledLabel] = "启用方案";
+        entries[TextTokens.SettingsInspectionScopeDefaultLabel] = "设为默认方案";
+        entries[TextTokens.SettingsInspectionAlertTypesTitle] = "启用的AI告警类型";
+        entries[TextTokens.SettingsInspectionAlertGlobalPolicyTitle] = "全局巡检策略";
+        entries[TextTokens.SettingsInspectionAlertOverrideListTitle] = "点位覆盖策略";
+        entries[TextTokens.SettingsInspectionAlertOverrideEditorTitle] = "点位覆盖编辑";
+        entries[TextTokens.SettingsInspectionPointIdLabel] = "点位编号";
+        entries[TextTokens.SettingsInspectionPointNameLabel] = "点位名称";
+        entries[TextTokens.SettingsInspectionUseGlobalAlertTypesLabel] = "沿用全局告警类型";
+        entries[TextTokens.SettingsInspectionPolicyOnlineLabel] = "在线状态检查";
+        entries[TextTokens.SettingsInspectionPolicyOnlineDescription] = "基础必选项，所有点位都要先完成在线状态检查。";
+        entries[TextTokens.SettingsInspectionPolicyPlaybackLabel] = "播放检查";
+        entries[TextTokens.SettingsInspectionPolicyPlaybackDescription] = "支持播放失败重试和协议切换重试的前置策略控制。";
+        entries[TextTokens.SettingsInspectionPolicyInterfaceAiLabel] = "启用接口判定";
+        entries[TextTokens.SettingsInspectionPolicyInterfaceAiDescription] = "对接平台 AI 告警能力，作为异常判定的重要来源。";
+        entries[TextTokens.SettingsInspectionPolicyLocalAnalysisLabel] = "启用本地截图分析";
+        entries[TextTokens.SettingsInspectionPolicyLocalAnalysisDescription] = "为后续本地截图取证和 AI 判定预留统一开关。";
+        entries[TextTokens.SettingsInspectionPolicyReviewWallLabel] = "异常先上墙复核";
+        entries[TextTokens.SettingsInspectionPolicyReviewWallDescription] = "关闭后异常结果可直接进入派单策略。";
+        entries[TextTokens.SettingsInspectionAlertTypeImageAbnormal] = "画面异常";
+        entries[TextTokens.SettingsInspectionAlertTypeImageAbnormalDescription] = "适用于黑屏、花屏、遮挡等画面类异常。";
+        entries[TextTokens.SettingsInspectionAlertTypeRegionIntrusion] = "区域入侵";
+        entries[TextTokens.SettingsInspectionAlertTypeRegionIntrusionDescription] = "适用于重点区域越界、入侵和停留告警。";
+        entries[TextTokens.SettingsInspectionAlertTypeFire] = "火情告警";
+        entries[TextTokens.SettingsInspectionAlertTypeFireDescription] = "适用于明火、烟雾等高优先级风险告警。";
+        entries[TextTokens.SettingsInspectionAlertTypePassengerFlow] = "客流异常";
+        entries[TextTokens.SettingsInspectionAlertTypePassengerFlowDescription] = "适用于重点区域人流激增、聚集等运营场景。";
+        entries[TextTokens.SettingsInspectionAlertTypeFaceOrPlate] = "人脸/车牌布控";
+        entries[TextTokens.SettingsInspectionAlertTypeFaceOrPlateDescription] = "适用于重点对象布控命中和过车布控场景。";
+        entries[TextTokens.SettingsInspectionDispatchGlobalModeLabel] = "全局派单策略";
+        entries[TextTokens.SettingsInspectionDispatchOverrideListTitle] = "点位派单覆盖";
+        entries[TextTokens.SettingsInspectionDispatchOverrideEditorTitle] = "点位派单规则编辑";
+        entries[TextTokens.SettingsInspectionDispatchModeAuto] = "自动派单";
+        entries[TextTokens.SettingsInspectionDispatchModeManualConfirm] = "人工确认派单";
+        entries[TextTokens.SettingsInspectionVideoPlaybackTimeoutLabel] = "播放超时秒数";
+        entries[TextTokens.SettingsInspectionVideoScreenshotCountLabel] = "截图张数";
+        entries[TextTokens.SettingsInspectionVideoScreenshotIntervalLabel] = "截图间隔秒数";
+        entries[TextTokens.SettingsInspectionVideoRetryCountLabel] = "播放失败重试次数";
+        entries[TextTokens.SettingsInspectionVideoReinspectionIntervalLabel] = "复检间隔（分钟）";
+        entries[TextTokens.SettingsInspectionVideoEvidenceRetentionModeLabel] = "证据保留策略";
+        entries[TextTokens.SettingsInspectionVideoEvidenceRetentionDaysLabel] = "证据保留天数";
+        entries[TextTokens.SettingsInspectionVideoAllowManualSupplementLabel] = "允许人工补截图";
+        entries[TextTokens.SettingsInspectionVideoEnableProtocolFallbackLabel] = "启用协议切换重试";
+        entries[TextTokens.SettingsInspectionVideoEvidenceKeepDays] = "按天数保留";
+        entries[TextTokens.SettingsInspectionVideoEvidenceKeepLatest] = "仅保留最新任务证据";
+        entries[TextTokens.SettingsInspectionVideoEvidenceManualCleanup] = "人工清理";
+        entries[TextTokens.SettingsInspectionTaskEnableSingleLabel] = "启用单点巡检";
+        entries[TextTokens.SettingsInspectionTaskEnableBatchLabel] = "启用批量巡检";
+        entries[TextTokens.SettingsInspectionTaskReserveScheduledLabel] = "保留定时任务入口";
+        entries[TextTokens.SettingsInspectionTaskReservedMaxConcurrencyLabel] = "最大并发数预留";
+        entries[TextTokens.SettingsInspectionTaskNamePatternLabel] = "默认任务命名规则";
+        entries[TextTokens.SettingsInspectionTaskSerialExecutionLabel] = "同组串行执行（固定规则）";
+        entries[TextTokens.SettingsInspectionSaveFeedbackPattern] = "{0}已保存到本地配置。";
+        entries[TextTokens.SettingsInspectionReloadFeedback] = "AI智能巡检中心设置已从本地重新读取。";
     }
 }

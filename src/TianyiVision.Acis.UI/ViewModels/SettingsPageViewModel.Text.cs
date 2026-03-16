@@ -91,29 +91,29 @@ public sealed partial class SettingsPageViewModel
         return
         [
             new SettingsSectionState(
-                SettingsSectionKey.InspectionGroups,
-                _textService.Resolve(TextTokens.SettingsSectionInspectionGroupsTitle),
-                _textService.Resolve(TextTokens.SettingsSectionInspectionGroupsDescription),
+                SettingsSectionKey.InspectionScopePlans,
+                _textService.Resolve(TextTokens.SettingsSectionInspectionScopePlansTitle),
+                _textService.Resolve(TextTokens.SettingsSectionInspectionScopePlansDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
-                SettingsSectionKey.PointManagement,
-                _textService.Resolve(TextTokens.SettingsSectionPointsTitle),
-                _textService.Resolve(TextTokens.SettingsSectionPointsDescription),
+                SettingsSectionKey.InspectionAlertStrategy,
+                _textService.Resolve(TextTokens.SettingsSectionInspectionAlertStrategyTitle),
+                _textService.Resolve(TextTokens.SettingsSectionInspectionAlertStrategyDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
-                SettingsSectionKey.ResponsibilityMapping,
-                _textService.Resolve(TextTokens.SettingsSectionResponsibilityTitle),
-                _textService.Resolve(TextTokens.SettingsSectionResponsibilityDescription),
+                SettingsSectionKey.InspectionDispatchStrategy,
+                _textService.Resolve(TextTokens.SettingsSectionInspectionDispatchStrategyTitle),
+                _textService.Resolve(TextTokens.SettingsSectionInspectionDispatchStrategyDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
-                SettingsSectionKey.NotificationChannels,
-                "通知通道管理",
-                "管理企业微信群 webhook 通道、默认通道与 demo fallback 开关。",
+                SettingsSectionKey.InspectionVideoStrategy,
+                _textService.Resolve(TextTokens.SettingsSectionInspectionVideoStrategyTitle),
+                _textService.Resolve(TextTokens.SettingsSectionInspectionVideoStrategyDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
-                SettingsSectionKey.VideoProtocolStrategy,
-                _textService.Resolve(TextTokens.SettingsSectionVideoStrategyTitle),
-                _textService.Resolve(TextTokens.SettingsSectionVideoStrategyDescription),
+                SettingsSectionKey.InspectionTaskExecution,
+                _textService.Resolve(TextTokens.SettingsSectionInspectionTaskExecutionTitle),
+                _textService.Resolve(TextTokens.SettingsSectionInspectionTaskExecutionDescription),
                 SelectSectionCommand),
             new SettingsSectionState(
                 SettingsSectionKey.ThemeCenter,

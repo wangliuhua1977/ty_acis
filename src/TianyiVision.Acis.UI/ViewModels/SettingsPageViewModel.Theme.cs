@@ -123,11 +123,11 @@ public sealed partial class SettingsPageViewModel
             item.IsSelected = item.Key == key;
         }
 
-        OnPropertyChanged(nameof(IsInspectionGroupsVisible));
-        OnPropertyChanged(nameof(IsPointsVisible));
-        OnPropertyChanged(nameof(IsResponsibilityVisible));
-        OnPropertyChanged(nameof(IsNotificationChannelsVisible));
-        OnPropertyChanged(nameof(IsVideoStrategyVisible));
+        OnPropertyChanged(nameof(IsInspectionScopePlansVisible));
+        OnPropertyChanged(nameof(IsInspectionAlertStrategyVisible));
+        OnPropertyChanged(nameof(IsInspectionDispatchStrategyVisible));
+        OnPropertyChanged(nameof(IsInspectionVideoStrategyVisible));
+        OnPropertyChanged(nameof(IsInspectionTaskExecutionVisible));
 
         if (IsPlaceholderSectionVisible)
         {
