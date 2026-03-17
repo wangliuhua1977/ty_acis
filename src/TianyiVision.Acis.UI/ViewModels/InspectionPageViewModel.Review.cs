@@ -173,6 +173,14 @@ public sealed partial class InspectionPageViewModel
             return;
         }
 
+        CommitReviewDispatch(workspace.ReviewCards.Select(card => card.PointId).ToList());
+
+        workspace = GetCurrentWorkspace();
+        if (workspace?.ReviewCards is null)
+        {
+            return;
+        }
+
         foreach (var card in workspace.ReviewCards)
         {
             SetCardReviewState(card, InspectionReviewStatus.Reviewed);
@@ -193,9 +201,24 @@ public sealed partial class InspectionPageViewModel
             return;
         }
 
-        SetCardReviewState(SelectedReviewCard, InspectionReviewStatus.Reviewed);
+        var pointId = SelectedReviewCard.PointId;
+        CommitReviewDispatch(new[] { pointId });
+
+        workspace = GetCurrentWorkspace();
+        if (workspace?.ReviewCards is null)
+        {
+            return;
+        }
+
+        var currentCard = workspace.ReviewCards.FirstOrDefault(card => string.Equals(card.PointId, pointId, StringComparison.Ordinal));
+        if (currentCard is null)
+        {
+            return;
+        }
+
+        SetCardReviewState(currentCard, InspectionReviewStatus.Reviewed);
         UpdateReviewSummary(workspace);
-        ApplyReviewFilter(workspace, SelectedReviewCard.PointId);
+        ApplyReviewFilter(workspace, pointId);
     }
 
     private void SelectReviewCard(InspectionReviewCardState card)
@@ -472,6 +495,30 @@ public sealed partial class InspectionPageViewModel
     {
         card.ReviewStatus = reviewStatus;
         card.ReviewStatusText = ResolveReviewStatusText(reviewStatus);
+    }
+
+    private void CommitReviewDispatch(IReadOnlyList<string> pointIds)
+    {
+        var workspace = GetCurrentWorkspace();
+        var task = workspace?.TaskBoard.CurrentTask;
+        if (task is null)
+        {
+            return;
+        }
+
+        var normalizedPointIds = (pointIds ?? Array.Empty<string>())
+            .Where(pointId => !string.IsNullOrWhiteSpace(pointId))
+            .Select(pointId => pointId.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (normalizedPointIds.Count == 0)
+        {
+            return;
+        }
+
+        _inspectionTaskService.ConfirmReviewDispatch(new InspectionReviewDispatchRequest(
+            task.TaskId,
+            normalizedPointIds));
     }
 
     private InspectionReviewDetailState CreateReviewDetail(InspectionReviewCardState card)

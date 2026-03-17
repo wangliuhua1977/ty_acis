@@ -28,6 +28,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private readonly IInspectionTaskHistoryStore _taskHistoryStore;
     private readonly IInspectionPointCheckExecutor _pointCheckExecutor;
     private readonly IInspectionEvidenceAiAnalysisService _inspectionEvidenceAiAnalysisService;
+    private readonly IInspectionDispatchBridgeService _inspectionDispatchBridgeService;
     private readonly List<InspectionTaskRecordModel> _taskHistory;
     private readonly Dictionary<string, InspectionTaskRecordModel> _latestTaskByGroupId;
 
@@ -36,13 +37,15 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         IInspectionSettingsService inspectionSettingsService,
         IInspectionTaskHistoryStore taskHistoryStore,
         IInspectionPointCheckExecutor pointCheckExecutor,
-        IInspectionEvidenceAiAnalysisService inspectionEvidenceAiAnalysisService)
+        IInspectionEvidenceAiAnalysisService inspectionEvidenceAiAnalysisService,
+        IInspectionDispatchBridgeService inspectionDispatchBridgeService)
     {
         _pointWorkspaceService = pointWorkspaceService;
         _inspectionSettingsService = inspectionSettingsService;
         _taskHistoryStore = taskHistoryStore;
         _pointCheckExecutor = pointCheckExecutor;
         _inspectionEvidenceAiAnalysisService = inspectionEvidenceAiAnalysisService;
+        _inspectionDispatchBridgeService = inspectionDispatchBridgeService;
 
         _taskHistory = _taskHistoryStore.Load()
             .OrderByDescending(task => task.CreatedAt)
@@ -389,6 +392,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                         AiAbnormalTags = aiAnalysis.AbnormalTags,
                         AiConfidence = aiAnalysis.Confidence,
                         AiSuggestedAction = aiAnalysis.SuggestedAction,
+                        PrimaryFaultType = ResolvePrimaryFaultType(aiAnalysis.AbnormalTags, point.FailureCategory, point.ExecutionSummary),
                         RouteToReviewWallReserved = aiAnalysis.RouteToReviewWallReserved,
                         RouteToDispatchPoolReserved = aiAnalysis.RouteToDispatchPoolReserved,
                         ManualReviewRequiredReserved = aiAnalysis.ManualReviewRequiredReserved,
@@ -415,6 +419,10 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 Summary = BuildTaskSummaryWithAi(baseSummary, updatedPoint, abnormalFlow)
             };
         });
+        updatedTask = BridgeDispatchCandidates(
+            updatedTask,
+            InspectionDispatchBridgeSource.AiResultDirect,
+            new[] { request.PointId });
 
         ApplyEvidenceRetention(
             request.TaskId,
@@ -428,6 +436,58 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         MapPointSourceDiagnostics.Write(
             "InspectionAi",
             $"pointId={request.PointId}, deviceCode={request.DeviceCode}, aiAnalysisStatus={aiAnalysis.AiAnalysisStatus}, abnormalTags={string.Join('|', aiAnalysis.AbnormalTags)}, routeToReviewWall={aiAnalysis.RouteToReviewWallReserved}, routeToDispatchPool={aiAnalysis.RouteToDispatchPoolReserved}, manualReviewRequired={aiAnalysis.ManualReviewRequiredReserved}, evidenceItemCount={normalizedItemsWithAi.Count}, aiAnalysisInvoked={aiAnalysis.AiAnalysisInvoked}, confidence={aiAnalysis.Confidence:0.00}");
+
+        return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
+    }
+
+    public ServiceResponse<InspectionTaskRecordModel> ConfirmReviewDispatch(InspectionReviewDispatchRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.TaskId))
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    "复核确认派单",
+                    InspectionTaskTypeModel.ScopePlan,
+                    InspectionTaskStatusModel.Failed,
+                    "复核确认请求缺少任务标识。"),
+                "复核确认请求无效。");
+        }
+
+        InspectionTaskRecordModel? existingTask;
+        lock (_syncRoot)
+        {
+            existingTask = _taskHistory.FirstOrDefault(task => string.Equals(task.TaskId, request.TaskId, StringComparison.Ordinal));
+        }
+
+        if (existingTask is null)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    "复核确认派单",
+                    InspectionTaskTypeModel.ScopePlan,
+                    InspectionTaskStatusModel.Failed,
+                    "未找到需要确认的巡检任务。"),
+                "未找到需要确认的巡检任务。");
+        }
+
+        var pointIds = (request.PointIds ?? Array.Empty<string>())
+            .Where(pointId => !string.IsNullOrWhiteSpace(pointId))
+            .Select(pointId => pointId.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (pointIds.Count == 0)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Success(existingTask);
+        }
+
+        var updatedTask = BridgeDispatchCandidates(
+            existingTask,
+            InspectionDispatchBridgeSource.ReviewWallConfirmed,
+            pointIds);
 
         return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
     }
@@ -777,6 +837,58 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         TaskBoardChanged?.Invoke(this, new InspectionTaskBoardChangedEventArgs(groupId));
     }
 
+    private InspectionTaskRecordModel BridgeDispatchCandidates(
+        InspectionTaskRecordModel task,
+        InspectionDispatchBridgeSource source,
+        IReadOnlyList<string> pointIds)
+    {
+        var bridgeResult = _inspectionDispatchBridgeService.Bridge(new InspectionDispatchBridgeRequest(task, source, pointIds));
+        if (!bridgeResult.Points.Any(point => point.DispatchCandidateAccepted))
+        {
+            return task;
+        }
+
+        return UpdateTask(task.TaskId, current =>
+        {
+            var resultsByPoint = bridgeResult.Points
+                .GroupBy(point => point.PointId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
+            var queue = current.PointExecutions
+                .Select(point => resultsByPoint.TryGetValue(point.PointId, out var result)
+                    ? point with
+                    {
+                        DispatchCandidateAccepted = result.DispatchCandidateAccepted,
+                        DispatchUpserted = result.DispatchUpserted,
+                        DispatchDeduplicated = result.DispatchDeduplicated,
+                        DispatchStatus = NormalizeDispatchStatus(result.DispatchStatus)
+                    }
+                    : point)
+                .ToList();
+            var abnormalFlow = InspectionTaskModelExtensions.BuildAbnormalFlowSnapshot(queue);
+            var baseSummary = BuildTaskSummary(
+                current.Status,
+                current.TotalPointCount,
+                current.SuccessCount,
+                current.FailureCount,
+                current.SkippedCount,
+                current.ScopePlanName,
+                current.CurrentPointName);
+            var currentPoint = queue.FirstOrDefault(point => string.Equals(point.PointId, current.CurrentPointId, StringComparison.Ordinal))
+                ?? queue.FirstOrDefault(point => resultsByPoint.ContainsKey(point.PointId))
+                ?? queue.FirstOrDefault();
+            var summary = currentPoint is null
+                ? baseSummary
+                : BuildTaskSummaryWithAi(baseSummary, currentPoint);
+
+            return current with
+            {
+                PointExecutions = queue,
+                AbnormalFlow = abnormalFlow,
+                Summary = AppendDispatchBridgeSummary(summary, abnormalFlow, bridgeResult, source)
+            };
+        });
+    }
+
     private static InspectionTaskRecordModel SetPointRunning(InspectionTaskRecordModel task, string pointId)
     {
         var queue = task.PointExecutions
@@ -832,9 +944,14 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                      AiAbnormalTags = [],
                      AiConfidence = 0d,
                      AiSuggestedAction = string.Empty,
+                     PrimaryFaultType = ResolvePrimaryFaultType(Array.Empty<string>(), result.FailureCategory, result.ResultSummary),
                      RouteToReviewWallReserved = false,
                      RouteToDispatchPoolReserved = false,
-                     ManualReviewRequiredReserved = false
+                     ManualReviewRequiredReserved = false,
+                     DispatchCandidateAccepted = false,
+                     DispatchUpserted = false,
+                     DispatchDeduplicated = false,
+                     DispatchStatus = InspectionDispatchValueKeys.None
                  }
                  : point)
              .ToList();
@@ -972,12 +1089,34 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             : $"{summary} {abnormalFlowSummary}";
     }
 
+    private static string AppendDispatchBridgeSummary(
+        string summary,
+        InspectionTaskAbnormalFlowModel abnormalFlow,
+        InspectionDispatchBridgeBatchResult bridgeResult,
+        InspectionDispatchBridgeSource source)
+    {
+        var abnormalFlowSummary = BuildAbnormalFlowSummary(abnormalFlow);
+        var dispatchBridgeSummary = BuildDispatchBridgeSummary(bridgeResult, source);
+        var segments = new[]
+            {
+                summary,
+                abnormalFlowSummary,
+                dispatchBridgeSummary
+            }
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return string.Join(" ", segments);
+    }
+
     private static string BuildAbnormalFlowSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
     {
         var reviewWallCount = abnormalFlow.ReviewWallPendingCount;
         var dispatchPoolCount = abnormalFlow.DispatchPoolCandidateCount;
+        var dispatchPendingCount = abnormalFlow.DispatchPendingCount;
         var manualReviewCount = abnormalFlow.ManualReviewCompatibilityCount;
-        if (reviewWallCount == 0 && dispatchPoolCount == 0 && manualReviewCount == 0)
+        if (reviewWallCount == 0 && dispatchPoolCount == 0 && dispatchPendingCount == 0 && manualReviewCount == 0)
         {
             return string.Empty;
         }
@@ -993,12 +1132,66 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             segments.Add($"派单池候选 {dispatchPoolCount} 个");
         }
 
+        if (dispatchPendingCount > 0)
+        {
+            segments.Add($"待派单快照 {dispatchPendingCount} 个");
+        }
+
         if (manualReviewCount > 0)
         {
             segments.Add($"人工补图兼容标记 {manualReviewCount} 个");
         }
 
         return $"异常流转入口：{string.Join("，", segments)}。";
+    }
+
+    private static string BuildDispatchBridgeSummary(
+        InspectionDispatchBridgeBatchResult bridgeResult,
+        InspectionDispatchBridgeSource source)
+    {
+        var acceptedCount = bridgeResult.Points.Count(point => point.DispatchCandidateAccepted);
+        if (acceptedCount == 0)
+        {
+            return string.Empty;
+        }
+
+        return source == InspectionDispatchBridgeSource.ReviewWallConfirmed
+            ? $"AI智能巡检中心复核确认后已桥接待派单 {acceptedCount} 个点位。"
+            : $"AI智能巡检中心已桥接待派单 {acceptedCount} 个点位。";
+    }
+
+    private static string NormalizeDispatchStatus(string? dispatchStatus)
+    {
+        return string.IsNullOrWhiteSpace(dispatchStatus)
+            ? InspectionDispatchValueKeys.None
+            : dispatchStatus.Trim();
+    }
+
+    private static string ResolvePrimaryFaultType(
+        IReadOnlyList<string>? abnormalTags,
+        InspectionPointFailureCategoryModel failureCategory,
+        string? fallbackSummary)
+    {
+        var tags = (abnormalTags ?? Array.Empty<string>())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => tag.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (tags.Count > 0)
+        {
+            return tags[0];
+        }
+
+        return failureCategory switch
+        {
+            InspectionPointFailureCategoryModel.DeviceOffline => "offline",
+            InspectionPointFailureCategoryModel.NoStreamAddress => "no_stream_address",
+            InspectionPointFailureCategoryModel.PlaybackCheckFailed => "playback_check_failed",
+            InspectionPointFailureCategoryModel.PlaybackTimeout => "playback_timeout",
+            InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "protocol_fallback_still_failed",
+            InspectionPointFailureCategoryModel.ImageAbnormalDetected => "image_abnormal_detected",
+            _ => string.IsNullOrWhiteSpace(fallbackSummary) ? string.Empty : fallbackSummary.Trim()
+        };
     }
 
     private static IReadOnlyList<InspectionPointEvidenceMetadataModel> ApplyAiAnalysisToEvidenceItems(
@@ -1269,6 +1462,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     policy.UsesOverridePolicy,
                     policy.PolicySnapshotSummary)
                 {
+                    UnitName = point.UnitName,
+                    CurrentHandlingUnit = point.CurrentHandlingUnit,
                     ScreenshotPlannedCount = Math.Max(1, settings.VideoInspection.ScreenshotCount),
                     ScreenshotIntervalSeconds = Math.Max(1, settings.VideoInspection.ScreenshotIntervalSeconds),
                     EvidenceCaptureState = InspectionEvidenceValueKeys.CaptureStateNone,

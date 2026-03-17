@@ -93,6 +93,8 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
             DeviceCode = string.IsNullOrWhiteSpace(point.DeviceCode) ? point.PointId : point.DeviceCode.Trim(),
             PointName = string.IsNullOrWhiteSpace(point.PointName) ? point.PointId : point.PointName.Trim(),
             Sequence = point.Sequence > 0 ? point.Sequence : fallbackSequence,
+            UnitName = point.UnitName?.Trim() ?? string.Empty,
+            CurrentHandlingUnit = point.CurrentHandlingUnit?.Trim() ?? string.Empty,
             SkipReason = point.SkipReason?.Trim() ?? string.Empty,
             FailureReason = point.FailureReason?.Trim() ?? string.Empty,
             PolicySnapshotSummary = point.PolicySnapshotSummary?.Trim() ?? string.Empty,
@@ -117,9 +119,16 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
                 .ToList(),
             AiConfidence = Math.Clamp(point.AiConfidence, 0d, 1d),
             AiSuggestedAction = point.AiSuggestedAction?.Trim() ?? string.Empty,
+            PrimaryFaultType = point.PrimaryFaultType?.Trim() ?? string.Empty,
             RouteToReviewWallReserved = point.RouteToReviewWallReserved,
             RouteToDispatchPoolReserved = point.RouteToDispatchPoolReserved,
             ManualReviewRequiredReserved = point.ManualReviewRequiredReserved,
+            DispatchCandidateAccepted = point.DispatchCandidateAccepted,
+            DispatchUpserted = point.DispatchUpserted,
+            DispatchDeduplicated = point.DispatchDeduplicated,
+            DispatchStatus = string.IsNullOrWhiteSpace(point.DispatchStatus)
+                ? InspectionDispatchValueKeys.None
+                : point.DispatchStatus.Trim(),
             EvidenceItems = evidenceItems
         };
     }

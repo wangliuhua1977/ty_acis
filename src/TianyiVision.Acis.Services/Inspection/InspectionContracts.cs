@@ -95,6 +95,12 @@ public static class InspectionEvidenceValueKeys
     public const string AiAnalysisFailed = "failed";
 }
 
+public static class InspectionDispatchValueKeys
+{
+    public const string None = "none";
+    public const string PendingDispatch = "pending_dispatch";
+}
+
 public sealed record InspectionGroupModel(
     string Id,
     string Name,
@@ -233,7 +239,18 @@ public sealed record InspectionAbnormalFlowEntryModel(
     string PointName,
     string AiAnalysisStatus,
     IReadOnlyList<string> AbnormalTags,
-    string AiAnalysisSummary = "");
+    string AiAnalysisSummary = "")
+{
+    public string PrimaryFaultType { get; init; } = string.Empty;
+
+    public bool DispatchCandidateAccepted { get; init; }
+
+    public bool DispatchUpserted { get; init; }
+
+    public bool DispatchDeduplicated { get; init; }
+
+    public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
+}
 
 public sealed record InspectionTaskAbnormalFlowModel(
     IReadOnlyList<InspectionAbnormalFlowEntryModel> ReviewWallPendingEntries,
@@ -247,6 +264,9 @@ public sealed record InspectionTaskAbnormalFlowModel(
     public int DispatchPoolCandidateCount => DispatchPoolCandidateEntries.Count;
 
     public int ManualReviewCompatibilityCount => ManualReviewRequiredEntries.Count;
+
+    public int DispatchPendingCount => DispatchPoolCandidateEntries.Count(entry =>
+        string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal));
 }
 
 public sealed record InspectionTaskPointExecutionModel(
@@ -262,6 +282,10 @@ public sealed record InspectionTaskPointExecutionModel(
     bool UsesOverridePolicy,
     string PolicySnapshotSummary)
 {
+    public string UnitName { get; init; } = string.Empty;
+
+    public string CurrentHandlingUnit { get; init; } = string.Empty;
+
     public string ExecutionSummary { get; init; } = string.Empty;
 
     public string OnlineCheckResult { get; init; } = string.Empty;
@@ -306,11 +330,21 @@ public sealed record InspectionTaskPointExecutionModel(
 
     public string AiSuggestedAction { get; init; } = string.Empty;
 
+    public string PrimaryFaultType { get; init; } = string.Empty;
+
     public bool RouteToReviewWallReserved { get; init; }
 
     public bool RouteToDispatchPoolReserved { get; init; }
 
     public bool ManualReviewRequiredReserved { get; init; }
+
+    public bool DispatchCandidateAccepted { get; init; }
+
+    public bool DispatchUpserted { get; init; }
+
+    public bool DispatchDeduplicated { get; init; }
+
+    public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
 
     public IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems { get; init; } = [];
 
@@ -469,7 +503,16 @@ public static class InspectionTaskModelExtensions
                 .Select(tag => tag.Trim())
                 .Distinct(StringComparer.Ordinal)
                 .ToList(),
-            point.AiAnalysisSummary);
+            point.AiAnalysisSummary)
+        {
+            PrimaryFaultType = ResolvePrimaryFaultType(point),
+            DispatchCandidateAccepted = point.DispatchCandidateAccepted,
+            DispatchUpserted = point.DispatchUpserted,
+            DispatchDeduplicated = point.DispatchDeduplicated,
+            DispatchStatus = string.IsNullOrWhiteSpace(point.DispatchStatus)
+                ? InspectionDispatchValueKeys.None
+                : point.DispatchStatus.Trim()
+        };
     }
 
     private static IReadOnlyList<InspectionAbnormalFlowEntryModel> CreateEntryList(
@@ -507,6 +550,38 @@ public static class InspectionTaskModelExtensions
         }
 
         return entries.FirstOrDefault(entry => string.Equals(entry.PointId, pointId, StringComparison.Ordinal));
+    }
+
+    private static string ResolvePrimaryFaultType(InspectionTaskPointExecutionModel point)
+    {
+        if (!string.IsNullOrWhiteSpace(point.PrimaryFaultType))
+        {
+            return point.PrimaryFaultType.Trim();
+        }
+
+        if (point.AiAbnormalTags is { Count: > 0 })
+        {
+            var tags = point.AiAbnormalTags
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (tags.Count > 0)
+            {
+                return string.Join("|", tags);
+            }
+        }
+
+        return point.FailureCategory switch
+        {
+            InspectionPointFailureCategoryModel.DeviceOffline => "offline",
+            InspectionPointFailureCategoryModel.NoStreamAddress => "no_stream_address",
+            InspectionPointFailureCategoryModel.PlaybackCheckFailed => "playback_check_failed",
+            InspectionPointFailureCategoryModel.PlaybackTimeout => "playback_timeout",
+            InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "protocol_fallback_still_failed",
+            InspectionPointFailureCategoryModel.ImageAbnormalDetected => "image_abnormal_detected",
+            _ => string.Empty
+        };
     }
 }
 
@@ -648,6 +723,35 @@ public sealed record InspectionPointAiAnalysisResult(
     bool RouteToDispatchPoolReserved,
     bool ManualReviewRequiredReserved);
 
+public enum InspectionDispatchBridgeSource
+{
+    AiResultDirect,
+    ReviewWallConfirmed
+}
+
+public sealed record InspectionDispatchBridgeRequest(
+    InspectionTaskRecordModel Task,
+    InspectionDispatchBridgeSource Source,
+    IReadOnlyList<string> PointIds);
+
+public sealed record InspectionDispatchBridgePointResult(
+    string PointId,
+    string DeviceCode,
+    bool DispatchCandidateAccepted,
+    bool DispatchUpserted,
+    bool DispatchDeduplicated,
+    string DispatchStatus);
+
+public sealed record InspectionDispatchBridgeBatchResult(
+    IReadOnlyList<InspectionDispatchBridgePointResult> Points)
+{
+    public static InspectionDispatchBridgeBatchResult Empty { get; } = new([]);
+}
+
+public sealed record InspectionReviewDispatchRequest(
+    string TaskId,
+    IReadOnlyList<string> PointIds);
+
 public interface IInspectionPointCheckExecutor
 {
     Task<InspectionPointCheckResult> ExecuteAsync(InspectionPointCheckRequest request, CancellationToken cancellationToken);
@@ -656,6 +760,11 @@ public interface IInspectionPointCheckExecutor
 public interface IInspectionEvidenceAiAnalysisService
 {
     InspectionPointAiAnalysisResult Analyze(InspectionPointAiAnalysisRequest request);
+}
+
+public interface IInspectionDispatchBridgeService
+{
+    InspectionDispatchBridgeBatchResult Bridge(InspectionDispatchBridgeRequest request);
 }
 
 public interface IInspectionTaskHistoryStore
@@ -678,4 +787,6 @@ public interface IInspectionTaskService
     ServiceResponse<InspectionTaskRecordModel> StartDefaultScopeInspection(string groupId);
 
     ServiceResponse<InspectionTaskRecordModel> WritePointEvidence(InspectionPointEvidenceWriteRequest request);
+
+    ServiceResponse<InspectionTaskRecordModel> ConfirmReviewDispatch(InspectionReviewDispatchRequest request);
 }

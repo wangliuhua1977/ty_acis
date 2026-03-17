@@ -136,12 +136,16 @@ public sealed class AppBootstrapper
         var pointWorkspaceService = new ConfigDrivenPointWorkspaceService(deviceWorkspaceService, faultPoolService);
         var dispatchNotificationSender = BuildDispatchNotificationSender(notificationSettings, notificationSettingsService);
         _homeDashboardService = new ConfigDrivenHomeDashboardService(pointWorkspaceService, demoHomeDashboardService);
+        var inspectionDispatchBridgeService = new InspectionDispatchBridgeService(
+            workOrderSnapshotService,
+            _dispatchResponsibilityService);
         _inspectionTaskService = new ConfigDrivenInspectionTaskService(
             pointWorkspaceService,
             inspectionSettingsService,
             inspectionTaskHistoryStore,
             inspectionPointCheckExecutor,
-            inspectionEvidenceAiAnalysisService);
+            inspectionEvidenceAiAnalysisService,
+            inspectionDispatchBridgeService);
         _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
             faultPoolService,
             dispatchNotificationSender,

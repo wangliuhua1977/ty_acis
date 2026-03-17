@@ -984,9 +984,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return "派单池候选：当前点位尚未形成异常流转写回。";
         }
 
-        return task?.FindDispatchPoolEntry(pointId) is not null
-            ? "派单池候选：已写入派单池候选集合，待派单处理模块承接。"
-            : "派单池候选：当前未写入派单池候选集合。";
+        var entry = task?.FindDispatchPoolEntry(pointId);
+        if (entry is null)
+        {
+            return "派单池候选：当前未写入派单池候选集合。";
+        }
+
+        return string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
+            ? "派单池候选：已桥接到派单模块待派单快照。"
+            : "派单池候选：已写入派单池候选集合，待桥接待派单快照。";
     }
 
     private string ResolveManualSupplementEntryStatus(
@@ -1022,7 +1028,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         if (task?.FindDispatchPoolEntry(pointId) is not null)
         {
-            pointSegments.Add("已进入派单池候选");
+            var dispatchEntry = task.FindDispatchPoolEntry(pointId)!;
+            pointSegments.Add(string.Equals(dispatchEntry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
+                ? "已桥接待派单快照"
+                : "已进入派单池候选");
         }
 
         if (task?.FindManualReviewCompatibilityEntry(pointId) is not null)
@@ -1038,7 +1047,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var compatibilitySuffix = abnormalFlow.ManualReviewCompatibilityCount > 0
             ? $" 人工补图仅保留兼容标记 {abnormalFlow.ManualReviewCompatibilityCount} 个。"
             : string.Empty;
-        return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个。{compatibilitySuffix}".Trim();
+        return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个，待派单快照 {abnormalFlow.DispatchPendingCount} 个。{compatibilitySuffix}".Trim();
     }
 
     private static string ResolveManualSupplementEntryActionText(InspectionTaskPointExecutionModel? execution)
@@ -1066,7 +1075,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var segments = new List<string>
         {
             $"复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个",
-            $"派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个"
+            $"派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个",
+            $"待派单快照 {abnormalFlow.DispatchPendingCount} 个"
         };
 
         if (abnormalFlow.ManualReviewCompatibilityCount > 0)
@@ -1087,7 +1097,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private static string BuildDispatchPoolCandidateSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
     {
         return abnormalFlow.DispatchPoolCandidateCount > 0
-            ? $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合。"
+            ? abnormalFlow.DispatchPendingCount > 0
+                ? $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合，其中 {abnormalFlow.DispatchPendingCount} 个已桥接待派单快照。"
+                : $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合。"
             : "派单池候选：当前任务暂无可承接的派单池候选点位。";
     }
 
