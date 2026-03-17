@@ -363,7 +363,14 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             queuePoints.Count(candidate => candidate.Status == InspectionPointExecutionStatusModel.Skipped),
             null,
             "--",
-            BuildTaskSummary(InspectionTaskStatusModel.Pending, queuePoints.Count, 0, 0, 0, scopePlan?.PlanName ?? DefaultScopePlanName, "--"),
+            BuildTaskSummary(
+                InspectionTaskStatusModel.Pending,
+                queuePoints.Count,
+                0,
+                queuePoints.Count(candidate => candidate.Status == InspectionPointExecutionStatusModel.Failed),
+                queuePoints.Count(candidate => candidate.Status == InspectionPointExecutionStatusModel.Skipped),
+                scopePlan?.PlanName ?? DefaultScopePlanName,
+                "--"),
             queuePoints);
 
         SaveTask(createdTask);
@@ -423,90 +430,120 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         IReadOnlyList<PointWorkspaceItemModel> points,
         InspectionSettingsSnapshot settings)
     {
-        var startedTask = UpdateTask(task.TaskId, current =>
+        try
         {
-            var firstRunnable = current.PointExecutions
-                .FirstOrDefault(candidate => candidate.Status == InspectionPointExecutionStatusModel.Pending);
-            return current with
+            var startedTask = UpdateTask(task.TaskId, current =>
             {
-                Status = InspectionTaskStatusModel.Running,
-                StartedAt = DateTime.Now,
-                CurrentPointId = firstRunnable?.PointId,
-                CurrentPointName = firstRunnable?.PointName ?? "--",
-                Summary = BuildTaskSummary(
-                    InspectionTaskStatusModel.Running,
-                    current.TotalPointCount,
-                    current.SuccessCount,
-                    current.FailureCount,
-                    current.SkippedCount,
-                    current.ScopePlanName,
-                    firstRunnable?.PointName ?? "--")
-            };
-        });
+                var firstRunnable = current.PointExecutions
+                    .FirstOrDefault(candidate => candidate.Status == InspectionPointExecutionStatusModel.Pending);
+                return current with
+                {
+                    Status = InspectionTaskStatusModel.Running,
+                    StartedAt = DateTime.Now,
+                    CurrentPointId = firstRunnable?.PointId,
+                    CurrentPointName = firstRunnable?.PointName ?? "--",
+                    Summary = BuildTaskSummary(
+                        InspectionTaskStatusModel.Running,
+                        current.TotalPointCount,
+                        current.SuccessCount,
+                        current.FailureCount,
+                        current.SkippedCount,
+                        current.ScopePlanName,
+                        firstRunnable?.PointName ?? "--")
+                };
+            });
 
-        var pointsById = points.ToDictionary(point => point.PointId, point => point, StringComparer.Ordinal);
-        var currentTask = startedTask;
+            var pointsById = points.ToDictionary(point => point.PointId, point => point, StringComparer.Ordinal);
+            var currentTask = startedTask;
 
-        foreach (var pointExecution in startedTask.PointExecutions.OrderBy(candidate => candidate.Sequence))
-        {
-            if (pointExecution.Status is InspectionPointExecutionStatusModel.Failed or InspectionPointExecutionStatusModel.Skipped)
+            foreach (var pointExecution in startedTask.PointExecutions.OrderBy(candidate => candidate.Sequence))
             {
-                continue;
-            }
+                if (pointExecution.Status is InspectionPointExecutionStatusModel.Failed or InspectionPointExecutionStatusModel.Skipped)
+                {
+                    continue;
+                }
 
-            currentTask = UpdateTask(currentTask.TaskId, current =>
-                SetPointRunning(current, pointExecution.PointId));
+                currentTask = UpdateTask(currentTask.TaskId, current =>
+                    SetPointRunning(current, pointExecution.PointId));
 
-            if (!pointsById.TryGetValue(pointExecution.PointId, out var point))
-            {
+                if (!pointsById.TryGetValue(pointExecution.PointId, out var point))
+                {
+                    currentTask = UpdateTask(currentTask.TaskId, current =>
+                        ApplyPointResult(
+                            current,
+                            pointExecution.PointId,
+                            InspectionPointExecutionStatusModel.Failed,
+                            InspectionPointFailureCategoryModel.PointNotFound,
+                            string.Empty,
+                            "点位数据已失效，本轮未继续推进。"));
+                    continue;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(180)).ConfigureAwait(false);
+
+                InspectionPointCheckResult result;
+                try
+                {
+                    var effectivePolicy = ResolveEffectivePolicy(
+                        point,
+                        settings,
+                        pointExecution.IsFocusPoint,
+                        pointExecution.UsesOverridePolicy,
+                        pointExecution.PolicySnapshotSummary);
+                    result = await _pointCheckExecutor.ExecuteAsync(
+                            new InspectionPointCheckRequest(
+                                currentTask.TaskId,
+                                currentTask.GroupId,
+                                currentTask.TaskName,
+                                currentTask.TaskType,
+                                currentTask.TriggerMode,
+                                currentTask.ScopePlanId,
+                                currentTask.ScopePlanName,
+                                point,
+                                effectivePolicy.Policy,
+                                settings.VideoInspection,
+                                effectivePolicy.IsFocusPoint,
+                                effectivePolicy.UsesOverridePolicy,
+                                effectivePolicy.PolicySnapshotSummary),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    MapPointSourceDiagnostics.Write(
+                        "InspectionTask",
+                        $"point execution failed unexpectedly: taskId={currentTask.TaskId}, pointId={pointExecution.PointId}, reason={NormalizeReason(ex.Message, "点位巡检执行异常。")}");
+                    result = new InspectionPointCheckResult(
+                        InspectionPointExecutionStatusModel.Failed,
+                        InspectionPointFailureCategoryModel.Unknown,
+                        NormalizeReason(ex.Message, "点位巡检执行异常。"),
+                        []);
+                }
+
                 currentTask = UpdateTask(currentTask.TaskId, current =>
                     ApplyPointResult(
                         current,
-                        pointExecution.PointId,
-                        InspectionPointExecutionStatusModel.Failed,
-                        InspectionPointFailureCategoryModel.PointNotFound,
-                        string.Empty,
-                        "点位数据已失效，本轮未继续推进。"));
-                continue;
+                        point.PointId,
+                        result.Status,
+                        result.FailureCategory,
+                        result.Status == InspectionPointExecutionStatusModel.Skipped ? result.ResultSummary : string.Empty,
+                        result.Status == InspectionPointExecutionStatusModel.Failed ? result.ResultSummary : string.Empty));
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(180)).ConfigureAwait(false);
-
-            var effectivePolicy = ResolveEffectivePolicy(
-                point,
-                settings,
-                pointExecution.IsFocusPoint,
-                pointExecution.UsesOverridePolicy,
-                pointExecution.PolicySnapshotSummary);
-            var result = await _pointCheckExecutor.ExecuteAsync(
-                    new InspectionPointCheckRequest(
-                        currentTask.TaskId,
-                        currentTask.GroupId,
-                        currentTask.TaskName,
-                        currentTask.TaskType,
-                        currentTask.TriggerMode,
-                        currentTask.ScopePlanId,
-                        currentTask.ScopePlanName,
-                        point,
-                        effectivePolicy.Policy,
-                        settings.VideoInspection,
-                        effectivePolicy.IsFocusPoint,
-                        effectivePolicy.UsesOverridePolicy,
-                        effectivePolicy.PolicySnapshotSummary),
-                    CancellationToken.None)
-                .ConfigureAwait(false);
-
-            currentTask = UpdateTask(currentTask.TaskId, current =>
-                ApplyPointResult(
-                    current,
-                    point.PointId,
-                    result.Status,
-                    result.FailureCategory,
-                    result.Status == InspectionPointExecutionStatusModel.Skipped ? result.ResultSummary : string.Empty,
-                    result.Status == InspectionPointExecutionStatusModel.Failed ? result.ResultSummary : string.Empty));
+            FinalizeTask(currentTask.TaskId);
         }
+        catch (Exception ex)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"task execution aborted unexpectedly: taskId={task.TaskId}, reason={NormalizeReason(ex.Message, "任务执行异常中断。")}");
+            TryFinalizeAbortedTask(task.TaskId, ex);
+        }
+    }
 
-        UpdateTask(currentTask.TaskId, current =>
+    private void FinalizeTask(string taskId)
+    {
+        UpdateTask(taskId, current =>
         {
             var finalStatus = ResolveFinalTaskStatus(current);
             return current with
@@ -525,6 +562,43 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     "--")
             };
         });
+    }
+
+    private void TryFinalizeAbortedTask(string taskId, Exception exception)
+    {
+        try
+        {
+            UpdateTask(taskId, current =>
+            {
+                var faultedTask = current;
+                if (!string.IsNullOrWhiteSpace(current.CurrentPointId))
+                {
+                    faultedTask = ApplyPointResult(
+                        current,
+                        current.CurrentPointId,
+                        InspectionPointExecutionStatusModel.Failed,
+                        InspectionPointFailureCategoryModel.Unknown,
+                        string.Empty,
+                        NormalizeReason(exception.Message, "任务执行异常中断。"));
+                }
+
+                var finalStatus = ResolveFinalTaskStatus(faultedTask);
+                return faultedTask with
+                {
+                    Status = finalStatus,
+                    FinishedAt = DateTime.Now,
+                    CurrentPointId = null,
+                    CurrentPointName = "--",
+                    Summary = $"任务执行异常中断：{NormalizeReason(exception.Message, "请检查点位巡检执行器。")}"
+                };
+            });
+        }
+        catch (Exception finalizeException)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"task abort finalize failed: taskId={taskId}, reason={NormalizeReason(finalizeException.Message, "任务异常收口失败。")}");
+        }
     }
 
     private InspectionTaskRecordModel UpdateTask(
@@ -696,10 +770,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     {
         lock (_syncRoot)
         {
-            var recentTasks = _taskHistory
+            var groupTasks = _taskHistory
                 .Where(task => string.Equals(task.GroupId, groupId, StringComparison.Ordinal))
                 .OrderByDescending(task => task.CreatedAt)
-                .Take(6)
                 .ToList();
 
             InspectionTaskRecordModel? currentTask = null;
@@ -707,12 +780,18 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             {
                 currentTask = latestTask;
             }
-            else if (recentTasks.Count > 0)
+            else if (groupTasks.Count > 0)
             {
-                currentTask = recentTasks[0];
+                currentTask = groupTasks[0];
             }
 
             currentTask ??= CreateEmptyTask(groupId, groupName);
+            var recentTasks = groupTasks
+                .Where(task => currentTask.IsPlaceholderTask()
+                    || !string.Equals(task.TaskId, currentTask.TaskId, StringComparison.Ordinal))
+                .Take(6)
+                .ToList();
+
             return new InspectionTaskBoardModel(currentTask, recentTasks);
         }
     }
@@ -786,7 +865,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         InspectionTaskBoardModel taskBoard)
     {
         var currentTask = taskBoard.CurrentTask;
-        var executedTodayCount = taskBoard.RecentTasks.Count(task => task.CreatedAt.Date == DateTime.Today);
+        var executedTodayCount = CountExecutedToday(taskBoard);
         var nextRunTime = settings.TaskExecution.ReserveScheduledTasks
             ? DateTime.Now.AddMinutes(settings.VideoInspection.ReinspectionIntervalMinutes).ToString("yyyy-MM-dd HH:mm")
             : "预留定时";
@@ -797,6 +876,26 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             nextRunTime,
             currentTask?.Summary ?? "尚未发起巡检任务。",
             settings.TaskExecution.EnableBatchInspection);
+    }
+
+    private static int CountExecutedToday(InspectionTaskBoardModel taskBoard)
+    {
+        var taskIds = new HashSet<string>(StringComparer.Ordinal);
+        var count = 0;
+
+        if (taskBoard.CurrentTask is not null
+            && !taskBoard.CurrentTask.IsPlaceholderTask()
+            && taskBoard.CurrentTask.CreatedAt.Date == DateTime.Today
+            && taskIds.Add(taskBoard.CurrentTask.TaskId))
+        {
+            count++;
+        }
+
+        count += taskBoard.RecentTasks.Count(task =>
+            task.CreatedAt.Date == DateTime.Today
+            && taskIds.Add(task.TaskId));
+
+        return count;
     }
 
     private static InspectionRunSummaryModel BuildRunSummary(

@@ -700,6 +700,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var response = _inspectionTaskService.StartSinglePointInspection(workspace.Group.Id, SelectedPoint.Id);
         if (!response.IsSuccess)
         {
+            CurrentTask = CreateTaskSummaryState(response.Data);
             ApplySinglePointInspectionRecord(response.Data, SelectedPoint);
             return;
         }
@@ -717,7 +718,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var response = _inspectionTaskService.StartDefaultScopeInspection(workspace.Group.Id);
         if (!response.IsSuccess)
         {
+            CurrentTask = CreateTaskSummaryState(response.Data);
             workspace.ExecutionState.CurrentTaskStatus = ResolveTaskStatusText(response.Data.Status);
+            workspace.ExecutionState.CurrentPointName = "--";
             workspace.ExecutionState.SimulationNote = response.Data.Summary;
             return;
         }
@@ -753,11 +756,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var totalPoints = currentTask?.TotalPointCount > 0 ? currentTask.TotalPointCount : workspace.Points.Count;
         var normalCount = currentTask?.SuccessCount ?? workspace.Points.Count(point => point.Status == InspectionPointStatus.Normal);
         var faultCount = currentTask?.FailureCount ?? workspace.Points.Count(point => point.Status == InspectionPointStatus.Fault);
+        var currentPointName = currentTask?.ResolveCurrentPointDisplayName() ?? "--";
         var inspectedCount = currentTask is null
             ? workspace.Points.Count(point => point.Status is InspectionPointStatus.Normal or InspectionPointStatus.Fault or InspectionPointStatus.Inspecting)
-            : currentTask.SuccessCount
-                + currentTask.FailureCount
-                + currentTask.SkippedCount
+            : currentTask.GetCompletedPointCount()
                 + (currentTask.Status == InspectionTaskStatusModel.Running ? 1 : 0);
         var inspectableCount = Math.Max(1, totalPoints);
 
@@ -769,11 +771,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         workspace.RunSummary.InspectedPoints = inspectedCount.ToString();
         workspace.RunSummary.NormalCount = normalCount.ToString();
         workspace.RunSummary.FaultCount = faultCount.ToString();
-        workspace.RunSummary.CurrentPointName = currentTask?.CurrentPointName ?? "--";
+        workspace.RunSummary.CurrentPointName = currentPointName;
 
         workspace.ExecutionState.CurrentProgressValue = Math.Round(inspectedCount * 100d / inspectableCount, 0);
         workspace.ExecutionState.CurrentProgressText = $"{inspectedCount} / {inspectableCount}";
-        workspace.ExecutionState.CurrentPointName = currentTask?.CurrentPointName ?? "--";
+        workspace.ExecutionState.CurrentPointName = currentPointName;
         workspace.ExecutionState.CurrentTaskStatus = currentTask is null
             ? workspace.ExecutionState.CurrentTaskStatus
             : ResolveTaskStatusText(currentTask.Status);
@@ -792,8 +794,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
-        var record = workspace.TaskBoard.RecentTasks
-            .FirstOrDefault(task => task.PointExecutions.Any(candidate => candidate.PointId == point.Id));
+        var record = EnumerateTaskCandidates(workspace)
+            .FirstOrDefault(task => task.FindPointExecution(point.Id) is not null);
         if (record is null)
         {
             SinglePointInspectionTaskStatus = TaskEmptyText;
@@ -812,9 +814,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         SinglePointInspectionLastTime = record.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss")
             ?? record.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")
             ?? record.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss");
-        SinglePointInspectionResultSummary = string.IsNullOrWhiteSpace(record.Summary)
+        var resultSummary = record.ResolvePointInspectionSummary(point.Id);
+        SinglePointInspectionResultSummary = string.IsNullOrWhiteSpace(resultSummary)
             ? TaskEmptyText
-            : record.Summary;
+            : resultSummary;
     }
 
     private InspectionPointDetailState CreatePointDetail(
@@ -898,7 +901,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                     : CreateTaskSummaryState(taskBoard.CurrentTask);
                 var recentTasks = new ObservableCollection<InspectionTaskSummaryState>(taskBoard.RecentTasks.Select(CreateTaskSummaryState));
 
-                return new GroupWorkspaceState(
+                var groupWorkspace = new GroupWorkspaceState(
                     new InspectionGroupSummaryState(
                         workspace.Group.Id,
                         workspace.Group.Name,
@@ -919,6 +922,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                     inspectionPoints,
                     mapPoints,
                     new ObservableCollection<RecentFaultSummaryState>(workspace.RecentFaults.Select(CreateRecentFault)));
+                RefreshSummary(groupWorkspace);
+                return groupWorkspace;
             })
             .ToDictionary(workspace => workspace.Group.Id, workspace => workspace);
     }
@@ -980,12 +985,31 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             TriggerText = ResolveTaskTriggerText(task.TriggerMode),
             StatusText = ResolveTaskStatusText(task.Status),
             ScopePlanText = string.IsNullOrWhiteSpace(task.ScopePlanName) ? TaskEmptyText : task.ScopePlanName,
-            CurrentPointText = string.IsNullOrWhiteSpace(task.CurrentPointName) ? "--" : task.CurrentPointName,
+            CurrentPointText = task.ResolveCurrentPointDisplayName(),
             TimeText = task.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss")
                 ?? task.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")
                 ?? task.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
             Summary = string.IsNullOrWhiteSpace(task.Summary) ? TaskEmptyText : task.Summary
         };
+    }
+
+    private IEnumerable<InspectionTaskRecordModel> EnumerateTaskCandidates(GroupWorkspaceState workspace)
+    {
+        var taskIds = new HashSet<string>(StringComparer.Ordinal);
+
+        if (workspace.TaskBoard.CurrentTask is not null
+            && taskIds.Add(workspace.TaskBoard.CurrentTask.TaskId))
+        {
+            yield return workspace.TaskBoard.CurrentTask;
+        }
+
+        foreach (var task in workspace.TaskBoard.RecentTasks)
+        {
+            if (taskIds.Add(task.TaskId))
+            {
+                yield return task;
+            }
+        }
     }
 
     private InspectionRunSummaryState CreateRunSummary(string groupName, string startedAt)

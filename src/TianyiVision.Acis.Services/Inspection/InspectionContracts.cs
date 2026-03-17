@@ -225,6 +225,68 @@ public sealed record InspectionTaskRecordModel(
     string Summary,
     IReadOnlyList<InspectionTaskPointExecutionModel> PointExecutions);
 
+public static class InspectionTaskModelExtensions
+{
+    public static int GetCompletedPointCount(this InspectionTaskRecordModel task)
+        => task.SuccessCount + task.FailureCount + task.SkippedCount;
+
+    public static bool IsPlaceholderTask(this InspectionTaskRecordModel task)
+        => task.TotalPointCount == 0
+           && (task.PointExecutions?.Count ?? 0) == 0
+           && string.Equals(task.TaskId, $"{task.GroupId}-empty", StringComparison.Ordinal);
+
+    public static InspectionTaskPointExecutionModel? FindPointExecution(this InspectionTaskRecordModel task, string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId) || task.PointExecutions is null)
+        {
+            return null;
+        }
+
+        return task.PointExecutions.FirstOrDefault(candidate =>
+            string.Equals(candidate.PointId, pointId, StringComparison.Ordinal));
+    }
+
+    public static string ResolveCurrentPointDisplayName(this InspectionTaskRecordModel task)
+    {
+        if (!string.IsNullOrWhiteSpace(task.CurrentPointName)
+            && !string.Equals(task.CurrentPointName, "--", StringComparison.Ordinal))
+        {
+            return task.CurrentPointName;
+        }
+
+        return task.FindPointExecution(task.CurrentPointId)?.PointName ?? "--";
+    }
+
+    public static string ResolvePointInspectionSummary(this InspectionTaskRecordModel task, string? pointId)
+    {
+        var pointExecution = task.FindPointExecution(pointId);
+        if (pointExecution is null)
+        {
+            return string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary;
+        }
+
+        if (pointExecution.Status == InspectionPointExecutionStatusModel.Failed
+            && !string.IsNullOrWhiteSpace(pointExecution.FailureReason))
+        {
+            return pointExecution.FailureReason;
+        }
+
+        if (pointExecution.Status == InspectionPointExecutionStatusModel.Skipped
+            && !string.IsNullOrWhiteSpace(pointExecution.SkipReason))
+        {
+            return pointExecution.SkipReason;
+        }
+
+        return pointExecution.Status switch
+        {
+            InspectionPointExecutionStatusModel.Pending => $"点位“{pointExecution.PointName}”待执行。",
+            InspectionPointExecutionStatusModel.Running => $"点位“{pointExecution.PointName}”执行中。",
+            InspectionPointExecutionStatusModel.Succeeded => $"点位“{pointExecution.PointName}”已完成巡检。",
+            _ => string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary
+        };
+    }
+}
+
 public sealed record InspectionTaskBoardModel(
     InspectionTaskRecordModel? CurrentTask,
     IReadOnlyList<InspectionTaskRecordModel> RecentTasks);

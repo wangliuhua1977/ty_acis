@@ -257,7 +257,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskNameLabel}" />
-                                    <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskName}" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskName}" TextWrapping="Wrap" />
                                     <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTypeLabel}" />
                                     <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskTypeText}" />
                                     <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTriggerLabel}" />
@@ -267,11 +267,11 @@
                                     <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskScopeLabel}" />
                                     <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.ScopePlanText}" />
                                     <TextBlock Grid.Row="5" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskCurrentPointLabel}" />
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.CurrentPointText}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.CurrentPointText}" TextWrapping="Wrap" />
                                 </Grid>
                             </Border>
                             <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskSummaryLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary}" />
+                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary}" TextWrapping="Wrap" />
                             <TextBlock Margin="0,18,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskRecentListLabel}" />
                             <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding RecentTasks}">
                                 <ItemsControl.ItemTemplate>
@@ -296,6 +296,20 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding TaskEmptyText}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding RecentTasks.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
                     </Border>
 
@@ -732,7 +746,7 @@
                                         <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionLastTimeLabel}" />
                                         <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionLastTime}" />
                                         <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionResultSummaryLabel}" />
-                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SinglePointInspectionResultSummary}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SinglePointInspectionResultSummary}" TextWrapping="Wrap" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
