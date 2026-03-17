@@ -153,7 +153,10 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
                 item.LatestDetectedAt.ToString("yyyy-MM-dd HH:mm"),
                 item.RepeatCount),
             persisted?.InspectionTaskId ?? string.Empty,
-            persisted?.DeviceCode ?? string.Empty);
+            persisted?.DeviceCode ?? string.Empty)
+        {
+            FaultKey = ResolveFaultKey(item.FaultKey, item.FaultType)
+        };
 
         if (persisted is not null)
         {
@@ -230,10 +233,13 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             WriteRecoveryLog(
                 persisted.PointId,
                 persisted.DeviceCode,
+                ResolveFaultKey(persisted),
+                ResolveDispatchStatus(persisted),
                 ResolveDispatchStatus(persisted),
                 persisted.RecoveryStatus,
                 persisted.RecoveryStatus,
-                recoveryConfirmed: true);
+                reopenTriggered: false,
+                deduplicated: false);
             return ServiceResponse<DispatchNotificationResult>.Success(
                 new DispatchNotificationResult(
                     confirmedAt,
@@ -260,10 +266,13 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         WriteRecoveryLog(
             persisted?.PointId ?? request.PointId,
             persisted?.DeviceCode ?? string.Empty,
+            ResolveFaultKey(persisted),
+            ResolveDispatchStatus(persisted),
             ResolveDispatchStatus(persisted),
             persisted?.RecoveryStatus ?? DispatchRecoveryStatusModel.Unrecovered,
             DispatchRecoveryStatusModel.Recovered,
-            recoveryConfirmed: true);
+            reopenTriggered: false,
+            deduplicated: false);
 
         return Send(
             request,
@@ -539,14 +548,34 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
     private static void WriteRecoveryLog(
         string pointId,
         string deviceCode,
-        string dispatchStatus,
+        string faultKey,
+        string dispatchStatusBefore,
+        string dispatchStatusAfter,
         DispatchRecoveryStatusModel recoveryStatusBefore,
         DispatchRecoveryStatusModel recoveryStatusAfter,
-        bool recoveryConfirmed)
+        bool reopenTriggered,
+        bool deduplicated)
     {
         MapPointSourceDiagnostics.Write(
             "InspectionDispatchRecovery",
-            $"pointId={pointId}, deviceCode={deviceCode}, dispatchStatus={dispatchStatus}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, recoveryConfirmed={recoveryConfirmed}");
+            $"pointId={pointId}, deviceCode={deviceCode}, faultKey={faultKey}, dispatchStatusBefore={dispatchStatusBefore}, dispatchStatusAfter={dispatchStatusAfter}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, reopenTriggered={reopenTriggered}, deduplicated={deduplicated}");
+    }
+
+    private static string ResolveFaultKey(DispatchWorkOrderModel? workOrder)
+    {
+        return workOrder is null
+            ? "inspection_abnormal"
+            : ResolveFaultKey(workOrder.FaultKey, workOrder.FaultType);
+    }
+
+    private static string ResolveFaultKey(string? faultKey, string? fallbackFaultType)
+    {
+        var candidate = !string.IsNullOrWhiteSpace(faultKey)
+            ? faultKey.Trim()
+            : !string.IsNullOrWhiteSpace(fallbackFaultType)
+                ? fallbackFaultType.Trim()
+                : "inspection_abnormal";
+        return candidate.Replace(" ", "_", StringComparison.Ordinal);
     }
 
     private static DateTime? ParseTime(string rawValue)

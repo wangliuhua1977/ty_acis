@@ -925,9 +925,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             RouteToDispatchPoolReserved = execution?.RouteToDispatchPoolReserved ?? false,
             ManualReviewRequiredReserved = execution?.ManualReviewRequiredReserved ?? false,
             ReviewWallEntryStatus = ResolveReviewWallEntryStatus(task, pointId),
-            DispatchCandidateEntryStatus = ResolveDispatchCandidateEntryStatus(task, pointId),
+            DispatchCandidateEntryStatus = ResolveDispatchCandidateEntryStatus(task, execution, pointId),
             ManualSupplementEntryStatus = ResolveManualSupplementEntryStatus(task, pointId),
-            BusinessRoutingDescription = BuildBusinessRoutingDescription(task, pointId),
+            BusinessRoutingDescription = AppendDispatchRoutingDescription(
+                BuildBusinessRoutingDescription(task, execution, pointId),
+                execution),
             ManualSupplementEntryActionText = ResolveManualSupplementEntryActionText(execution),
             ScreenshotReserved = execution?.ScreenshotReserved ?? "reserved",
             EvidenceReserved = execution?.EvidenceReserved ?? "reserved",
@@ -979,6 +981,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     private string ResolveDispatchCandidateEntryStatus(
         InspectionTaskRecordModel? task,
+        InspectionTaskPointExecutionModel? execution,
         string? pointId)
     {
         if (string.IsNullOrWhiteSpace(pointId))
@@ -995,6 +998,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (string.Equals(entry.RecoveryStatus, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal))
         {
             return $"派单池候选：已恢复，确认时间 {entry.RecoveryConfirmedAt}。";
+        }
+
+        if (execution?.ReopenTriggered == true)
+        {
+            return "派单池候选：同点位同故障已恢复后再次出现，本轮已重开新的待派单快照。";
+        }
+
+        if (execution?.DispatchDeduplicated == true)
+        {
+            return "派单池候选：同点位同故障仍未恢复，本轮已幂等合并到现有快照。";
         }
 
         return string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
@@ -1020,6 +1033,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     private string BuildBusinessRoutingDescription(
         InspectionTaskRecordModel? task,
+        InspectionTaskPointExecutionModel? execution,
         string? pointId)
     {
         if (string.IsNullOrWhiteSpace(pointId))
@@ -1061,6 +1075,23 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ? $" 人工补图仅保留兼容标记 {abnormalFlow.ManualReviewCompatibilityCount} 个。"
             : string.Empty;
         return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个，待派单快照 {abnormalFlow.DispatchPendingCount} 个，已恢复 {abnormalFlow.DispatchRecoveredCount} 个。{compatibilitySuffix}".Trim();
+    }
+
+    private static string AppendDispatchRoutingDescription(
+        string description,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (execution?.ReopenTriggered == true)
+        {
+            return $"{description} 同点位同故障已恢复后再次出现，本轮重开新的待派单快照。";
+        }
+
+        if (execution?.DispatchDeduplicated == true)
+        {
+            return $"{description} 同点位同故障仍未恢复，本轮幂等合并到现有快照。";
+        }
+
+        return description;
     }
 
     private static string ResolveManualSupplementEntryActionText(InspectionTaskPointExecutionModel? execution)

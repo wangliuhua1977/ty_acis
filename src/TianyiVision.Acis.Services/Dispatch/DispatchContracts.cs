@@ -70,7 +70,38 @@ public sealed record DispatchWorkOrderModel(
     DispatchNotificationRecordModel NotificationRecord,
     DispatchRepeatFaultModel RepeatFault,
     string InspectionTaskId = "",
-    string DeviceCode = "");
+    string DeviceCode = "")
+{
+    public string FaultKey { get; init; } = string.Empty;
+}
+
+public sealed record DispatchInspectionWorkOrderUpsertRequest(
+    string PointId,
+    string DeviceCode,
+    string PointName,
+    string FaultType,
+    string FaultKey,
+    string InspectionGroupName,
+    string MapLocationPlaceholder,
+    string ScreenshotTitle,
+    string ScreenshotSubtitle,
+    string FaultSummary,
+    string LatestInspectionConclusion,
+    bool EntersDispatchPool,
+    DispatchMethodModel DispatchMethod,
+    DispatchResponsibilityModel Responsibility,
+    DateTime DetectedAt,
+    string InspectionTaskId);
+
+public sealed record DispatchInspectionWorkOrderUpsertResult(
+    string WorkOrderId,
+    string FaultKey,
+    DispatchWorkOrderStatusModel? DispatchStatusBefore,
+    DispatchWorkOrderStatusModel DispatchStatusAfter,
+    DispatchRecoveryStatusModel? RecoveryStatusBefore,
+    DispatchRecoveryStatusModel RecoveryStatusAfter,
+    bool ReopenTriggered,
+    bool Deduplicated);
 
 public sealed record DispatchResponsibilityQueryDto(
     string PointId,

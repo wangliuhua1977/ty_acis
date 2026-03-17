@@ -5,7 +5,7 @@ namespace TianyiVision.Acis.Services.Inspection;
 
 public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeService
 {
-    private const string PendingNotificationStatus = "待发送";
+    private const string InspectionGroupName = "AI智能巡检中心";
 
     private readonly IDispatchWorkOrderSnapshotService _workOrderSnapshotService;
     private readonly IDispatchResponsibilityService _dispatchResponsibilityService;
@@ -23,8 +23,7 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Task);
 
-        var snapshot = _workOrderSnapshotService.Load();
-        var workOrders = snapshot.WorkOrders.ToList();
+        var workOrders = _workOrderSnapshotService.Load().WorkOrders;
         var acceptedResults = new List<InspectionDispatchBridgePointResult>();
         var requestedPointIds = NormalizePointIds(request);
 
@@ -36,59 +35,50 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
 
             if (candidateEntry is null)
             {
-                acceptedResults.Add(WriteBridgeLog(
-                    pointId,
-                    deviceCode,
-                    dispatchCandidateAccepted: false,
-                    dispatchUpserted: false,
-                    dispatchDeduplicated: false,
-                    dispatchStatus: InspectionDispatchValueKeys.None));
+                acceptedResults.Add(WriteRejectedResult(pointId, deviceCode));
                 continue;
             }
 
-            var faultKey = BuildFaultKey(candidateEntry);
-            var existingIndex = FindExistingIndex(workOrders, candidateEntry.PointId, faultKey);
+            var faultType = ResolveFaultType(candidateEntry);
+            var faultKey = ResolveFaultKey(candidateEntry, faultType);
+            var existing = FindLatestWorkOrder(workOrders, candidateEntry.PointId, faultKey);
+            var responsibility = ResolveResponsibility(
+                pointExecution,
+                candidateEntry.PointId,
+                candidateEntry.PointName,
+                existing);
             var detectedAt = ResolveDetectedAt(request.Task);
-            var responsibility = ResolveResponsibility(pointExecution, candidateEntry.PointId, candidateEntry.PointName, existingIndex >= 0 ? workOrders[existingIndex] : null);
-            var candidateWorkOrder = existingIndex >= 0
-                ? MergeExisting(
-                    request.Task,
-                    workOrders[existingIndex],
-                    candidateEntry,
-                    pointExecution,
-                    responsibility,
-                    detectedAt,
-                    request.Source)
-                : CreateNew(
-                    request.Task,
-                    candidateEntry,
-                    pointExecution,
-                    responsibility,
-                    detectedAt,
+            var upsertResult = _workOrderSnapshotService.UpsertInspectionWorkOrder(
+                new DispatchInspectionWorkOrderUpsertRequest(
+                    candidateEntry.PointId,
+                    candidateEntry.DeviceCode,
+                    candidateEntry.PointName,
+                    faultType,
                     faultKey,
-                    request.Source);
+                    InspectionGroupName,
+                    ResolveCurrentHandlingUnit(pointExecution, existing),
+                    BuildScreenshotTitle(request.Source),
+                    BuildScreenshotSubtitle(request.Source),
+                    ResolveFaultSummary(candidateEntry, pointExecution),
+                    BuildInspectionConclusion(request.Source),
+                    true,
+                    DispatchMethodModel.Manual,
+                    responsibility,
+                    detectedAt,
+                    request.Task.TaskId));
 
-            if (existingIndex >= 0)
-            {
-                workOrders[existingIndex] = candidateWorkOrder;
-            }
-            else
-            {
-                workOrders.Add(candidateWorkOrder);
-            }
-
-            acceptedResults.Add(WriteBridgeLog(
+            acceptedResults.Add(new InspectionDispatchBridgePointResult(
                 candidateEntry.PointId,
                 candidateEntry.DeviceCode,
-                dispatchCandidateAccepted: true,
-                dispatchUpserted: true,
-                dispatchDeduplicated: existingIndex >= 0,
-                dispatchStatus: InspectionDispatchValueKeys.PendingDispatch));
-        }
-
-        if (acceptedResults.Any(item => item.DispatchUpserted))
-        {
-            _workOrderSnapshotService.Save(workOrders);
+                upsertResult.FaultKey,
+                true,
+                true,
+                upsertResult.Deduplicated,
+                upsertResult.ReopenTriggered,
+                MapDispatchStatus(upsertResult.DispatchStatusBefore),
+                MapDispatchStatus(upsertResult.DispatchStatusAfter),
+                MapRecoveryStatus(upsertResult.RecoveryStatusBefore),
+                MapRecoveryStatus(upsertResult.RecoveryStatusAfter)));
         }
 
         return new InspectionDispatchBridgeBatchResult(acceptedResults);
@@ -112,33 +102,6 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
             .Where(pointId => !string.IsNullOrWhiteSpace(pointId))
             .Distinct(StringComparer.Ordinal)
             .ToList();
-    }
-
-    private static int FindExistingIndex(
-        IReadOnlyList<DispatchWorkOrderModel> workOrders,
-        string pointId,
-        string faultKey)
-    {
-        for (var index = 0; index < workOrders.Count; index++)
-        {
-            var current = workOrders[index];
-            if (!string.Equals(current.PointId, pointId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (current.RecoveryStatus != DispatchRecoveryStatusModel.Unrecovered)
-            {
-                continue;
-            }
-
-            if (string.Equals(BuildFaultKey(current.FaultType), faultKey, StringComparison.Ordinal))
-            {
-                return index;
-            }
-        }
-
-        return -1;
     }
 
     private DispatchResponsibilityModel ResolveResponsibility(
@@ -172,76 +135,17 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
             "InspectionDispatchBridge");
     }
 
-    private static DispatchWorkOrderModel MergeExisting(
-        InspectionTaskRecordModel task,
-        DispatchWorkOrderModel existing,
-        InspectionAbnormalFlowEntryModel candidateEntry,
-        InspectionTaskPointExecutionModel? pointExecution,
-        DispatchResponsibilityModel responsibility,
-        DateTime detectedAt,
-        InspectionDispatchBridgeSource source)
+    private static DispatchWorkOrderModel? FindLatestWorkOrder(
+        IReadOnlyList<DispatchWorkOrderModel> workOrders,
+        string pointId,
+        string faultKey)
     {
-        var latestDetectedAt = ParseOrDefault(existing.RepeatFault.LatestFaultTime, detectedAt);
-        var effectiveDetectedAt = latestDetectedAt > detectedAt ? latestDetectedAt : detectedAt;
-
-        return existing with
-        {
-            InspectionTaskId = task.TaskId,
-            DeviceCode = candidateEntry.DeviceCode,
-            PointName = candidateEntry.PointName,
-            FaultType = ResolveFaultType(candidateEntry),
-            InspectionGroupName = "AI智能巡检中心",
-            MapLocationPlaceholder = ResolveCurrentHandlingUnit(pointExecution, existing),
-            ScreenshotTitle = BuildScreenshotTitle(source),
-            ScreenshotSubtitle = BuildScreenshotSubtitle(source),
-            FaultSummary = ResolveFaultSummary(candidateEntry, pointExecution),
-            LatestInspectionConclusion = BuildInspectionConclusion(source),
-            EntersDispatchPool = true,
-            IsTodayNew = effectiveDetectedAt.Date == DateTime.Today,
-            WorkOrderStatus = existing.WorkOrderStatus == DispatchWorkOrderStatusModel.Dispatched
-                ? DispatchWorkOrderStatusModel.Dispatched
-                : DispatchWorkOrderStatusModel.PendingDispatch,
-            RecoveryStatus = DispatchRecoveryStatusModel.Unrecovered,
-            Responsibility = responsibility,
-            RepeatFault = existing.RepeatFault with
-            {
-                LatestFaultTime = effectiveDetectedAt.ToString("yyyy-MM-dd HH:mm")
-            }
-        };
-    }
-
-    private static DispatchWorkOrderModel CreateNew(
-        InspectionTaskRecordModel task,
-        InspectionAbnormalFlowEntryModel candidateEntry,
-        InspectionTaskPointExecutionModel? pointExecution,
-        DispatchResponsibilityModel responsibility,
-        DateTime detectedAt,
-        string faultKey,
-        InspectionDispatchBridgeSource source)
-    {
-        var detectedAtText = detectedAt.ToString("yyyy-MM-dd HH:mm");
-
-        return new DispatchWorkOrderModel(
-            BuildWorkOrderId(candidateEntry.PointId, faultKey),
-            candidateEntry.PointId,
-            candidateEntry.PointName,
-            ResolveFaultType(candidateEntry),
-            "AI智能巡检中心",
-            ResolveCurrentHandlingUnit(pointExecution, null),
-            BuildScreenshotTitle(source),
-            BuildScreenshotSubtitle(source),
-            ResolveFaultSummary(candidateEntry, pointExecution),
-            BuildInspectionConclusion(source),
-            true,
-            detectedAt.Date == DateTime.Today,
-            DispatchMethodModel.Manual,
-            DispatchWorkOrderStatusModel.PendingDispatch,
-            DispatchRecoveryStatusModel.Unrecovered,
-            responsibility,
-            new DispatchNotificationRecordModel("--", PendingNotificationStatus, "--", "--", "--", PendingNotificationStatus, [], string.Empty),
-            new DispatchRepeatFaultModel(detectedAtText, detectedAtText, 1),
-            task.TaskId,
-            candidateEntry.DeviceCode);
+        return workOrders
+            .Where(workOrder =>
+                string.Equals(workOrder.PointId, pointId, StringComparison.Ordinal)
+                && string.Equals(ResolveFaultKey(workOrder), faultKey, StringComparison.Ordinal))
+            .OrderByDescending(workOrder => ParseOrDefault(workOrder.RepeatFault.LatestFaultTime, DateTime.MinValue))
+            .FirstOrDefault();
     }
 
     private static string ResolveCurrentHandlingUnit(
@@ -282,6 +186,43 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
         return tags.Count > 0 ? string.Join("|", tags) : "inspection_abnormal";
     }
 
+    private static string ResolveFaultKey(
+        InspectionAbnormalFlowEntryModel candidateEntry,
+        string faultType)
+    {
+        if (!string.IsNullOrWhiteSpace(candidateEntry.FaultKey))
+        {
+            return NormalizeFaultKey(candidateEntry.FaultKey);
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidateEntry.PrimaryFaultType))
+        {
+            return NormalizeFaultKey(candidateEntry.PrimaryFaultType);
+        }
+
+        var tags = (candidateEntry.AbnormalTags ?? Array.Empty<string>())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => tag.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return tags.Count > 0
+            ? NormalizeFaultKey(string.Join("|", tags))
+            : NormalizeFaultKey(faultType);
+    }
+
+    private static string ResolveFaultKey(DispatchWorkOrderModel workOrder)
+    {
+        return NormalizeFaultKey(string.IsNullOrWhiteSpace(workOrder.FaultKey) ? workOrder.FaultType : workOrder.FaultKey);
+    }
+
+    private static string NormalizeFaultKey(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? "inspection_abnormal"
+            : value.Trim().Replace(" ", "_", StringComparison.Ordinal);
+    }
+
     private static string ResolveFaultSummary(
         InspectionAbnormalFlowEntryModel candidateEntry,
         InspectionTaskPointExecutionModel? pointExecution)
@@ -301,7 +242,7 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
             return pointExecution.ExecutionSummary.Trim();
         }
 
-        return "AI智能巡检中心已识别异常，待派单处理。";
+        return "AI智能巡检中心已识别异常，待派单处置。";
     }
 
     private static string BuildScreenshotTitle(InspectionDispatchBridgeSource source)
@@ -314,7 +255,7 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
     private static string BuildScreenshotSubtitle(InspectionDispatchBridgeSource source)
     {
         return source == InspectionDispatchBridgeSource.ReviewWallConfirmed
-            ? "复核墙确认后进入待派单"
+            ? "复核确认后进入待派单快照"
             : "AI巡检结果直入待派单";
     }
 
@@ -323,23 +264,6 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
         return source == InspectionDispatchBridgeSource.ReviewWallConfirmed
             ? "AI智能巡检中心复核确认后已桥接到待派单快照。"
             : "AI智能巡检中心异常已桥接到待派单快照。";
-    }
-
-    private static string BuildWorkOrderId(string pointId, string faultKey)
-    {
-        return $"inspection:{pointId}:{faultKey}";
-    }
-
-    private static string BuildFaultKey(InspectionAbnormalFlowEntryModel candidateEntry)
-    {
-        return BuildFaultKey(ResolveFaultType(candidateEntry));
-    }
-
-    private static string BuildFaultKey(string value)
-    {
-        return string.IsNullOrWhiteSpace(value)
-            ? "inspection_abnormal"
-            : value.Trim().Replace(" ", "_", StringComparison.Ordinal);
     }
 
     private static DateTime ResolveDetectedAt(InspectionTaskRecordModel task)
@@ -352,24 +276,42 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
         return DateTime.TryParse(value, out var parsed) ? parsed : fallback;
     }
 
-    private static InspectionDispatchBridgePointResult WriteBridgeLog(
-        string pointId,
-        string deviceCode,
-        bool dispatchCandidateAccepted,
-        bool dispatchUpserted,
-        bool dispatchDeduplicated,
-        string dispatchStatus)
+    private static string MapDispatchStatus(DispatchWorkOrderStatusModel? status)
     {
-        var result = new InspectionDispatchBridgePointResult(
-            pointId,
-            deviceCode,
-            dispatchCandidateAccepted,
-            dispatchUpserted,
-            dispatchDeduplicated,
-            dispatchStatus);
+        return status switch
+        {
+            DispatchWorkOrderStatusModel.PendingDispatch => InspectionDispatchValueKeys.PendingDispatch,
+            DispatchWorkOrderStatusModel.Dispatched => InspectionDispatchValueKeys.Dispatched,
+            _ => InspectionDispatchValueKeys.None
+        };
+    }
+
+    private static string MapRecoveryStatus(DispatchRecoveryStatusModel? status)
+    {
+        return status switch
+        {
+            DispatchRecoveryStatusModel.Unrecovered => InspectionRecoveryValueKeys.Unrecovered,
+            DispatchRecoveryStatusModel.Recovered => InspectionRecoveryValueKeys.Recovered,
+            _ => InspectionRecoveryValueKeys.None
+        };
+    }
+
+    private static InspectionDispatchBridgePointResult WriteRejectedResult(string pointId, string deviceCode)
+    {
         MapPointSourceDiagnostics.Write(
             "InspectionDispatchBridge",
-            $"pointId={pointId}, deviceCode={deviceCode}, dispatchCandidateAccepted={dispatchCandidateAccepted}, dispatchUpserted={dispatchUpserted}, dispatchDeduplicated={dispatchDeduplicated}, dispatchStatus={dispatchStatus}");
-        return result;
+            $"pointId={pointId}, deviceCode={deviceCode}, faultKey=none, dispatchStatusBefore={InspectionDispatchValueKeys.None}, dispatchStatusAfter={InspectionDispatchValueKeys.None}, recoveryStatusBefore={InspectionRecoveryValueKeys.None}, recoveryStatusAfter={InspectionRecoveryValueKeys.None}, reopenTriggered=false, deduplicated=false");
+        return new InspectionDispatchBridgePointResult(
+            pointId,
+            deviceCode,
+            string.Empty,
+            false,
+            false,
+            false,
+            false,
+            InspectionDispatchValueKeys.None,
+            InspectionDispatchValueKeys.None,
+            InspectionRecoveryValueKeys.None,
+            InspectionRecoveryValueKeys.None);
     }
 }

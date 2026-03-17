@@ -547,13 +547,20 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         if (string.Equals(recoveryStatusBefore, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
             && pointExecution.RecoveryConfirmed)
         {
+            var dispatchStatusBefore = NormalizeDispatchStatus(
+                string.IsNullOrWhiteSpace(request.DispatchStatus)
+                    ? pointExecution.DispatchStatus
+                    : request.DispatchStatus);
             WriteDispatchRecoveryLog(
                 request.PointId,
                 ResolveRecoveryDeviceCode(request.DeviceCode, pointExecution.DeviceCode),
-                NormalizeDispatchStatus(request.DispatchStatus),
+                ResolveDispatchFaultKey(pointExecution),
+                dispatchStatusBefore,
+                dispatchStatusBefore,
                 recoveryStatusBefore,
                 recoveryStatusBefore,
-                pointExecution.RecoveryConfirmed);
+                reopenTriggered: false,
+                deduplicated: false);
             return ServiceResponse<InspectionTaskRecordModel>.Success(existingTask);
         }
 
@@ -603,10 +610,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         WriteDispatchRecoveryLog(
             request.PointId,
             ResolveRecoveryDeviceCode(request.DeviceCode, pointExecution.DeviceCode),
+            ResolveDispatchFaultKey(pointExecution),
+            NormalizeDispatchStatus(pointExecution.DispatchStatus),
             dispatchStatus,
             recoveryStatusBefore,
             InspectionRecoveryValueKeys.Recovered,
-            request.RecoveryConfirmed);
+            reopenTriggered: false,
+            deduplicated: false);
 
         return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
     }
@@ -976,13 +986,22 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 .Select(point => resultsByPoint.TryGetValue(point.PointId, out var result)
                     ? point with
                     {
+                        FaultKey = result.FaultKey,
                         DispatchCandidateAccepted = result.DispatchCandidateAccepted,
                         DispatchUpserted = result.DispatchUpserted,
                         DispatchDeduplicated = result.DispatchDeduplicated,
-                        DispatchStatus = NormalizeDispatchStatus(result.DispatchStatus),
-                        RecoveryStatus = result.DispatchCandidateAccepted
-                            ? InspectionRecoveryValueKeys.Unrecovered
-                            : point.RecoveryStatus
+                        ReopenTriggered = result.ReopenTriggered,
+                        DispatchStatus = NormalizeDispatchStatus(result.DispatchStatusAfter),
+                        RecoveryStatus = NormalizeRecoveryStatus(result.RecoveryStatusAfter),
+                        RecoveryConfirmed = string.Equals(NormalizeRecoveryStatus(result.RecoveryStatusAfter), InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
+                            ? point.RecoveryConfirmed
+                            : false,
+                        RecoveryConfirmedAt = string.Equals(NormalizeRecoveryStatus(result.RecoveryStatusAfter), InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
+                            ? point.RecoveryConfirmedAt
+                            : string.Empty,
+                        RecoverySummary = string.Equals(NormalizeRecoveryStatus(result.RecoveryStatusAfter), InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
+                            ? point.RecoverySummary
+                            : string.Empty
                     }
                     : point)
                 .ToList();
@@ -1308,9 +1327,24 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             return string.Empty;
         }
 
-        return source == InspectionDispatchBridgeSource.ReviewWallConfirmed
+        var reopenCount = bridgeResult.Points.Count(point => point.ReopenTriggered);
+        var deduplicatedCount = bridgeResult.Points.Count(point => point.DispatchDeduplicated && !point.ReopenTriggered);
+        var summary = source == InspectionDispatchBridgeSource.ReviewWallConfirmed
             ? $"AI智能巡检中心复核确认后已桥接待派单 {acceptedCount} 个点位。"
             : $"AI智能巡检中心已桥接待派单 {acceptedCount} 个点位。";
+        var segments = new List<string> { summary };
+
+        if (reopenCount > 0)
+        {
+            segments.Add($"其中 {reopenCount} 个点位已恢复后重开新快照。");
+        }
+
+        if (deduplicatedCount > 0)
+        {
+            segments.Add($"其中 {deduplicatedCount} 个点位未恢复重复故障已合并旧快照。");
+        }
+
+        return string.Join(" ", segments);
     }
 
     private static string BuildDispatchRecoverySummary(InspectionTaskPointExecutionModel pointExecution)
@@ -1340,6 +1374,21 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             InspectionRecoveryValueKeys.Unrecovered => InspectionRecoveryValueKeys.Unrecovered,
             _ => InspectionRecoveryValueKeys.None
         };
+    }
+
+    private static string ResolveDispatchFaultKey(InspectionTaskPointExecutionModel pointExecution)
+    {
+        if (!string.IsNullOrWhiteSpace(pointExecution.FaultKey))
+        {
+            return pointExecution.FaultKey.Trim();
+        }
+
+        return ResolvePrimaryFaultType(
+                pointExecution.AiAbnormalTags,
+                pointExecution.FailureCategory,
+                pointExecution.ExecutionSummary)
+            .Trim()
+            .Replace(" ", "_", StringComparison.Ordinal);
     }
 
     private static string ResolvePrimaryFaultType(
@@ -1803,14 +1852,17 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private static void WriteDispatchRecoveryLog(
         string pointId,
         string deviceCode,
-        string dispatchStatus,
+        string faultKey,
+        string dispatchStatusBefore,
+        string dispatchStatusAfter,
         string recoveryStatusBefore,
         string recoveryStatusAfter,
-        bool recoveryConfirmed)
+        bool reopenTriggered,
+        bool deduplicated)
     {
         MapPointSourceDiagnostics.Write(
             "InspectionDispatchRecovery",
-            $"pointId={pointId}, deviceCode={deviceCode}, dispatchStatus={dispatchStatus}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, recoveryConfirmed={recoveryConfirmed}");
+            $"pointId={pointId}, deviceCode={deviceCode}, faultKey={faultKey}, dispatchStatusBefore={dispatchStatusBefore}, dispatchStatusAfter={dispatchStatusAfter}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, reopenTriggered={reopenTriggered}, deduplicated={deduplicated}");
     }
 
     private static void ApplyEvidenceRetention(

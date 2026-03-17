@@ -251,11 +251,15 @@ public sealed record InspectionAbnormalFlowEntryModel(
 {
     public string PrimaryFaultType { get; init; } = string.Empty;
 
+    public string FaultKey { get; init; } = string.Empty;
+
     public bool DispatchCandidateAccepted { get; init; }
 
     public bool DispatchUpserted { get; init; }
 
     public bool DispatchDeduplicated { get; init; }
+
+    public bool ReopenTriggered { get; init; }
 
     public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
 
@@ -352,6 +356,8 @@ public sealed record InspectionTaskPointExecutionModel(
 
     public string PrimaryFaultType { get; init; } = string.Empty;
 
+    public string FaultKey { get; init; } = string.Empty;
+
     public bool RouteToReviewWallReserved { get; init; }
 
     public bool RouteToDispatchPoolReserved { get; init; }
@@ -363,6 +369,8 @@ public sealed record InspectionTaskPointExecutionModel(
     public bool DispatchUpserted { get; init; }
 
     public bool DispatchDeduplicated { get; init; }
+
+    public bool ReopenTriggered { get; init; }
 
     public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
 
@@ -539,9 +547,11 @@ public static class InspectionTaskModelExtensions
             point.AiAnalysisSummary)
         {
             PrimaryFaultType = ResolvePrimaryFaultType(point),
+            FaultKey = point.FaultKey?.Trim() ?? string.Empty,
             DispatchCandidateAccepted = point.DispatchCandidateAccepted,
             DispatchUpserted = point.DispatchUpserted,
             DispatchDeduplicated = point.DispatchDeduplicated,
+            ReopenTriggered = point.ReopenTriggered,
             DispatchStatus = string.IsNullOrWhiteSpace(point.DispatchStatus)
                 ? InspectionDispatchValueKeys.None
                 : point.DispatchStatus.Trim(),
@@ -776,10 +786,15 @@ public sealed record InspectionDispatchBridgeRequest(
 public sealed record InspectionDispatchBridgePointResult(
     string PointId,
     string DeviceCode,
+    string FaultKey,
     bool DispatchCandidateAccepted,
     bool DispatchUpserted,
     bool DispatchDeduplicated,
-    string DispatchStatus);
+    bool ReopenTriggered,
+    string DispatchStatusBefore,
+    string DispatchStatusAfter,
+    string RecoveryStatusBefore,
+    string RecoveryStatusAfter);
 
 public sealed record InspectionDispatchBridgeBatchResult(
     IReadOnlyList<InspectionDispatchBridgePointResult> Points)
