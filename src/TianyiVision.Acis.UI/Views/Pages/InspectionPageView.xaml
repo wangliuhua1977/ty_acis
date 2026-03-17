@@ -205,7 +205,14 @@
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ScopePreviewTitle}" />
                                         <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePreviewDescription}" TextWrapping="Wrap" />
-                                        <TextBlock Margin="0,16,0,10" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ScopePlanSelectionLabel}" />
+                                        <DockPanel Margin="0,16,0,10" LastChildFill="False">
+                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ScopePlanSelectionLabel}" />
+                                            <Button DockPanel.Dock="Right"
+                                                    Padding="12,8"
+                                                    Style="{StaticResource SecondaryActionButtonStyle}"
+                                                    Command="{Binding SaveCurrentScopePlanCommand}"
+                                                    Content="{Binding ScopeSaveActionText}" />
+                                        </DockPanel>
                                         <ItemsControl ItemsSource="{Binding AvailableScopePlans}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
@@ -239,6 +246,7 @@
                                             <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanAlignmentSummary}" TextWrapping="Wrap" />
                                         </Grid>
                                         <TextBlock Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopeReadonlyHint}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanSaveFeedback}" TextWrapping="Wrap" />
                                         <Grid Margin="0,16,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130" />

@@ -886,3 +886,8 @@ public interface IInspectionTaskService
 
     ServiceResponse<InspectionTaskRecordModel> ConfirmDispatchRecovery(InspectionDispatchRecoveryWritebackRequest request);
 }
+
+public interface IInspectionScopePlanPersistenceService
+{
+    ServiceResponse<InspectionWorkspaceSnapshot> SaveDefaultScopePlan(string groupId, string scopePlanId);
+}

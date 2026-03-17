@@ -21,6 +21,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedScopePlanIdByGroupId = new(StringComparer.Ordinal);
     private readonly RelayCommand _executeInspectionCommand;
+    private readonly RelayCommand _saveCurrentScopePlanCommand;
     private readonly RelayCommand _startSinglePointInspectionCommand;
     private readonly RelayCommand _openDispatchWorkspaceCommand;
     private readonly RelayCommand _openReportsCenterCommand;
@@ -61,6 +62,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string _currentViewingScopePlanName = "--";
     private string _currentExecutionScopePlanName = "--";
     private string _scopePlanAlignmentSummary = string.Empty;
+    private string _scopePlanSaveFeedback = string.Empty;
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -129,6 +131,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ScopeCurrentViewingPlanLabel = textService.Resolve(TextTokens.InspectionScopeCurrentViewingPlanLabel);
         ScopeCurrentExecutionPlanLabel = textService.Resolve(TextTokens.InspectionScopeCurrentExecutionPlanLabel);
         ScopeReadonlyHint = textService.Resolve(TextTokens.InspectionScopeReadonlyHint);
+        ScopeSaveActionText = textService.Resolve(TextTokens.InspectionScopeSaveAction);
         WorkbenchMapBadge = textService.Resolve(TextTokens.InspectionWorkbenchMapBadge);
         WorkbenchHint = textService.Resolve(TextTokens.InspectionWorkbenchHint);
         MapModeRealText = textService.Resolve(TextTokens.InspectionMapModeReal);
@@ -253,9 +256,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 return;
             }
 
+            ScopePlanSaveFeedback = string.Empty;
             ApplyScopePlanSelection(workspace, option.PlanId);
         });
 
+        _saveCurrentScopePlanCommand = new RelayCommand(_ => SaveCurrentScopePlan(), _ => CanSaveCurrentScopePlan);
         _executeInspectionCommand = new RelayCommand(_ => StartGroupInspection(), _ => ExecutionState?.IsEnabled == true);
         _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspection(), _ => CanStartSinglePointInspection);
         _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
@@ -275,6 +280,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         OpenDispatchWorkspaceCommand = _openDispatchWorkspaceCommand;
         OpenReportsCenterCommand = _openReportsCenterCommand;
         SelectFirstUnmappedPointCommand = _selectFirstUnmappedPointCommand;
+        SaveCurrentScopePlanCommand = _saveCurrentScopePlanCommand;
         ViewHistoryCommand = new RelayCommand(_ =>
         {
             RequestRefreshWorkspace(SelectedGroup?.Id, SelectedPoint?.Id);
@@ -336,6 +342,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string ScopeCurrentViewingPlanLabel { get; }
     public string ScopeCurrentExecutionPlanLabel { get; }
     public string ScopeReadonlyHint { get; }
+    public string ScopeSaveActionText { get; }
     public string WorkbenchMapBadge { get; }
     public string WorkbenchHint { get; }
     public string MapModeRealText { get; }
@@ -626,6 +633,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     public bool HasScopeUnmatchedPoints => ScopeUnmatchedPoints.Count > 0;
 
+    public bool CanSaveCurrentScopePlan
+        => SelectedGroup is not null
+            && _workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace)
+            && !string.IsNullOrWhiteSpace(ResolveScopePlanSelection(workspace, null));
+
     public string CurrentViewingScopePlanName
     {
         get => _currentViewingScopePlanName;
@@ -644,11 +656,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         private set => SetProperty(ref _scopePlanAlignmentSummary, value);
     }
 
+    public string ScopePlanSaveFeedback
+    {
+        get => _scopePlanSaveFeedback;
+        private set => SetProperty(ref _scopePlanSaveFeedback, value);
+    }
+
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
     public ICommand SelectScopePlanCommand { get; }
     public ICommand SelectFirstUnmappedPointCommand { get; }
+    public ICommand SaveCurrentScopePlanCommand { get; }
     public ICommand ExecuteInspectionCommand { get; }
     public ICommand StartSinglePointInspectionCommand { get; }
     public ICommand OpenDispatchWorkspaceCommand { get; }
@@ -708,6 +727,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ? _textService.Resolve(TextTokens.InspectionActionDisable)
             : _textService.Resolve(TextTokens.InspectionActionEnable);
 
+        _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
         _executeInspectionCommand.RaiseCanExecuteChanged();
 
         var initialPoint = !string.IsNullOrWhiteSpace(preferredPointId)
@@ -809,6 +829,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => point.IsInDefaultScope));
         ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => !point.IsInDefaultScope));
+        _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
         SyncScopePointSelection(SelectedPoint?.Id);
     }
 
@@ -856,26 +877,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private void RequestRefreshWorkspace(string? preferredGroupId = null, string? preferredPointId = null)
     {
         var snapshot = _inspectionTaskService.GetWorkspace().Data;
-        _workspaceByGroupId = CreateWorkspaces(snapshot);
-
-        Groups.Clear();
-        foreach (var workspace in _workspaceByGroupId.Values)
-        {
-            Groups.Add(workspace.Group);
-        }
-
-        var targetGroup = !string.IsNullOrWhiteSpace(preferredGroupId)
-            ? Groups.FirstOrDefault(group => group.Id == preferredGroupId)
-            : null;
-        targetGroup ??= SelectedGroup is not null
-            ? Groups.FirstOrDefault(group => group.Id == SelectedGroup.Id)
-            : null;
-        targetGroup ??= Groups.FirstOrDefault();
-
-        if (targetGroup is not null)
-        {
-            LoadGroup(targetGroup, preferredPointId);
-        }
+        TryApplyWorkspaceSnapshot(snapshot, preferredGroupId, preferredPointId);
     }
 
     public bool TryWritePointEvidence(InspectionPointEvidenceWriteRequest request)
@@ -981,6 +983,50 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint?.Id);
     }
 
+    private void SaveCurrentScopePlan()
+    {
+        if (SelectedGroup is null
+            || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
+        {
+            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan);
+            return;
+        }
+
+        var selectedPlanId = ResolveScopePlanSelection(workspace, null);
+        if (string.IsNullOrWhiteSpace(selectedPlanId))
+        {
+            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan);
+            return;
+        }
+
+        if (_inspectionTaskService is not IInspectionScopePlanPersistenceService persistenceService)
+        {
+            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveFailure);
+            return;
+        }
+
+        var selectedPointId = SelectedPoint?.Id;
+        var response = persistenceService.SaveDefaultScopePlan(workspace.Group.Id, selectedPlanId);
+        if (!response.IsSuccess)
+        {
+            ScopePlanSaveFeedback = string.IsNullOrWhiteSpace(response.Message)
+                ? _textService.Resolve(TextTokens.InspectionScopeSaveFailure)
+                : response.Message;
+            return;
+        }
+
+        if (!TryApplyWorkspaceSnapshot(response.Data, workspace.Group.Id, selectedPointId))
+        {
+            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveRefreshRollback);
+            return;
+        }
+
+        var savedPlanName = CurrentExecutionScopePlanName;
+        ScopePlanSaveFeedback = string.Format(
+            _textService.Resolve(TextTokens.InspectionScopeSaveSuccessPattern),
+            savedPlanName);
+    }
+
     private void ToggleGroupEnabled()
     {
         if (SelectedGroup is null || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
@@ -1001,6 +1047,51 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         _executeInspectionCommand.RaiseCanExecuteChanged();
         _startSinglePointInspectionCommand.RaiseCanExecuteChanged();
         RefreshSinglePointInspectionSummary(workspace, SelectedPoint);
+    }
+
+    private bool TryApplyWorkspaceSnapshot(
+        InspectionWorkspaceSnapshot snapshot,
+        string? preferredGroupId = null,
+        string? preferredPointId = null)
+    {
+        try
+        {
+            var updatedWorkspaces = CreateWorkspaces(snapshot);
+            var updatedGroups = updatedWorkspaces.Values
+                .Select(workspace => workspace.Group)
+                .ToList();
+
+            var targetGroup = !string.IsNullOrWhiteSpace(preferredGroupId)
+                ? updatedGroups.FirstOrDefault(group => group.Id == preferredGroupId)
+                : null;
+            targetGroup ??= SelectedGroup is not null
+                ? updatedGroups.FirstOrDefault(group => group.Id == SelectedGroup.Id)
+                : null;
+            targetGroup ??= updatedGroups.FirstOrDefault();
+
+            _workspaceByGroupId = updatedWorkspaces;
+
+            Groups.Clear();
+            foreach (var group in updatedGroups)
+            {
+                Groups.Add(group);
+            }
+
+            if (targetGroup is not null)
+            {
+                LoadGroup(targetGroup, preferredPointId);
+            }
+
+            _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"inspection workspace apply failed: groupId={preferredGroupId ?? "none"}, reason={exception.Message}");
+            return false;
+        }
     }
 
     private void RefreshSummary(GroupWorkspaceState workspace)

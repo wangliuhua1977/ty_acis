@@ -4,7 +4,7 @@ using TianyiVision.Acis.Services.Diagnostics;
 
 namespace TianyiVision.Acis.Services.Inspection;
 
-public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
+public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, IInspectionScopePlanPersistenceService
 {
     private const string DefaultGroupId = "inspection-live-group";
     private const string DefaultGroupName = "实时点位巡检组";
@@ -137,6 +137,88 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         ]);
 
         return ServiceResponse<InspectionWorkspaceSnapshot>.Success(new InspectionWorkspaceSnapshot([group]), pointCollectionResponse.Message);
+    }
+
+    public ServiceResponse<InspectionWorkspaceSnapshot> SaveDefaultScopePlan(string groupId, string scopePlanId)
+    {
+        var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim();
+        var normalizedScopePlanId = scopePlanId?.Trim() ?? string.Empty;
+        var fallbackSnapshot = GetWorkspaceSnapshotOrEmpty();
+
+        if (string.IsNullOrWhiteSpace(normalizedScopePlanId))
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"save default scope plan rejected: groupId={normalizedGroupId}, reason=missing_scope_plan_id");
+            return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
+                fallbackSnapshot,
+                "当前查看方案不存在，请重新选择后再保存。");
+        }
+
+        InspectionSettingsSnapshot? originalSettings = null;
+        try
+        {
+            originalSettings = _inspectionSettingsService.Load();
+            var targetScopePlan = originalSettings.ScopePlans
+                .FirstOrDefault(plan => string.Equals(plan.PlanId, normalizedScopePlanId, StringComparison.Ordinal));
+            if (targetScopePlan is null)
+            {
+                var fallbackPlan = ResolveDefaultScopePlan(originalSettings.ScopePlans);
+                MapPointSourceDiagnostics.Write(
+                    "InspectionTask",
+                    $"save default scope plan rejected: groupId={normalizedGroupId}, scopePlanId={normalizedScopePlanId}, fallbackPlanId={fallbackPlan?.PlanId ?? "none"}");
+                return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
+                    fallbackSnapshot,
+                    "当前查看方案已失效，请重新选择后再保存。");
+            }
+
+            var updatedSettings = originalSettings with
+            {
+                ScopePlans = originalSettings.ScopePlans
+                    .Select(plan => plan with
+                    {
+                        IsDefault = string.Equals(plan.PlanId, targetScopePlan.PlanId, StringComparison.Ordinal)
+                    })
+                    .ToList()
+            };
+
+            _inspectionSettingsService.Save(updatedSettings);
+
+            try
+            {
+                var refreshedWorkspace = GetWorkspace();
+                MapPointSourceDiagnostics.Write(
+                    "InspectionTask",
+                    $"save default scope plan succeeded: groupId={normalizedGroupId}, scopePlanId={targetScopePlan.PlanId}, scopePlanName={targetScopePlan.PlanName}");
+                return ServiceResponse<InspectionWorkspaceSnapshot>.Success(
+                    refreshedWorkspace.Data,
+                    targetScopePlan.PlanName);
+            }
+            catch (Exception refreshException)
+            {
+                _inspectionSettingsService.Save(originalSettings);
+                MapPointSourceDiagnostics.Write(
+                    "InspectionTask",
+                    $"save default scope plan refresh failed and reverted: groupId={normalizedGroupId}, scopePlanId={targetScopePlan.PlanId}, reason={refreshException.Message}");
+                return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
+                    fallbackSnapshot,
+                    "执行方案刷新失败，当前显示已保持原状态。");
+            }
+        }
+        catch (Exception exception)
+        {
+            if (originalSettings is not null)
+            {
+                TryRestoreInspectionSettings(originalSettings, normalizedGroupId, normalizedScopePlanId);
+            }
+
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"save default scope plan failed: groupId={normalizedGroupId}, scopePlanId={normalizedScopePlanId}, reason={exception.Message}");
+            return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
+                fallbackSnapshot,
+                "执行方案保存失败，请稍后重试。");
+        }
     }
 
     public ServiceResponse<InspectionTaskRecordModel> StartSinglePointInspection(string groupId, string pointId)
@@ -2326,6 +2408,35 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private static string NormalizeReason(string? message, string fallbackReason)
     {
         return string.IsNullOrWhiteSpace(message) ? fallbackReason : message.Trim();
+    }
+
+    private InspectionWorkspaceSnapshot GetWorkspaceSnapshotOrEmpty()
+    {
+        try
+        {
+            return GetWorkspace().Data;
+        }
+        catch
+        {
+            return new InspectionWorkspaceSnapshot([]);
+        }
+    }
+
+    private void TryRestoreInspectionSettings(
+        InspectionSettingsSnapshot settings,
+        string groupId,
+        string scopePlanId)
+    {
+        try
+        {
+            _inspectionSettingsService.Save(settings);
+        }
+        catch (Exception restoreException)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"restore inspection settings failed: groupId={groupId}, scopePlanId={scopePlanId}, reason={restoreException.Message}");
+        }
     }
 
     private static bool ContainsPlayableFlag(string playbackStatusText)

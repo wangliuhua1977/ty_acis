@@ -130,6 +130,11 @@ public static class TextTokens
     public const string InspectionScopeCurrentViewingPlanLabel = "inspection.scopeCurrentViewingPlanLabel";
     public const string InspectionScopeCurrentExecutionPlanLabel = "inspection.scopeCurrentExecutionPlanLabel";
     public const string InspectionScopeReadonlyHint = "inspection.scopeReadonlyHint";
+    public const string InspectionScopeSaveAction = "inspection.scopeSaveAction";
+    public const string InspectionScopeSaveSuccessPattern = "inspection.scopeSaveSuccessPattern";
+    public const string InspectionScopeSaveFailure = "inspection.scopeSaveFailure";
+    public const string InspectionScopeSaveMissingPlan = "inspection.scopeSaveMissingPlan";
+    public const string InspectionScopeSaveRefreshRollback = "inspection.scopeSaveRefreshRollback";
     public const string InspectionScopeCurrentViewEqualsExecution = "inspection.scopeCurrentViewEqualsExecution";
     public const string InspectionScopeCurrentViewDiffersExecutionPattern = "inspection.scopeCurrentViewDiffersExecutionPattern";
     public const string InspectionWorkbenchMapBadge = "inspection.workbenchMapBadge";
