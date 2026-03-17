@@ -488,8 +488,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     public bool CanStartSinglePointInspection
         => HasSelectedPoint
-            && SelectedGroup?.IsEnabled == true
-            && string.Equals(CurrentPointSourceType, "real", StringComparison.Ordinal);
+            && SelectedGroup?.IsEnabled == true;
 
     public bool HasUnmappedPoints => UnmappedPoints.Count > 0;
 
@@ -1482,6 +1481,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.X,
             point.Y,
             MapPointStatus(point.Status),
+            ResolvePointStatus(MapPointStatus(point.Status)),
             MapPointStatus(point.CompletionStatus),
             point.IsOnline,
             point.IsPlayable,
@@ -1514,6 +1514,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         double x,
         double y,
         InspectionPointStatus status,
+        string statusText,
         InspectionPointStatus completionStatus,
         bool? isOnline,
         bool isPlayable,
@@ -1574,6 +1575,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             x,
             y,
             status,
+            statusText,
             completionStatus,
             onlineStatus,
             ResolvePlaybackStatus(isOnline, isPlayable),

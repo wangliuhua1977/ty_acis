@@ -30,6 +30,7 @@ public sealed class InspectionPointState : ViewModelBase
         double x,
         double y,
         InspectionPointStatus status,
+        string statusText,
         InspectionPointStatus completionStatus,
         string onlineStatus,
         string playbackStatus,
@@ -62,6 +63,7 @@ public sealed class InspectionPointState : ViewModelBase
         X = x;
         Y = y;
         _status = status;
+        StatusText = statusText;
         CompletionStatus = completionStatus;
         OnlineStatus = onlineStatus;
         PlaybackStatus = playbackStatus;
@@ -128,6 +130,8 @@ public sealed class InspectionPointState : ViewModelBase
             }
         }
     }
+
+    public string StatusText { get; }
 
     public InspectionPointStatus CompletionStatus { get; }
 

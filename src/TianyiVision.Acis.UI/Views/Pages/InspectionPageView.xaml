@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:TianyiVision.Acis.UI.Views.Controls"
              xmlns:state="clr-namespace:TianyiVision.Acis.UI.States"
-             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-             xmlns:views="clr-namespace:TianyiVision.Acis.UI.Views.Pages">
+             xmlns:views="clr-namespace:TianyiVision.Acis.UI.Views.Pages"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <UserControl.Resources>
         <Style x:Key="WorkspaceVisibilityStyle" TargetType="FrameworkElement">
             <Setter Property="Visibility" Value="Visible" />
@@ -14,7 +14,6 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
         <Style x:Key="ReviewVisibilityStyle" TargetType="FrameworkElement">
             <Setter Property="Visibility" Value="Collapsed" />
             <Style.Triggers>
@@ -23,12 +22,10 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
         <Style x:Key="InspectionSectionCardStyle" TargetType="Border" BasedOn="{StaticResource PrimaryPanelStyle}">
             <Setter Property="Padding" Value="18" />
             <Setter Property="Margin" Value="0,0,0,16" />
         </Style>
-
         <Style x:Key="GroupItemButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Margin" Value="0,0,0,10" />
@@ -36,882 +33,252 @@
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
                     <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                    <Setter Property="BorderThickness" Value="2" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
-        <Style x:Key="FaultItemButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+        <Style x:Key="PointItemButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Margin" Value="0,0,0,10" />
             <Setter Property="Padding" Value="14,12" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Fault}">
                     <Setter Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
                     <Setter Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
-                    <Setter Property="BorderThickness" Value="2" />
                 </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="UnmappedItemButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Margin" Value="0,0,0,10" />
-            <Setter Property="Padding" Value="14,12" />
-            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.PausedUntilRecovery}">
+                    <Setter Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static state:InspectionPointStatus.Inspecting}">
+                    <Setter Property="Background" Value="{DynamicResource Theme.InspectionActiveSoftBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.InspectionActiveBrush}" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
                     <Setter Property="BorderThickness" Value="2" />
                 </DataTrigger>
             </Style.Triggers>
-        </Style>
-
-        <Style x:Key="LegendChipStyle" TargetType="Border">
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="Margin" Value="0,0,10,0" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
-        </Style>
-
-        <Style x:Key="MapOverlayCardStyle" TargetType="Border">
-            <Setter Property="Padding" Value="14" />
-            <Setter Property="CornerRadius" Value="16" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Background" Value="#D9162235" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderStrongBrush}" />
-        </Style>
-
-        <Style x:Key="MapPointButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="92" />
-            <Setter Property="Height" Value="92" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Grid Width="92" Height="92" RenderTransformOrigin="0.5,0.5">
-                            <Grid.RenderTransform>
-                                <ScaleTransform />
-                            </Grid.RenderTransform>
-                            <Ellipse x:Name="SelectionRing" Width="84" Height="84" Stroke="{DynamicResource Theme.TextPrimaryBrush}" StrokeThickness="2" Opacity="0" />
-                            <Ellipse x:Name="PulseRing" Width="72" Height="72" Fill="{DynamicResource Theme.InspectionActiveSoftBrush}" Opacity="0" />
-                            <Ellipse x:Name="FaultRing" Width="76" Height="76" Fill="{DynamicResource Theme.DangerSoftBrush}" Opacity="0" />
-                            <Border x:Name="CoreBorder" Width="52" Height="52" Background="{DynamicResource Theme.AccentSoftBrush}" BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}" BorderThickness="1" CornerRadius="26" VerticalAlignment="Top" HorizontalAlignment="Center">
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8" TextWrapping="Wrap" TextAlignment="Center" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding PointName}" />
-                            </Border>
-                            <Border x:Name="SelectionTag" Width="16" Height="16" CornerRadius="8" Background="{DynamicResource Theme.AccentBrush}" BorderBrush="{DynamicResource Theme.TextPrimaryBrush}" BorderThickness="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0" Visibility="Collapsed" />
-                            <TextBlock Margin="0,62,0,0" HorizontalAlignment="Center" TextAlignment="Center" Width="90" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextPrimaryBrush}" Text="{Binding PointName}" />
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Normal}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.SuccessSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.SuccessBrush}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Fault}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
-                                <Setter TargetName="FaultRing" Property="Opacity" Value="0.65" />
-                                <DataTrigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                            <DoubleAnimation Storyboard.TargetName="FaultRing" Storyboard.TargetProperty="Opacity" From="0.25" To="0.95" Duration="0:0:0.75" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </DataTrigger.EnterActions>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Key}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Silent}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.TextSecondaryBrush}" />
-                                <Setter TargetName="CoreBorder" Property="Opacity" Value="0.7" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Paused}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding VisualKind}" Value="{x:Static state:MapPointVisualKind.Inspecting}">
-                                <Setter TargetName="CoreBorder" Property="Background" Value="{DynamicResource Theme.InspectionActiveSoftBrush}" />
-                                <Setter TargetName="CoreBorder" Property="BorderBrush" Value="{DynamicResource Theme.InspectionActiveBrush}" />
-                                <Setter TargetName="PulseRing" Property="Opacity" Value="0.75" />
-                                <DataTrigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard RepeatBehavior="Forever">
-                                            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity" From="0.25" To="0.8" Duration="0:0:0.8" AutoReverse="True" />
-                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.05" Duration="0:0:0.8" AutoReverse="True" />
-                                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="1.05" Duration="0:0:0.8" AutoReverse="True" />
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </DataTrigger.EnterActions>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="CoreBorder" Property="BorderThickness" Value="2" />
-                                <Setter TargetName="SelectionRing" Property="Opacity" Value="0.65" />
-                                <Setter TargetName="SelectionTag" Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
     </UserControl.Resources>
 
     <Grid>
         <Grid Style="{StaticResource WorkspaceVisibilityStyle}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <StackPanel Margin="0,0,0,20">
-            <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
-            <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" />
-        </StackPanel>
+            <StackPanel Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource PageTitleTextStyle}" Text="{Binding Title}" />
+                <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Description}" TextWrapping="Wrap" />
+            </StackPanel>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="360" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="360" />
-            </Grid.ColumnDefinitions>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="320" />
+                    <ColumnDefinition Width="460" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="0,0,18,0">
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding GroupSectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding GroupSectionDescription}" />
-                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding CurrentGroupLabel}" />
-                            <Border Margin="0,8,0,16" Padding="14" Background="{DynamicResource Theme.AccentSoftBrush}" BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}" BorderThickness="1" CornerRadius="16">
-                                <StackPanel>
-                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding SelectedGroup.Name}" />
-                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedGroup.Summary}" />
-                                </StackPanel>
-                            </Border>
-                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding AvailableGroupsLabel}" />
-                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Groups}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Style="{StaticResource GroupItemButtonStyle}" Command="{Binding DataContext.SelectGroupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
-                                            <StackPanel>
-                                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
-                                                <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Summary}" />
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding StrategySectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding StrategySectionDescription}" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding StrategyFirstRunLabel}" />
-                                <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StrategySummary.FirstRunTime}" />
-                                <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding StrategyDailyRunsLabel}" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StrategySummary.DailyExecutionCount}" />
-                                <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding StrategyIntervalLabel}" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StrategySummary.Interval}" />
-                                <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding StrategyResultModeLabel}" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StrategySummary.ResultMode}" />
-                                <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding StrategyDispatchModeLabel}" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StrategySummary.DispatchMode}" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TasksSectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TasksSectionDescription}" />
-                            <Border Style="{StaticResource MutedPanelStyle}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="120" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskNameLabel}" />
-                                    <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskName}" TextWrapping="Wrap" />
-                                    <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTypeLabel}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskTypeText}" />
-                                    <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskTriggerLabel}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TriggerText}" />
-                                    <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionTaskStatusLabel}" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.StatusText}" />
-                                    <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskScopeLabel}" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.ScopePlanText}" />
-                                    <TextBlock Grid.Row="5" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskCurrentPointLabel}" />
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.CurrentPointText}" TextWrapping="Wrap" />
-                                </Grid>
-                            </Border>
-                            <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskSummaryLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary}" TextWrapping="Wrap" />
-                            <Border Margin="0,12,0,0"
-                                    Padding="12"
-                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
-                                               Text="{Binding TaskRoutingSummary}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               Style="{StaticResource FieldValueTextStyle}"
-                                               Text="{Binding ReviewWallEntrySummary}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Style="{StaticResource FieldValueTextStyle}"
-                                               Text="{Binding DispatchPoolCandidateSummary}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-                            <TextBlock Margin="0,18,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskRecentListLabel}" />
-                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding RecentTasks}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource MutedPanelStyle}" Margin="0,0,0,12">
-                                            <StackPanel>
-                                                <DockPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding TaskName}" />
-                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StatusText}" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Summary}" />
-                                                <WrapPanel Margin="0,10,0,0">
-                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskTypeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                    <TextBlock Margin="8,0,16,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding TaskTypeText}" />
-                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                    <TextBlock Margin="8,0,16,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding TimeText}" />
-                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.TaskCurrentPointLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                    <TextBlock Margin="8,0,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentPointText}" />
-                                                </WrapPanel>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Margin="0,4,0,0"
-                                       Text="{Binding TaskEmptyText}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock" BasedOn="{StaticResource PageDescriptionTextStyle}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding RecentTasks.Count}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ExecutionSectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ExecutionSectionDescription}" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionExecutedTodayLabel}" />
-                                <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.ExecutedToday}" />
-                                <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionTaskStatusLabel}" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentTaskStatus}" />
-                                <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionNextRunLabel}" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.NextRunTime}" />
-                                <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionProgressLabel}" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentProgressText}" />
-                                <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding RunSummaryCurrentPointLabel}" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentPointName}" />
-                            </Grid>
-                            <ProgressBar Margin="0,14,0,0" Height="10" Maximum="100" Value="{Binding ExecutionState.CurrentProgressValue}" />
-                            <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ExecutionSimulationLabel}" />
-                            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ExecutionState.SimulationNote}" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <WrapPanel>
-                                <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ExecuteInspectionCommand}" Content="{Binding ExecuteInspectionText}" />
-                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ViewHistoryCommand}" Content="{Binding ViewHistoryText}" />
-                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReviewWallCommand}" Content="{Binding OpenReviewWallText}" />
-                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenDispatchWorkspaceCommand}" Content="{Binding OpenDispatchWorkspaceText}" />
-                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReportsCenterCommand}" Content="{Binding OpenReportsCenterText}" />
-                                <Button Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ToggleGroupCommand}" Content="{Binding ToggleGroupActionText}" />
-                            </WrapPanel>
-                            <TextBlock Margin="0,12,0,0"
-                                       Style="{StaticResource PageDescriptionTextStyle}"
-                                       Text="{Binding ReviewWallEntrySummary}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding RecentFaultsSectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding RecentFaultsSectionDescription}" />
-                            <ItemsControl ItemsSource="{Binding RecentFaults}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Style="{StaticResource FaultItemButtonStyle}" Command="{Binding DataContext.SelectRecentFaultCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding FaultType}" />
-                                                </StackPanel>
-                                                <Border Grid.Column="1"
-                                                        Width="14"
-                                                        Height="14"
-                                                        Margin="14,0,0,0"
-                                                        CornerRadius="7"
-                                                        Background="{DynamicResource Theme.DangerBrush}"
-                                                        BorderBrush="{DynamicResource Theme.TextPrimaryBrush}"
-                                                        BorderThickness="1">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                                <StackPanel Grid.Column="2" Margin="14,0,0,0">
-                                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding DataContext.RecentFaultTimeLabel, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding LatestFaultTime}" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding UnmappedPointsTitle}" />
-                                <Border Grid.Column="1"
-                                        Padding="10,4"
-                                        CornerRadius="10"
-                                        Background="{DynamicResource Theme.WarningSoftBrush}"
-                                        BorderBrush="{DynamicResource Theme.WarningBrush}"
-                                        BorderThickness="1">
-                                    <TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding UnmappedPointCount}" />
-                                </Border>
-                            </Grid>
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding UnmappedPointsDescription}" />
-                            <ItemsControl ItemsSource="{Binding UnmappedPoints}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type state:MapPointState}">
-                                        <Button Style="{StaticResource UnmappedItemButtonStyle}"
-                                                Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding PointName}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CoordinateStatusText}" />
-                                                </StackPanel>
-                                                <Border Grid.Column="1"
-                                                        Width="14"
-                                                        Height="14"
-                                                        Margin="14,0,0,0"
-                                                        CornerRadius="7"
-                                                        Background="{DynamicResource Theme.WarningBrush}"
-                                                        BorderBrush="{DynamicResource Theme.TextPrimaryBrush}"
-                                                        BorderThickness="1">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                            </Grid>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
-
-            <Border Grid.Column="1" Style="{StaticResource InspectionSectionCardStyle}" Margin="0,0,18,0">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource AccentTextStyle}" Text="{Binding WorkbenchMapBadge}" />
-                        <TextBlock Margin="0,10,0,6" Style="{StaticResource SectionTitleTextStyle}" Text="{Binding WorkbenchTitle}" />
-                        <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding WorkbenchDescription}" />
-                    </StackPanel>
-
-                    <Border Grid.Row="1"
-                            Margin="0,18,0,16"
-                            Background="{DynamicResource Theme.WorkbenchBackgroundBrush}"
-                            BorderBrush="{DynamicResource Theme.PanelBorderStrongBrush}"
-                            BorderThickness="1"
-                            CornerRadius="20"
-                            Padding="18">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-
-                            <Border Background="{DynamicResource Theme.PanelBackgroundBrush}"
-                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="14">
-                                <UniformGrid Columns="7">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,18,0">
+                        <Border Style="{StaticResource InspectionSectionCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding GroupSectionTitle}" />
+                                <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding GroupSectionDescription}" TextWrapping="Wrap" />
+                                <Border Style="{StaticResource MutedPanelStyle}">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding CurrentGroupLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.GroupName}" />
+                                        <TextBlock Margin="0,8,0,0" FontSize="18" FontWeight="SemiBold" Text="{Binding SelectedGroup.Name, TargetNullValue=--}" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedGroup.Summary, TargetNullValue=--}" TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryStartedAtLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.StartedAt}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryTotalPointsLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.TotalPoints}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryInspectedPointsLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.InspectedPoints}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryNormalLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.NormalCount}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryFaultLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.FaultCount}" />
-                                    </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding RunSummaryCurrentPointLabel}" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding RunSummary.CurrentPointName}" />
-                                    </StackPanel>
-                                </UniformGrid>
-                            </Border>
+                                </Border>
+                                <DockPanel Margin="0,16,0,12">
+                                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding AvailableGroupsLabel}" />
+                                    <Button DockPanel.Dock="Right" Padding="12,8" Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ToggleGroupCommand}" Content="{Binding ToggleGroupActionText}" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Groups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource GroupItemButtonStyle}" Command="{Binding DataContext.SelectGroupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Summary}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
 
-                            <DockPanel Grid.Row="1" Margin="0,14,0,0">
-                                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                                    <Border Style="{StaticResource LegendChipStyle}"
-                                            Visibility="{Binding HasSelectedPoint, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="{Binding SelectedPointDetail.PointName}" />
-                                            <TextBlock Margin="8,0,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentStatus}" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                                <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
-                                    <Button Padding="14,10"
-                                            Style="{StaticResource SecondaryActionButtonStyle}"
-                                            Command="{Binding SelectFirstUnmappedPointCommand}"
-                                            Visibility="{Binding HasUnmappedPoints, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding UnmappedPointsTitle}" />
-                                            <Border Margin="10,0,0,0"
-                                                    Padding="8,2"
-                                                    CornerRadius="9"
-                                                    Background="{DynamicResource Theme.WarningSoftBrush}"
-                                                    BorderBrush="{DynamicResource Theme.WarningBrush}"
-                                                    BorderThickness="1">
-                                                <TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding UnmappedPointCount}" />
-                                            </Border>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Padding="14,10"
-                                            Style="{StaticResource SecondaryActionButtonStyle}"
-                                            Content="{Binding MapOverlayReserveActionText}"
-                                            IsEnabled="False"
-                                            Visibility="{Binding HasSelectedPoint, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                </WrapPanel>
-                            </DockPanel>
-
-                            <Grid Grid.Row="2" Margin="0,14,0,0" ClipToBounds="True">
-                                <controls:RealMapHost x:Name="RealMapHost"
-                                                      HostContext="InspectionMap"
-                                                      ItemsSource="{Binding MapPoints}"
-                                                      SelectedPointId="{Binding SelectedMapPointId}"
-                                                      PointSelectedCommand="{Binding SelectPointCommand}"
-                                                      ApiKey="{Binding MapProvider.AmapWebJsApiKey}"
-                                                      SecurityJsCode="{Binding MapProvider.AmapSecurityJsCode}"
-                                                      ApiVersion="{Binding MapProvider.AmapJsApiVersion}"
-                                                      DefaultCenterLongitude="{Binding MapProvider.DefaultCenterLongitude}"
-                                                         DefaultCenterLatitude="{Binding MapProvider.DefaultCenterLatitude}"
-                                                         DefaultZoom="{Binding MapProvider.DefaultZoom}" />
-
-                                <Grid x:Name="FallbackMapLayer" Visibility="Collapsed">
-                                    <Canvas>
-                                        <Line X1="50" Y1="70" X2="1140" Y2="70" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="50" Y1="170" X2="1140" Y2="170" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="50" Y1="270" X2="1140" Y2="270" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="50" Y1="370" X2="1140" Y2="370" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="120" Y1="30" X2="120" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="320" Y1="30" X2="320" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="520" Y1="30" X2="520" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="720" Y1="30" X2="720" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Line X1="920" Y1="30" X2="920" Y2="430" Stroke="{DynamicResource Theme.MapGridOverlayBrush}" StrokeThickness="1" />
-                                        <Path Stroke="{DynamicResource Theme.AccentSecondaryBrush}" StrokeThickness="2" Opacity="0.45" Data="M 80,310 C 220,180 340,220 460,140 S 720,120 900,210 1080,300 1120,260" />
-                                        <Path Stroke="{DynamicResource Theme.PanelBorderStrongBrush}" StrokeThickness="2" Opacity="0.40" Data="M 100,120 C 240,260 380,260 520,310 650,360 900,360 1080,170" />
-                                    </Canvas>
-
-                                    <ItemsControl ItemsSource="{Binding MapPoints}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <Canvas />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemContainerStyle>
-                                            <Style TargetType="ContentPresenter">
-                                                <Setter Property="Canvas.Left" Value="{Binding X}" />
-                                                <Setter Property="Canvas.Top" Value="{Binding Y}" />
-                                            </Style>
-                                        </ItemsControl.ItemContainerStyle>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type state:MapPointState}">
-                                                <Button Style="{StaticResource MapPointButtonStyle}"
-                                                        ToolTip="{Binding PointName}"
-                                                        Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        CommandParameter="{Binding}" />
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </Grid>
-                            </Grid>
-                        </Grid>
-                    </Border>
-
-                    <DockPanel Grid.Row="2">
-                        <WrapPanel DockPanel.Dock="Left">
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendPendingText}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendActiveText}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendNormalText}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendFaultText}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding UnmappedPointsTitle}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendSilentText}" /></Border>
-                            <Border Style="{StaticResource LegendChipStyle}"><TextBlock Style="{StaticResource FieldValueTextStyle}" Text="{Binding LegendPausedText}" /></Border>
-                        </WrapPanel>
-                        <TextBlock DockPanel.Dock="Right" Width="280" HorizontalAlignment="Right" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding WorkbenchHint}" />
-                    </DockPanel>
-                </Grid>
-            </Border>
-
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DetailsSectionTitle}" />
-                            <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DetailsSectionDescription}" />
-                            <Border Style="{StaticResource MutedPanelStyle}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DetailBasicTitle}" />
-                                    <Grid Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPointNameLabel}" />
-                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PointName}" />
-                                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailUnitLabel}" />
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.UnitName}" />
-                                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCurrentHandlingUnitLabel}" />
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentHandlingUnit}" />
-                                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCurrentStatusLabel}" />
-                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentStatus}" />
-                                        <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCoordinateLabel}" />
-                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CoordinateStatusText}" />
-                                        <TextBlock Grid.Row="5" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailLastSyncLabel}" />
-                                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.LastSyncTime}" />
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource MutedPanelStyle}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DetailStatusTitle}" />
-                                    <Grid Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailOnlineLabel}" />
-                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.OnlineStatus}" />
-                                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPlaybackLabel}" />
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PlaybackStatus}" />
-                                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailImageLabel}" />
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.ImageStatus}" />
-                                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailFaultTypeLabel}" />
-                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.FaultType}" />
-                                        <TextBlock Grid.Row="4" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailFaultNoteLabel}" />
-                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.FaultDescription}" />
-                                    </Grid>
-                                    <Button Margin="0,14,0,0"
-                                            Content="{Binding CoordinateReserveActionText}"
-                                            IsEnabled="False">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding SelectedPointDetail.IsCoordinatePending}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource MutedPanelStyle}">
-                                <StackPanel>
-                                    <DockPanel>
-                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding SinglePointInspectionTitle}" />
-                                        <Button DockPanel.Dock="Right"
-                                                Padding="14,10"
-                                                Style="{StaticResource PrimaryActionButtonStyle}"
-                                                Command="{Binding StartSinglePointInspectionCommand}"
-                                                Content="{Binding SinglePointInspectionActionText}" />
-                                    </DockPanel>
-                                    <Grid Margin="0,14,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionPointNameLabel}" />
-                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionPointName}" />
-                                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionTaskStatusLabel}" />
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionTaskStatus}" />
-                                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionLastTimeLabel}" />
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionLastTime}" />
-                                        <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionResultSummaryLabel}" />
-                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SinglePointInspectionResultSummary}" TextWrapping="Wrap" />
-                                    </Grid>
-                                    <TextBlock Margin="0,12,0,0"
-                                               Style="{StaticResource PageDescriptionTextStyle}"
-                                               Text="{Binding SelectedPointDetail.EvidenceSummary}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               Style="{StaticResource FieldValueTextStyle}"
-                                               Text="{Binding SelectedPointDetail.AiRecognitionSummary}"
-                                               TextWrapping="Wrap" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               Style="{StaticResource PageDescriptionTextStyle}"
-                                               Text="{Binding SelectedPointDetail.AiAnalysisSummary}"
-                                               TextWrapping="Wrap" />
-                                    <Border Margin="0,12,0,0"
-                                            Padding="12"
-                                            Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
-                                            BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="12">
-                                        <StackPanel>
-                                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
-                                                       Text="{Binding SelectedPointDetail.BusinessRoutingDescription}"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Margin="0,8,0,0"
-                                                       Style="{StaticResource FieldValueTextStyle}"
-                                                       Text="{Binding SelectedPointDetail.ReviewWallEntryStatus}"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       Style="{StaticResource FieldValueTextStyle}"
-                                                       Text="{Binding SelectedPointDetail.DispatchCandidateEntryStatus}"
-                                                       TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource MutedPanelStyle}">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PreviewTitle}" />
-                                    <TextBlock Margin="0,8,0,14" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreviewDescription}" />
+                        <Border Style="{StaticResource InspectionSectionCardStyle}" Margin="0">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding TasksSectionTitle}" />
+                                <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding TasksSectionDescription}" TextWrapping="Wrap" />
+                                <Border Style="{StaticResource MutedPanelStyle}">
                                     <Grid>
-                                        <Border Height="220"
-                                                Background="{DynamicResource Theme.InspectionActiveSoftBrush}"
-                                                BorderBrush="{DynamicResource Theme.InspectionActiveBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="18"
-                                                Visibility="{Binding SelectedPointDetail.IsPreviewAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <Grid ClipToBounds="True">
-                                                <wv2:WebView2 x:Name="PreviewWebView"
-                                                              Source="{Binding SelectedPointDetail.PreviewHostUri}" />
-                                                <Border Margin="12"
-                                                        Padding="10,6"
-                                                        HorizontalAlignment="Left"
-                                                        VerticalAlignment="Top"
-                                                        Background="#CC0F172A"
-                                                        CornerRadius="12">
-                                                    <TextBlock Style="{StaticResource AccentTextStyle}"
-                                                               Text="{Binding SelectedPointDetail.PreviewBusinessTitle}" />
-                                                </Border>
-                                                <Border Margin="12"
-                                                        Padding="12"
-                                                        HorizontalAlignment="Stretch"
-                                                        VerticalAlignment="Bottom"
-                                                        Background="#CC0F172A"
-                                                        CornerRadius="14">
-                                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
-                                                               Text="{Binding SelectedPointDetail.PreviewBusinessDescription}"
-                                                               TextWrapping="Wrap" />
-                                                </Border>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskNameLabel}" />
+                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentTask.TaskName, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionTaskStatusLabel}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentTaskStatus, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskCurrentPointLabel}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentPointName, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ExecutionProgressLabel}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentProgressText, TargetNullValue=0 / 0}" />
+                                        <TextBlock Grid.Row="4" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskSummaryLabel}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary, TargetNullValue=--}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Margin="0,16,0,10" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskRecentListLabel}" />
+                                <ItemsControl ItemsSource="{Binding RecentTasks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,10" Padding="12" Background="{DynamicResource Theme.PanelMutedBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="12">
+                                                <StackPanel>
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding TaskName}" />
+                                                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StatusText}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Summary}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,18,0">
+                        <Border Style="{StaticResource InspectionSectionCardStyle}" Margin="0">
+                            <StackPanel>
+                                <DockPanel LastChildFill="False">
+                                    <StackPanel Width="290">
+                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding WorkbenchTitle}" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding WorkbenchDescription}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button DockPanel.Dock="Right" Padding="16,10" Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ExecuteInspectionCommand}" Content="{Binding ExecuteInspectionText}" />
+                                </DockPanel>
+                                <Border Margin="0,18,0,14" Style="{StaticResource MutedPanelStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding CurrentGroupLabel}" />
+                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedGroup.Name, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding TaskCurrentPointLabel}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentPointName, TargetNullValue=--}" />
+                                    </Grid>
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding Points}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource PointItemButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <DockPanel LastChildFill="False">
+                                                        <StackPanel Width="250">
+                                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DeviceCode}" />
+                                                        </StackPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StatusText}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding OnlineStatus}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlaybackStatus}" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding LastInspectionConclusion}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Border Style="{StaticResource InspectionSectionCardStyle}" Margin="0">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding DetailsSectionTitle}" />
+                                <TextBlock Margin="0,8,0,16" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DetailsSectionDescription}" TextWrapping="Wrap" />
+                                <Border Style="{StaticResource MutedPanelStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPointNameLabel}" />
+                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PointName, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailUnitLabel}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.UnitName, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailCurrentStatusLabel}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.CurrentStatus, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailOnlineLabel}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.OnlineStatus, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="4" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DetailPlaybackLabel}" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.PlaybackStatus, TargetNullValue=--}" />
+                                        <TextBlock Grid.Row="5" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding LastConclusionLabel}" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.LastInspectionConclusion, TargetNullValue=--}" TextWrapping="Wrap" />
+                                    </Grid>
+                                </Border>
+                                <Border Margin="0,14,0,0" Style="{StaticResource MutedPanelStyle}">
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="False">
+                                            <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding SinglePointInspectionTitle}" />
+                                            <Button DockPanel.Dock="Right" Padding="14,10" Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding StartSinglePointInspectionCommand}" Content="{Binding SinglePointInspectionActionText}" />
+                                        </DockPanel>
+                                        <Grid Margin="0,16,0,0">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionPointNameLabel}" />
+                                            <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionPointName}" />
+                                            <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionTaskStatusLabel}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionTaskStatus}" />
+                                            <TextBlock Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionLastTimeLabel}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SinglePointInspectionLastTime}" />
+                                            <TextBlock Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionResultSummaryLabel}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SinglePointInspectionResultSummary}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="0,14,0,0" Style="{StaticResource MutedPanelStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding PreviewTitle}" />
+                                        <TextBlock Margin="0,8,0,14" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreviewDescription}" TextWrapping="Wrap" />
+                                        <Border Height="220" Background="{DynamicResource Theme.PanelMutedBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="18">
+                                            <Grid>
+                                                <wv2:WebView2 x:Name="PreviewWebView" Source="{Binding SelectedPointDetail.PreviewHostUri}" Visibility="{Binding SelectedPointDetail.IsPreviewAvailable, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <TextBlock HorizontalAlignment="Center" Style="{StaticResource AccentTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessTitle, TargetNullValue=--}" />
+                                                    <TextBlock Margin="0,18,0,0" Width="240" TextAlignment="Center" TextWrapping="Wrap" FontSize="18" FontWeight="SemiBold" Text="{Binding SelectedPointDetail.PlaybackStatus, TargetNullValue=--}" />
+                                                    <TextBlock Margin="0,18,0,0" Width="240" TextAlignment="Center" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessDescription, TargetNullValue=--}" TextWrapping="Wrap" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
-                                        <Border x:Name="PreviewFailureCard"
-                                                Height="220"
-                                                Background="{DynamicResource Theme.DangerSoftBrush}"
-                                                BorderBrush="{DynamicResource Theme.DangerBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="18"
-                                                Visibility="Collapsed">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding SelectedPointDetail.IsPreviewAvailable}" Value="False">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                    </Style>
-                                            </Border.Style>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Style="{StaticResource AccentTextStyle}"
-                                                           HorizontalAlignment="Center"
-                                                           Text="{Binding SelectedPointDetail.PreviewBusinessTitle}" />
-                                                <TextBlock Margin="0,18,0,0"
-                                                           Width="240"
-                                                           TextAlignment="Center"
-                                                           TextWrapping="Wrap"
-                                                           FontSize="18"
-                                                           FontWeight="SemiBold"
-                                                           Text="{Binding SelectedPointDetail.PlaybackStatus}" />
-                                                <TextBlock Margin="0,18,0,0"
-                                                           Width="240"
-                                                           TextAlignment="Center"
-                                                           Style="{StaticResource PageDescriptionTextStyle}"
-                                                           Text="{Binding SelectedPointDetail.PreviewBusinessDescription}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource MutedPanelStyle}" Margin="0">
-                                <StackPanel>
-                                    <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding HistorySectionTitle}" />
-                                    <TextBlock Margin="0,8,0,14" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding HistorySectionDescription}" />
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding LastFaultLabel}" />
-                                        <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.LastFaultTime}" />
-                                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding DispatchEntryLabel}" />
-                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.DispatchPoolEntry}" />
-                                        <TextBlock Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding LastConclusionLabel}" />
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding SelectedPointDetail.LastInspectionConclusion}" />
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
+        <Grid Visibility="Collapsed" Width="0" Height="0">
+            <controls:RealMapHost x:Name="RealMapHost"
+                                  ItemsSource="{Binding MapPoints}"
+                                  SelectedPointId="{Binding SelectedMapPointId}"
+                                  PointSelectedCommand="{Binding SelectPointCommand}" />
+            <Border x:Name="FallbackMapLayer" />
+            <Border x:Name="PreviewFailureCard" Width="320" Height="180" Background="{DynamicResource Theme.DangerSoftBrush}" BorderBrush="{DynamicResource Theme.DangerBrush}" BorderThickness="1" CornerRadius="16">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center" Style="{StaticResource AccentTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessTitle, TargetNullValue=--}" />
+                    <TextBlock Margin="0,10,0,0" Width="220" TextAlignment="Center" TextWrapping="Wrap" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessDescription, TargetNullValue=--}" />
+                </StackPanel>
+            </Border>
         </Grid>
         <views:InspectionReviewWallView Style="{StaticResource ReviewVisibilityStyle}" />
     </Grid>
