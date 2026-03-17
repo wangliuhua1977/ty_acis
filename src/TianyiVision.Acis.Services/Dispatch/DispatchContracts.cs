@@ -42,7 +42,8 @@ public sealed record DispatchNotificationRecordModel(
     string RecoverySourceTag,
     string RecoveryNotificationSentAt,
     string RecoveryNotificationStatus,
-    IReadOnlyList<DispatchNotificationTimelineEntryModel> TimelineEntries);
+    IReadOnlyList<DispatchNotificationTimelineEntryModel> TimelineEntries,
+    string RecoverySummary = "");
 
 public sealed record DispatchRepeatFaultModel(
     string FirstFaultTime,
@@ -67,7 +68,9 @@ public sealed record DispatchWorkOrderModel(
     DispatchRecoveryStatusModel RecoveryStatus,
     DispatchResponsibilityModel Responsibility,
     DispatchNotificationRecordModel NotificationRecord,
-    DispatchRepeatFaultModel RepeatFault);
+    DispatchRepeatFaultModel RepeatFault,
+    string InspectionTaskId = "",
+    string DeviceCode = "");
 
 public sealed record DispatchResponsibilityQueryDto(
     string PointId,

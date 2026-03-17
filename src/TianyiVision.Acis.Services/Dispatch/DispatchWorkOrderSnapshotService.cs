@@ -17,7 +17,8 @@ public interface IDispatchWorkOrderSnapshotService
     void MarkRecovered(
         DispatchNotificationRequestDto request,
         DateTime recoveredAt,
-        string recoverySource);
+        string recoverySource,
+        string recoverySummary);
 
     void UpdateNotificationAttempt(
         DispatchNotificationRequestDto request,
@@ -61,7 +62,8 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
     public void MarkRecovered(
         DispatchNotificationRequestDto request,
         DateTime recoveredAt,
-        string recoverySource)
+        string recoverySource,
+        string recoverySummary)
     {
         var workOrders = Load().WorkOrders.ToDictionary(item => item.WorkOrderId, StringComparer.Ordinal);
         var existing = workOrders.TryGetValue(request.WorkOrderId, out var current)
@@ -85,7 +87,8 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
             NotificationRecord = existing.NotificationRecord with
             {
                 RecoveryConfirmedAt = recoveredAt.ToString("yyyy-MM-dd HH:mm"),
-                RecoverySourceTag = string.IsNullOrWhiteSpace(recoverySource) ? "--" : recoverySource.Trim()
+                RecoverySourceTag = string.IsNullOrWhiteSpace(recoverySource) ? "--" : recoverySource.Trim(),
+                RecoverySummary = string.IsNullOrWhiteSpace(recoverySummary) ? existing.NotificationRecord.RecoverySummary : recoverySummary.Trim()
             }
         };
 
@@ -222,7 +225,7 @@ public sealed class FileDispatchWorkOrderSnapshotService : IDispatchWorkOrderSna
                 request.SupervisorPhone,
                 string.IsNullOrWhiteSpace(request.NotificationChannelId) ? "default" : request.NotificationChannelId,
                 "LocalSnapshot"),
-            new DispatchNotificationRecordModel("--", "待发送", "--", "--", "--", "待发送", []),
+            new DispatchNotificationRecordModel("--", "待发送", "--", "--", "--", "待发送", [], string.Empty),
             new DispatchRepeatFaultModel(detectedAt, detectedAt, 1));
     }
 }

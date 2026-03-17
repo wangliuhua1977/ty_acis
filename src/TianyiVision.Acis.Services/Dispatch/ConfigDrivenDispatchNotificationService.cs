@@ -1,4 +1,6 @@
 using TianyiVision.Acis.Services.Contracts;
+using TianyiVision.Acis.Services.Diagnostics;
+using TianyiVision.Acis.Services.Inspection;
 
 namespace TianyiVision.Acis.Services.Dispatch;
 
@@ -16,6 +18,7 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
     private readonly IDispatchWorkOrderSnapshotService _workOrderSnapshotService;
     private readonly IDispatchNotificationService _notificationFallback;
     private readonly bool _enableFallback;
+    private readonly IInspectionTaskService? _inspectionTaskService;
 
     public ConfigDrivenDispatchNotificationService(
         IFaultPoolService faultPoolService,
@@ -23,7 +26,8 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         IDispatchNotificationHistoryService historyService,
         IDispatchWorkOrderSnapshotService workOrderSnapshotService,
         IDispatchNotificationService notificationFallback,
-        bool enableFallback)
+        bool enableFallback,
+        IInspectionTaskService? inspectionTaskService = null)
     {
         _faultPoolService = faultPoolService;
         _primarySender = primarySender;
@@ -31,6 +35,7 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         _workOrderSnapshotService = workOrderSnapshotService;
         _notificationFallback = notificationFallback;
         _enableFallback = enableFallback;
+        _inspectionTaskService = inspectionTaskService;
     }
 
     public ServiceResponse<IReadOnlyList<DispatchWorkOrderModel>> GetWorkOrders()
@@ -146,7 +151,9 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             new DispatchRepeatFaultModel(
                 item.FirstDetectedAt.ToString("yyyy-MM-dd HH:mm"),
                 item.LatestDetectedAt.ToString("yyyy-MM-dd HH:mm"),
-                item.RepeatCount));
+                item.RepeatCount),
+            persisted?.InspectionTaskId ?? string.Empty,
+            persisted?.DeviceCode ?? string.Empty);
 
         if (persisted is not null)
         {
@@ -160,6 +167,12 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
                 RecoveryStatus = persisted.RecoveryStatus == DispatchRecoveryStatusModel.Recovered && !faultReopened
                     ? DispatchRecoveryStatusModel.Recovered
                     : current.RecoveryStatus,
+                InspectionTaskId = string.IsNullOrWhiteSpace(persisted.InspectionTaskId)
+                    ? current.InspectionTaskId
+                    : persisted.InspectionTaskId,
+                DeviceCode = string.IsNullOrWhiteSpace(persisted.DeviceCode)
+                    ? current.DeviceCode
+                    : persisted.DeviceCode,
                 NotificationRecord = faultReopened
                     ? ClearRecoveryNotification(persisted.NotificationRecord)
                     : persisted.NotificationRecord
@@ -192,7 +205,8 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
             ResolveRecoverySource(item.NotificationRecord, latestRecoveryNotification),
             latestRecoveryNotification?.SentAt.ToString("yyyy-MM-dd HH:mm") ?? item.NotificationRecord.RecoveryNotificationSentAt,
             latestRecoveryNotification?.ResultText ?? item.NotificationRecord.RecoveryNotificationStatus,
-            BuildTimelineEntries(historyEntries, item.NotificationRecord.TimelineEntries));
+            BuildTimelineEntries(historyEntries, item.NotificationRecord.TimelineEntries),
+            item.NotificationRecord.RecoverySummary);
 
         return item with
         {
@@ -206,7 +220,50 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         DispatchNotificationRequestDto request,
         string recoverySource)
     {
-        _workOrderSnapshotService.MarkRecovered(request, DateTime.Now, recoverySource);
+        var persisted = _workOrderSnapshotService.Load().WorkOrders
+            .FirstOrDefault(item => string.Equals(item.WorkOrderId, request.WorkOrderId, StringComparison.Ordinal));
+        if (persisted?.RecoveryStatus == DispatchRecoveryStatusModel.Recovered)
+        {
+            var confirmedAt = string.IsNullOrWhiteSpace(persisted.NotificationRecord.RecoveryConfirmedAt)
+                ? DateTime.Now.ToString("yyyy-MM-dd HH:mm")
+                : persisted.NotificationRecord.RecoveryConfirmedAt;
+            WriteRecoveryLog(
+                persisted.PointId,
+                persisted.DeviceCode,
+                ResolveDispatchStatus(persisted),
+                persisted.RecoveryStatus,
+                persisted.RecoveryStatus,
+                recoveryConfirmed: true);
+            return ServiceResponse<DispatchNotificationResult>.Success(
+                new DispatchNotificationResult(
+                    confirmedAt,
+                    "工单已确认恢复，无需重复写回。",
+                    persisted.Responsibility.CurrentHandlingUnit),
+                "工单已确认恢复。");
+        }
+
+        var recoveredAt = DateTime.Now;
+        var recoverySummary = BuildRecoverySummary(persisted, recoverySource, recoveredAt);
+        var inspectionRecoveryResponse = ConfirmInspectionRecovery(persisted, recoveredAt, recoverySummary);
+        if (!inspectionRecoveryResponse.IsSuccess)
+        {
+            return ServiceResponse<DispatchNotificationResult>.Failure(
+                new DispatchNotificationResult(
+                    recoveredAt.ToString("yyyy-MM-dd HH:mm"),
+                    inspectionRecoveryResponse.Message,
+                    persisted?.Responsibility.CurrentHandlingUnit ?? request.CurrentHandlingUnit),
+                inspectionRecoveryResponse.Message);
+        }
+
+        _workOrderSnapshotService.MarkRecovered(request, recoveredAt, recoverySource, recoverySummary);
+
+        WriteRecoveryLog(
+            persisted?.PointId ?? request.PointId,
+            persisted?.DeviceCode ?? string.Empty,
+            ResolveDispatchStatus(persisted),
+            persisted?.RecoveryStatus ?? DispatchRecoveryStatusModel.Unrecovered,
+            DispatchRecoveryStatusModel.Recovered,
+            recoveryConfirmed: true);
 
         return Send(
             request,
@@ -384,6 +441,7 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         {
             RecoveryConfirmedAt = "--",
             RecoverySourceTag = "--",
+            RecoverySummary = string.Empty,
             RecoveryNotificationSentAt = "--",
             RecoveryNotificationStatus = "待发送"
         };
@@ -417,6 +475,78 @@ public sealed class ConfigDrivenDispatchNotificationService : IDispatchNotificat
         return latestRecoveryNotification?.IsSuccess == true
             ? latestRecoveryNotification.TimelineActor
             : notificationRecord.RecoverySourceTag;
+    }
+
+    private ServiceResponse<bool> ConfirmInspectionRecovery(
+        DispatchWorkOrderModel? workOrder,
+        DateTime recoveredAt,
+        string recoverySummary)
+    {
+        if (_inspectionTaskService is null || workOrder is null)
+        {
+            return ServiceResponse<bool>.Success(true);
+        }
+
+        var looksLikeInspectionWorkOrder = string.Equals(workOrder.InspectionGroupName, "AI智能巡检中心", StringComparison.Ordinal);
+        if (!looksLikeInspectionWorkOrder)
+        {
+            return ServiceResponse<bool>.Success(true);
+        }
+
+        if (string.IsNullOrWhiteSpace(workOrder.InspectionTaskId))
+        {
+            return ServiceResponse<bool>.Failure(false, $"点位 {workOrder.PointId} 缺少巡检任务关联，无法回写恢复确认。");
+        }
+
+        var response = _inspectionTaskService.ConfirmDispatchRecovery(new InspectionDispatchRecoveryWritebackRequest(
+            workOrder.InspectionTaskId,
+            workOrder.PointId,
+            workOrder.DeviceCode,
+            ResolveDispatchStatus(workOrder),
+            recoveredAt.ToString("yyyy-MM-dd HH:mm"),
+            recoverySummary,
+            true));
+
+        return response.IsSuccess
+            ? ServiceResponse<bool>.Success(true)
+            : ServiceResponse<bool>.Failure(false, response.Message);
+    }
+
+    private static string BuildRecoverySummary(
+        DispatchWorkOrderModel? workOrder,
+        string recoverySource,
+        DateTime recoveredAt)
+    {
+        var action = string.Equals(recoverySource, ManualRecoverySourceTag, StringComparison.Ordinal)
+            ? "派单侧人工确认恢复"
+            : "派单侧自动确认恢复";
+        var pointName = string.IsNullOrWhiteSpace(workOrder?.PointName) ? "当前点位" : workOrder.PointName.Trim();
+        return $"{recoveredAt:yyyy-MM-dd HH:mm} {pointName}{action}。";
+    }
+
+    private static string ResolveDispatchStatus(DispatchWorkOrderModel? workOrder)
+    {
+        if (workOrder is null)
+        {
+            return InspectionDispatchValueKeys.PendingDispatch;
+        }
+
+        return workOrder.WorkOrderStatus == DispatchWorkOrderStatusModel.Dispatched
+            ? InspectionDispatchValueKeys.Dispatched
+            : InspectionDispatchValueKeys.PendingDispatch;
+    }
+
+    private static void WriteRecoveryLog(
+        string pointId,
+        string deviceCode,
+        string dispatchStatus,
+        DispatchRecoveryStatusModel recoveryStatusBefore,
+        DispatchRecoveryStatusModel recoveryStatusAfter,
+        bool recoveryConfirmed)
+    {
+        MapPointSourceDiagnostics.Write(
+            "InspectionDispatchRecovery",
+            $"pointId={pointId}, deviceCode={deviceCode}, dispatchStatus={dispatchStatus}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, recoveryConfirmed={recoveryConfirmed}");
     }
 
     private static DateTime? ParseTime(string rawValue)

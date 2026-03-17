@@ -152,7 +152,8 @@ public sealed class AppBootstrapper
             notificationHistoryService,
             workOrderSnapshotService,
             demoDispatchNotificationService,
-            notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback);
+            notificationSettings.IsAutoFallback() || notificationSettings.EnableDemoFallback,
+            _inspectionTaskService);
         _reportDataService = new ConfigDrivenReportDataService(
             _dispatchNotificationService,
             _textService,

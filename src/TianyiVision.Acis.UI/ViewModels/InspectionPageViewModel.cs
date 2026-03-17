@@ -891,7 +891,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             summary.IsCoordinatePending,
             point.LastFaultTime,
             ResolveDispatchPoolEntryText(task, pointId),
-            !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
+            !string.IsNullOrWhiteSpace(execution?.RecoverySummary)
+                ? execution.RecoverySummary
+                : !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
                 ? execution.AiAnalysisSummary
                 : execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
         {
@@ -990,9 +992,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return "派单池候选：当前未写入派单池候选集合。";
         }
 
+        if (string.Equals(entry.RecoveryStatus, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal))
+        {
+            return $"派单池候选：已恢复，确认时间 {entry.RecoveryConfirmedAt}。";
+        }
+
         return string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
             ? "派单池候选：已桥接到派单模块待派单快照。"
-            : "派单池候选：已写入派单池候选集合，待桥接待派单快照。";
+            : string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.Dispatched, StringComparison.Ordinal)
+                ? "派单池候选：已派单，待恢复确认。"
+                : "派单池候选：已写入派单池候选集合，待桥接待派单快照。";
     }
 
     private string ResolveManualSupplementEntryStatus(
@@ -1029,9 +1038,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (task?.FindDispatchPoolEntry(pointId) is not null)
         {
             var dispatchEntry = task.FindDispatchPoolEntry(pointId)!;
-            pointSegments.Add(string.Equals(dispatchEntry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
-                ? "已桥接待派单快照"
-                : "已进入派单池候选");
+            pointSegments.Add(string.Equals(dispatchEntry.RecoveryStatus, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
+                ? $"已恢复确认（{dispatchEntry.RecoveryConfirmedAt}）"
+                : string.Equals(dispatchEntry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
+                    ? "已桥接待派单快照"
+                    : string.Equals(dispatchEntry.DispatchStatus, InspectionDispatchValueKeys.Dispatched, StringComparison.Ordinal)
+                        ? "已派单待恢复"
+                        : "已进入派单池候选");
         }
 
         if (task?.FindManualReviewCompatibilityEntry(pointId) is not null)
@@ -1047,7 +1060,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var compatibilitySuffix = abnormalFlow.ManualReviewCompatibilityCount > 0
             ? $" 人工补图仅保留兼容标记 {abnormalFlow.ManualReviewCompatibilityCount} 个。"
             : string.Empty;
-        return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个，待派单快照 {abnormalFlow.DispatchPendingCount} 个。{compatibilitySuffix}".Trim();
+        return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个，待派单快照 {abnormalFlow.DispatchPendingCount} 个，已恢复 {abnormalFlow.DispatchRecoveredCount} 个。{compatibilitySuffix}".Trim();
     }
 
     private static string ResolveManualSupplementEntryActionText(InspectionTaskPointExecutionModel? execution)
@@ -1076,7 +1089,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         {
             $"复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个",
             $"派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个",
-            $"待派单快照 {abnormalFlow.DispatchPendingCount} 个"
+            $"待派单快照 {abnormalFlow.DispatchPendingCount} 个",
+            $"已恢复 {abnormalFlow.DispatchRecoveredCount} 个"
         };
 
         if (abnormalFlow.ManualReviewCompatibilityCount > 0)
@@ -1097,8 +1111,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private static string BuildDispatchPoolCandidateSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
     {
         return abnormalFlow.DispatchPoolCandidateCount > 0
-            ? abnormalFlow.DispatchPendingCount > 0
-                ? $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合，其中 {abnormalFlow.DispatchPendingCount} 个已桥接待派单快照。"
+            ? abnormalFlow.DispatchPendingCount > 0 || abnormalFlow.DispatchRecoveredCount > 0
+                ? $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合，其中 {abnormalFlow.DispatchPendingCount} 个待派单，{abnormalFlow.DispatchRecoveredCount} 个已恢复。"
                 : $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合。"
             : "派单池候选：当前任务暂无可承接的派单池候选点位。";
     }
@@ -1143,6 +1157,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         PointBusinessSummaryState summary,
         InspectionTaskPointExecutionModel? execution)
     {
+        if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
+        {
+            return execution.RecoverySummary;
+        }
+
         if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
         {
             return execution.ExecutionSummary;
@@ -1532,7 +1551,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             resolvedFaultDescription,
             lastFaultTime,
             entersDispatchPool ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes) : _textService.Resolve(TextTokens.InspectionDispatchPoolNo),
-            ResolveConclusion(status, completionStatus),
+            ResolveConclusion(status, completionStatus, businessSummary?.StatusSummary, faultSummary),
             isPreviewAvailable,
             pointSummary)
         {
@@ -1691,8 +1710,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             : summary.StatusSummary;
     }
 
-    private string ResolveConclusion(InspectionPointStatus status, InspectionPointStatus completionStatus)
+    private string ResolveConclusion(
+        InspectionPointStatus status,
+        InspectionPointStatus completionStatus,
+        string? businessSummary = null,
+        string? faultSummary = null)
     {
+        if ((!string.IsNullOrWhiteSpace(faultSummary) && faultSummary.Contains("确认恢复", StringComparison.Ordinal))
+            || (!string.IsNullOrWhiteSpace(businessSummary) && businessSummary.Contains("确认恢复", StringComparison.Ordinal)))
+        {
+            return "已恢复";
+        }
+
         var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;
 
         return effectiveStatus is InspectionPointStatus.Fault or InspectionPointStatus.PausedUntilRecovery

@@ -52,6 +52,7 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
             var responsibility = ResolveResponsibility(pointExecution, candidateEntry.PointId, candidateEntry.PointName, existingIndex >= 0 ? workOrders[existingIndex] : null);
             var candidateWorkOrder = existingIndex >= 0
                 ? MergeExisting(
+                    request.Task,
                     workOrders[existingIndex],
                     candidateEntry,
                     pointExecution,
@@ -172,6 +173,7 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
     }
 
     private static DispatchWorkOrderModel MergeExisting(
+        InspectionTaskRecordModel task,
         DispatchWorkOrderModel existing,
         InspectionAbnormalFlowEntryModel candidateEntry,
         InspectionTaskPointExecutionModel? pointExecution,
@@ -184,6 +186,8 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
 
         return existing with
         {
+            InspectionTaskId = task.TaskId,
+            DeviceCode = candidateEntry.DeviceCode,
             PointName = candidateEntry.PointName,
             FaultType = ResolveFaultType(candidateEntry),
             InspectionGroupName = "AI智能巡检中心",
@@ -234,8 +238,10 @@ public sealed class InspectionDispatchBridgeService : IInspectionDispatchBridgeS
             DispatchWorkOrderStatusModel.PendingDispatch,
             DispatchRecoveryStatusModel.Unrecovered,
             responsibility,
-            new DispatchNotificationRecordModel("--", PendingNotificationStatus, "--", "--", "--", PendingNotificationStatus, []),
-            new DispatchRepeatFaultModel(detectedAtText, detectedAtText, 1));
+            new DispatchNotificationRecordModel("--", PendingNotificationStatus, "--", "--", "--", PendingNotificationStatus, [], string.Empty),
+            new DispatchRepeatFaultModel(detectedAtText, detectedAtText, 1),
+            task.TaskId,
+            candidateEntry.DeviceCode);
     }
 
     private static string ResolveCurrentHandlingUnit(

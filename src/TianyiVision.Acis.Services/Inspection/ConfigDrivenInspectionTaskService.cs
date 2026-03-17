@@ -492,6 +492,125 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
     }
 
+    public ServiceResponse<InspectionTaskRecordModel> ConfirmDispatchRecovery(InspectionDispatchRecoveryWritebackRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.TaskId) || string.IsNullOrWhiteSpace(request.PointId))
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    "派单恢复确认回写",
+                    InspectionTaskTypeModel.ScopePlan,
+                    InspectionTaskStatusModel.Failed,
+                    "派单恢复确认缺少任务或点位标识。"),
+                "派单恢复确认请求无效。");
+        }
+
+        InspectionTaskRecordModel? existingTask;
+        lock (_syncRoot)
+        {
+            existingTask = _taskHistory.FirstOrDefault(task => string.Equals(task.TaskId, request.TaskId, StringComparison.Ordinal));
+        }
+
+        if (existingTask is null)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    "派单恢复确认回写",
+                    InspectionTaskTypeModel.ScopePlan,
+                    InspectionTaskStatusModel.Failed,
+                    "未找到需要回写恢复确认的巡检任务。"),
+                "未找到需要回写恢复确认的巡检任务。");
+        }
+
+        var pointExecution = existingTask.FindPointExecution(request.PointId);
+        if (pointExecution is null)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    existingTask.GroupId,
+                    existingTask.GroupName,
+                    "派单恢复确认回写",
+                    existingTask.TaskType,
+                    InspectionTaskStatusModel.Failed,
+                    "未找到需要回写恢复确认的点位执行记录。"),
+                "未找到需要回写恢复确认的点位执行记录。");
+        }
+
+        var recoveryStatusBefore = NormalizeRecoveryStatus(pointExecution.RecoveryStatus) == InspectionRecoveryValueKeys.None
+            && pointExecution.DispatchCandidateAccepted
+            ? InspectionRecoveryValueKeys.Unrecovered
+            : NormalizeRecoveryStatus(pointExecution.RecoveryStatus);
+        if (string.Equals(recoveryStatusBefore, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal)
+            && pointExecution.RecoveryConfirmed)
+        {
+            WriteDispatchRecoveryLog(
+                request.PointId,
+                ResolveRecoveryDeviceCode(request.DeviceCode, pointExecution.DeviceCode),
+                NormalizeDispatchStatus(request.DispatchStatus),
+                recoveryStatusBefore,
+                recoveryStatusBefore,
+                pointExecution.RecoveryConfirmed);
+            return ServiceResponse<InspectionTaskRecordModel>.Success(existingTask);
+        }
+
+        var recoveryConfirmedAt = NormalizeRecoveryConfirmedAt(request.RecoveryConfirmedAt);
+        var recoverySummary = NormalizeRecoverySummary(
+            request.RecoverySummary,
+            pointExecution.PointName,
+            recoveryConfirmedAt);
+        var dispatchStatus = NormalizeDispatchStatus(
+            string.IsNullOrWhiteSpace(request.DispatchStatus)
+                ? pointExecution.DispatchStatus
+                : request.DispatchStatus);
+        var updatedTask = UpdateTask(request.TaskId, current =>
+        {
+            var queue = current.PointExecutions
+                .Select(point => string.Equals(point.PointId, request.PointId, StringComparison.Ordinal)
+                    ? point with
+                    {
+                        DispatchStatus = dispatchStatus,
+                        RecoveryStatus = InspectionRecoveryValueKeys.Recovered,
+                        RecoveryConfirmed = request.RecoveryConfirmed,
+                        RecoveryConfirmedAt = recoveryConfirmedAt,
+                        RecoverySummary = recoverySummary,
+                        ExecutionSummary = AppendRecoverySummary(point.ExecutionSummary, recoverySummary)
+                    }
+                    : point)
+                .ToList();
+            var updatedPoint = queue.First(point => string.Equals(point.PointId, request.PointId, StringComparison.Ordinal));
+            var abnormalFlow = InspectionTaskModelExtensions.BuildAbnormalFlowSnapshot(queue);
+            var baseSummary = BuildTaskSummary(
+                current.Status,
+                current.TotalPointCount,
+                current.SuccessCount,
+                current.FailureCount,
+                current.SkippedCount,
+                current.ScopePlanName,
+                current.CurrentPointName);
+
+            return current with
+            {
+                PointExecutions = queue,
+                AbnormalFlow = abnormalFlow,
+                Summary = AppendDispatchRecoverySummary(baseSummary, abnormalFlow, updatedPoint)
+            };
+        });
+
+        WriteDispatchRecoveryLog(
+            request.PointId,
+            ResolveRecoveryDeviceCode(request.DeviceCode, pointExecution.DeviceCode),
+            dispatchStatus,
+            recoveryStatusBefore,
+            InspectionRecoveryValueKeys.Recovered,
+            request.RecoveryConfirmed);
+
+        return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
+    }
+
     private ServiceResponse<InspectionTaskRecordModel> TryStartTask(
         string groupId,
         string groupName,
@@ -860,7 +979,10 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                         DispatchCandidateAccepted = result.DispatchCandidateAccepted,
                         DispatchUpserted = result.DispatchUpserted,
                         DispatchDeduplicated = result.DispatchDeduplicated,
-                        DispatchStatus = NormalizeDispatchStatus(result.DispatchStatus)
+                        DispatchStatus = NormalizeDispatchStatus(result.DispatchStatus),
+                        RecoveryStatus = result.DispatchCandidateAccepted
+                            ? InspectionRecoveryValueKeys.Unrecovered
+                            : point.RecoveryStatus
                     }
                     : point)
                 .ToList();
@@ -1110,13 +1232,39 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         return string.Join(" ", segments);
     }
 
+    private static string AppendDispatchRecoverySummary(
+        string summary,
+        InspectionTaskAbnormalFlowModel abnormalFlow,
+        InspectionTaskPointExecutionModel pointExecution)
+    {
+        var baseSummary = BuildTaskSummaryWithAi(summary, pointExecution);
+        var abnormalFlowSummary = BuildAbnormalFlowSummary(abnormalFlow);
+        var recoverySummary = BuildDispatchRecoverySummary(pointExecution);
+        var segments = new[]
+            {
+                baseSummary,
+                abnormalFlowSummary,
+                recoverySummary
+            }
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return string.Join(" ", segments);
+    }
+
     private static string BuildAbnormalFlowSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
     {
         var reviewWallCount = abnormalFlow.ReviewWallPendingCount;
         var dispatchPoolCount = abnormalFlow.DispatchPoolCandidateCount;
         var dispatchPendingCount = abnormalFlow.DispatchPendingCount;
+        var dispatchRecoveredCount = abnormalFlow.DispatchRecoveredCount;
         var manualReviewCount = abnormalFlow.ManualReviewCompatibilityCount;
-        if (reviewWallCount == 0 && dispatchPoolCount == 0 && dispatchPendingCount == 0 && manualReviewCount == 0)
+        if (reviewWallCount == 0
+            && dispatchPoolCount == 0
+            && dispatchPendingCount == 0
+            && dispatchRecoveredCount == 0
+            && manualReviewCount == 0)
         {
             return string.Empty;
         }
@@ -1135,6 +1283,11 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         if (dispatchPendingCount > 0)
         {
             segments.Add($"待派单快照 {dispatchPendingCount} 个");
+        }
+
+        if (dispatchRecoveredCount > 0)
+        {
+            segments.Add($"已恢复 {dispatchRecoveredCount} 个");
         }
 
         if (manualReviewCount > 0)
@@ -1160,11 +1313,33 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             : $"AI智能巡检中心已桥接待派单 {acceptedCount} 个点位。";
     }
 
+    private static string BuildDispatchRecoverySummary(InspectionTaskPointExecutionModel pointExecution)
+    {
+        if (!string.Equals(NormalizeRecoveryStatus(pointExecution.RecoveryStatus), InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        return string.IsNullOrWhiteSpace(pointExecution.RecoverySummary)
+            ? $"{pointExecution.PointName} 已由派单侧确认恢复。"
+            : pointExecution.RecoverySummary;
+    }
+
     private static string NormalizeDispatchStatus(string? dispatchStatus)
     {
         return string.IsNullOrWhiteSpace(dispatchStatus)
             ? InspectionDispatchValueKeys.None
             : dispatchStatus.Trim();
+    }
+
+    private static string NormalizeRecoveryStatus(string? recoveryStatus)
+    {
+        return recoveryStatus?.Trim() switch
+        {
+            InspectionRecoveryValueKeys.Recovered => InspectionRecoveryValueKeys.Recovered,
+            InspectionRecoveryValueKeys.Unrecovered => InspectionRecoveryValueKeys.Unrecovered,
+            _ => InspectionRecoveryValueKeys.None
+        };
     }
 
     private static string ResolvePrimaryFaultType(
@@ -1581,6 +1756,63 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             : string.Join(" | ", evidenceItems.Select(item => item.LocalFilePath));
     }
 
+    private static string NormalizeRecoveryConfirmedAt(string recoveryConfirmedAt)
+    {
+        return DateTime.TryParse(recoveryConfirmedAt, out var parsed)
+            ? parsed.ToString("yyyy-MM-dd HH:mm")
+            : DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private static string NormalizeRecoverySummary(
+        string recoverySummary,
+        string pointName,
+        string recoveryConfirmedAt)
+    {
+        if (!string.IsNullOrWhiteSpace(recoverySummary))
+        {
+            return recoverySummary.Trim();
+        }
+
+        return $"{recoveryConfirmedAt} {pointName}已由派单侧确认恢复。";
+    }
+
+    private static string AppendRecoverySummary(string currentSummary, string recoverySummary)
+    {
+        if (string.IsNullOrWhiteSpace(recoverySummary))
+        {
+            return currentSummary;
+        }
+
+        if (string.IsNullOrWhiteSpace(currentSummary))
+        {
+            return recoverySummary;
+        }
+
+        return currentSummary.Contains(recoverySummary, StringComparison.Ordinal)
+            ? currentSummary
+            : $"{currentSummary} {recoverySummary}";
+    }
+
+    private static string ResolveRecoveryDeviceCode(string requestedDeviceCode, string existingDeviceCode)
+    {
+        return string.IsNullOrWhiteSpace(requestedDeviceCode)
+            ? existingDeviceCode
+            : requestedDeviceCode.Trim();
+    }
+
+    private static void WriteDispatchRecoveryLog(
+        string pointId,
+        string deviceCode,
+        string dispatchStatus,
+        string recoveryStatusBefore,
+        string recoveryStatusAfter,
+        bool recoveryConfirmed)
+    {
+        MapPointSourceDiagnostics.Write(
+            "InspectionDispatchRecovery",
+            $"pointId={pointId}, deviceCode={deviceCode}, dispatchStatus={dispatchStatus}, recoveryStatusBefore={recoveryStatusBefore}, recoveryStatusAfter={recoveryStatusAfter}, recoveryConfirmed={recoveryConfirmed}");
+    }
+
     private static void ApplyEvidenceRetention(
         string taskId,
         string pointId,
@@ -1812,9 +2044,11 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     : InspectionPointStatusModel.Normal;
         var status = ResolveRuntimeStatus(taskPoint, baseStatus);
         var completionStatus = ResolveCompletionStatus(taskPoint, baseStatus);
-        var faultSummary = string.IsNullOrWhiteSpace(point.CurrentFaultSummary)
-            ? taskPoint?.FailureReason ?? string.Empty
-            : point.CurrentFaultSummary;
+        var faultSummary = !string.IsNullOrWhiteSpace(taskPoint?.RecoverySummary)
+            ? taskPoint.RecoverySummary
+            : string.IsNullOrWhiteSpace(point.CurrentFaultSummary)
+                ? taskPoint?.FailureReason ?? string.Empty
+                : point.CurrentFaultSummary;
         var entersDispatchPool = taskPoint?.RouteToDispatchPoolReserved ?? point.EntersDispatchPool;
 
         return new InspectionPointModel(

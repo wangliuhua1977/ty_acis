@@ -99,6 +99,14 @@ public static class InspectionDispatchValueKeys
 {
     public const string None = "none";
     public const string PendingDispatch = "pending_dispatch";
+    public const string Dispatched = "dispatched";
+}
+
+public static class InspectionRecoveryValueKeys
+{
+    public const string None = "none";
+    public const string Unrecovered = "unrecovered";
+    public const string Recovered = "recovered";
 }
 
 public sealed record InspectionGroupModel(
@@ -250,6 +258,14 @@ public sealed record InspectionAbnormalFlowEntryModel(
     public bool DispatchDeduplicated { get; init; }
 
     public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
+
+    public string RecoveryStatus { get; init; } = InspectionRecoveryValueKeys.None;
+
+    public bool RecoveryConfirmed { get; init; }
+
+    public string RecoveryConfirmedAt { get; init; } = string.Empty;
+
+    public string RecoverySummary { get; init; } = string.Empty;
 }
 
 public sealed record InspectionTaskAbnormalFlowModel(
@@ -266,7 +282,11 @@ public sealed record InspectionTaskAbnormalFlowModel(
     public int ManualReviewCompatibilityCount => ManualReviewRequiredEntries.Count;
 
     public int DispatchPendingCount => DispatchPoolCandidateEntries.Count(entry =>
-        string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal));
+        string.Equals(entry.DispatchStatus, InspectionDispatchValueKeys.PendingDispatch, StringComparison.Ordinal)
+        && !string.Equals(entry.RecoveryStatus, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal));
+
+    public int DispatchRecoveredCount => DispatchPoolCandidateEntries.Count(entry =>
+        string.Equals(entry.RecoveryStatus, InspectionRecoveryValueKeys.Recovered, StringComparison.Ordinal));
 }
 
 public sealed record InspectionTaskPointExecutionModel(
@@ -345,6 +365,14 @@ public sealed record InspectionTaskPointExecutionModel(
     public bool DispatchDeduplicated { get; init; }
 
     public string DispatchStatus { get; init; } = InspectionDispatchValueKeys.None;
+
+    public string RecoveryStatus { get; init; } = InspectionRecoveryValueKeys.None;
+
+    public bool RecoveryConfirmed { get; init; }
+
+    public string RecoveryConfirmedAt { get; init; } = string.Empty;
+
+    public string RecoverySummary { get; init; } = string.Empty;
 
     public IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems { get; init; } = [];
 
@@ -426,6 +454,11 @@ public static class InspectionTaskModelExtensions
         if (pointExecution is null)
         {
             return string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(pointExecution.RecoverySummary))
+        {
+            return pointExecution.RecoverySummary;
         }
 
         if (!string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary))
@@ -511,7 +544,13 @@ public static class InspectionTaskModelExtensions
             DispatchDeduplicated = point.DispatchDeduplicated,
             DispatchStatus = string.IsNullOrWhiteSpace(point.DispatchStatus)
                 ? InspectionDispatchValueKeys.None
-                : point.DispatchStatus.Trim()
+                : point.DispatchStatus.Trim(),
+            RecoveryStatus = string.IsNullOrWhiteSpace(point.RecoveryStatus)
+                ? InspectionRecoveryValueKeys.None
+                : point.RecoveryStatus.Trim(),
+            RecoveryConfirmed = point.RecoveryConfirmed,
+            RecoveryConfirmedAt = point.RecoveryConfirmedAt?.Trim() ?? string.Empty,
+            RecoverySummary = point.RecoverySummary?.Trim() ?? string.Empty
         };
     }
 
@@ -752,6 +791,15 @@ public sealed record InspectionReviewDispatchRequest(
     string TaskId,
     IReadOnlyList<string> PointIds);
 
+public sealed record InspectionDispatchRecoveryWritebackRequest(
+    string TaskId,
+    string PointId,
+    string DeviceCode,
+    string DispatchStatus,
+    string RecoveryConfirmedAt,
+    string RecoverySummary,
+    bool RecoveryConfirmed);
+
 public interface IInspectionPointCheckExecutor
 {
     Task<InspectionPointCheckResult> ExecuteAsync(InspectionPointCheckRequest request, CancellationToken cancellationToken);
@@ -789,4 +837,6 @@ public interface IInspectionTaskService
     ServiceResponse<InspectionTaskRecordModel> WritePointEvidence(InspectionPointEvidenceWriteRequest request);
 
     ServiceResponse<InspectionTaskRecordModel> ConfirmReviewDispatch(InspectionReviewDispatchRequest request);
+
+    ServiceResponse<InspectionTaskRecordModel> ConfirmDispatchRecovery(InspectionDispatchRecoveryWritebackRequest request);
 }

@@ -74,6 +74,11 @@ public sealed class DemoInspectionTaskService : IInspectionTaskService
             CreateRejectedTask(request.TaskId, "演示复核确认派单", InspectionTaskTypeModel.ScopePlan),
             "演示分支未接入复核确认派单。");
 
+    public ServiceResponse<InspectionTaskRecordModel> ConfirmDispatchRecovery(InspectionDispatchRecoveryWritebackRequest request)
+        => ServiceResponse<InspectionTaskRecordModel>.Failure(
+            CreateRejectedTask(request.TaskId, "演示恢复确认回写", InspectionTaskTypeModel.ScopePlan),
+            "演示分支未接入恢复确认回写。");
+
     private static InspectionTaskRecordModel CreateRejectedTask(
         string groupId,
         string taskName,
