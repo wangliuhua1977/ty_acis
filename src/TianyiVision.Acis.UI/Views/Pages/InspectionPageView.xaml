@@ -211,7 +211,7 @@
                                                     Padding="12,8"
                                                     Style="{StaticResource SecondaryActionButtonStyle}"
                                                     Command="{Binding SaveCurrentScopePlanCommand}"
-                                                    Content="{Binding ScopeSaveActionText}" />
+                                                    Content="{Binding ScopeSaveButtonText}" />
                                         </DockPanel>
                                         <ItemsControl ItemsSource="{Binding AvailableScopePlans}">
                                             <ItemsControl.ItemsPanel>
@@ -229,6 +229,42 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
+                                        <Border Margin="0,12,0,0" Padding="10,8" BorderThickness="1" CornerRadius="10">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Setter Property="Background" Value="{DynamicResource Theme.PanelMutedBackgroundBrush}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.PanelBorderBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasScopePlanSaveFeedback}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsScopePlanSavePending}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource Theme.InspectionActiveSoftBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource Theme.InspectionActiveBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsScopePlanSaveSuccess}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource Theme.SuccessSoftBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource Theme.SuccessBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsScopePlanSaveFailure}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource Theme.DangerSoftBrush}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource Theme.DangerBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanSaveFeedback}" TextWrapping="Wrap" />
+                                        </Border>
+                                        <Border Margin="0,10,0,0"
+                                                Padding="10,8"
+                                                Background="{DynamicResource Theme.WarningSoftBrush}"
+                                                BorderBrush="{DynamicResource Theme.WarningBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Visibility="{Binding HasScopePlanFallbackHint, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanFallbackHint}" TextWrapping="Wrap" />
+                                        </Border>
                                         <Grid Margin="0,6,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130" />
@@ -246,7 +282,6 @@
                                             <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanAlignmentSummary}" TextWrapping="Wrap" />
                                         </Grid>
                                         <TextBlock Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopeReadonlyHint}" TextWrapping="Wrap" />
-                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanSaveFeedback}" TextWrapping="Wrap" />
                                         <Grid Margin="0,16,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130" />

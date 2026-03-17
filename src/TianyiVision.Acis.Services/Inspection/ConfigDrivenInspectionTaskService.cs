@@ -139,7 +139,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         return ServiceResponse<InspectionWorkspaceSnapshot>.Success(new InspectionWorkspaceSnapshot([group]), pointCollectionResponse.Message);
     }
 
-    public ServiceResponse<InspectionWorkspaceSnapshot> SaveDefaultScopePlan(string groupId, string scopePlanId)
+    public ServiceResponse<InspectionScopePlanSaveResult> SaveDefaultScopePlan(string groupId, string scopePlanId)
     {
         var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim();
         var normalizedScopePlanId = scopePlanId?.Trim() ?? string.Empty;
@@ -150,16 +150,33 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
             MapPointSourceDiagnostics.Write(
                 "InspectionTask",
                 $"save default scope plan rejected: groupId={normalizedGroupId}, reason=missing_scope_plan_id");
-            return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
-                fallbackSnapshot,
-                "当前查看方案不存在，请重新选择后再保存。");
+            return ServiceResponse<InspectionScopePlanSaveResult>.Failure(
+                CreateScopePlanSaveResult(
+                    InspectionScopePlanSaveOutcomeModel.DefaultPlanMissing,
+                    fallbackSnapshot),
+                "默认方案缺失");
         }
 
         InspectionSettingsSnapshot? originalSettings = null;
         try
         {
             originalSettings = _inspectionSettingsService.Load();
-            var targetScopePlan = originalSettings.ScopePlans
+            var enabledScopePlans = originalSettings.ScopePlans
+                .Where(plan => plan.IsEnabled)
+                .ToList();
+            if (enabledScopePlans.Count == 0)
+            {
+                MapPointSourceDiagnostics.Write(
+                    "InspectionTask",
+                    $"save default scope plan rejected: groupId={normalizedGroupId}, scopePlanId={normalizedScopePlanId}, reason=default_scope_plan_missing");
+                return ServiceResponse<InspectionScopePlanSaveResult>.Failure(
+                    CreateScopePlanSaveResult(
+                        InspectionScopePlanSaveOutcomeModel.DefaultPlanMissing,
+                        fallbackSnapshot),
+                    "默认方案缺失");
+            }
+
+            var targetScopePlan = enabledScopePlans
                 .FirstOrDefault(plan => string.Equals(plan.PlanId, normalizedScopePlanId, StringComparison.Ordinal));
             if (targetScopePlan is null)
             {
@@ -167,9 +184,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                 MapPointSourceDiagnostics.Write(
                     "InspectionTask",
                     $"save default scope plan rejected: groupId={normalizedGroupId}, scopePlanId={normalizedScopePlanId}, fallbackPlanId={fallbackPlan?.PlanId ?? "none"}");
-                return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
-                    fallbackSnapshot,
-                    "当前查看方案已失效，请重新选择后再保存。");
+                return ServiceResponse<InspectionScopePlanSaveResult>.Failure(
+                    CreateScopePlanSaveResult(
+                        InspectionScopePlanSaveOutcomeModel.CurrentPlanInvalid,
+                        fallbackSnapshot,
+                        fallbackPlan?.PlanId ?? string.Empty,
+                        fallbackPlan?.PlanName ?? string.Empty),
+                    "保存失败");
             }
 
             var updatedSettings = originalSettings with
@@ -190,8 +211,12 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                 MapPointSourceDiagnostics.Write(
                     "InspectionTask",
                     $"save default scope plan succeeded: groupId={normalizedGroupId}, scopePlanId={targetScopePlan.PlanId}, scopePlanName={targetScopePlan.PlanName}");
-                return ServiceResponse<InspectionWorkspaceSnapshot>.Success(
-                    refreshedWorkspace.Data,
+                return ServiceResponse<InspectionScopePlanSaveResult>.Success(
+                    CreateScopePlanSaveResult(
+                        InspectionScopePlanSaveOutcomeModel.Succeeded,
+                        refreshedWorkspace.Data,
+                        targetScopePlan.PlanId,
+                        targetScopePlan.PlanName),
                     targetScopePlan.PlanName);
             }
             catch (Exception refreshException)
@@ -200,9 +225,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                 MapPointSourceDiagnostics.Write(
                     "InspectionTask",
                     $"save default scope plan refresh failed and reverted: groupId={normalizedGroupId}, scopePlanId={targetScopePlan.PlanId}, reason={refreshException.Message}");
-                return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
-                    fallbackSnapshot,
-                    "执行方案刷新失败，当前显示已保持原状态。");
+                return ServiceResponse<InspectionScopePlanSaveResult>.Failure(
+                    CreateScopePlanSaveResult(
+                        InspectionScopePlanSaveOutcomeModel.RefreshRolledBack,
+                        fallbackSnapshot,
+                        targetScopePlan.PlanId,
+                        targetScopePlan.PlanName),
+                    "刷新失败已回退");
             }
         }
         catch (Exception exception)
@@ -215,9 +244,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
             MapPointSourceDiagnostics.Write(
                 "InspectionTask",
                 $"save default scope plan failed: groupId={normalizedGroupId}, scopePlanId={normalizedScopePlanId}, reason={exception.Message}");
-            return ServiceResponse<InspectionWorkspaceSnapshot>.Failure(
-                fallbackSnapshot,
-                "执行方案保存失败，请稍后重试。");
+            return ServiceResponse<InspectionScopePlanSaveResult>.Failure(
+                CreateScopePlanSaveResult(
+                    InspectionScopePlanSaveOutcomeModel.SaveFailed,
+                    fallbackSnapshot,
+                    normalizedScopePlanId,
+                    string.Empty),
+                "保存失败");
         }
     }
 
@@ -2420,6 +2453,19 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         {
             return new InspectionWorkspaceSnapshot([]);
         }
+    }
+
+    private static InspectionScopePlanSaveResult CreateScopePlanSaveResult(
+        InspectionScopePlanSaveOutcomeModel outcome,
+        InspectionWorkspaceSnapshot workspaceSnapshot,
+        string scopePlanId = "",
+        string scopePlanName = "")
+    {
+        return new InspectionScopePlanSaveResult(
+            outcome,
+            workspaceSnapshot,
+            scopePlanId,
+            scopePlanName);
     }
 
     private void TryRestoreInspectionSettings(

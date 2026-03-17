@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using TianyiVision.Acis.Core.Application;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Configuration;
 using TianyiVision.Acis.Services.Devices;
 using TianyiVision.Acis.Services.Diagnostics;
@@ -20,6 +22,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly IInspectionTaskService _inspectionTaskService;
     private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedScopePlanIdByGroupId = new(StringComparer.Ordinal);
+    private readonly RelayCommand _selectScopePlanCommand;
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _saveCurrentScopePlanCommand;
     private readonly RelayCommand _startSinglePointInspectionCommand;
@@ -63,6 +66,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string _currentExecutionScopePlanName = "--";
     private string _scopePlanAlignmentSummary = string.Empty;
     private string _scopePlanSaveFeedback = string.Empty;
+    private string _scopePlanFallbackHint = string.Empty;
+    private string _scopeSaveButtonText = string.Empty;
+    private ScopePlanSaveVisualState _scopePlanSaveVisualState = ScopePlanSaveVisualState.Idle;
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -132,6 +138,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ScopeCurrentExecutionPlanLabel = textService.Resolve(TextTokens.InspectionScopeCurrentExecutionPlanLabel);
         ScopeReadonlyHint = textService.Resolve(TextTokens.InspectionScopeReadonlyHint);
         ScopeSaveActionText = textService.Resolve(TextTokens.InspectionScopeSaveAction);
+        ScopeSaveButtonText = ScopeSaveActionText;
         WorkbenchMapBadge = textService.Resolve(TextTokens.InspectionWorkbenchMapBadge);
         WorkbenchHint = textService.Resolve(TextTokens.InspectionWorkbenchHint);
         MapModeRealText = textService.Resolve(TextTokens.InspectionMapModeReal);
@@ -236,7 +243,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 }
             }
         });
-        SelectScopePlanCommand = new RelayCommand(parameter =>
+        _selectScopePlanCommand = new RelayCommand(parameter =>
         {
             if (parameter is not InspectionScopePlanOptionState option)
             {
@@ -256,10 +263,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 return;
             }
 
-            ScopePlanSaveFeedback = string.Empty;
+            ClearScopePlanSaveFeedback();
             ApplyScopePlanSelection(workspace, option.PlanId);
-        });
+        }, _ => !IsScopePlanSavePending);
 
+        SelectScopePlanCommand = _selectScopePlanCommand;
         _saveCurrentScopePlanCommand = new RelayCommand(_ => SaveCurrentScopePlan(), _ => CanSaveCurrentScopePlan);
         _executeInspectionCommand = new RelayCommand(_ => StartGroupInspection(), _ => ExecutionState?.IsEnabled == true);
         _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspection(), _ => CanStartSinglePointInspection);
@@ -634,9 +642,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public bool HasScopeUnmatchedPoints => ScopeUnmatchedPoints.Count > 0;
 
     public bool CanSaveCurrentScopePlan
-        => SelectedGroup is not null
+        => !IsScopePlanSavePending
+            && SelectedGroup is not null
             && _workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace)
-            && !string.IsNullOrWhiteSpace(ResolveScopePlanSelection(workspace, null));
+            && !string.IsNullOrWhiteSpace(ResolveScopePlanSelection(workspace, null))
+            && HasSavableScopePlan(workspace);
 
     public string CurrentViewingScopePlanName
     {
@@ -659,8 +669,42 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string ScopePlanSaveFeedback
     {
         get => _scopePlanSaveFeedback;
-        private set => SetProperty(ref _scopePlanSaveFeedback, value);
+        private set
+        {
+            if (SetProperty(ref _scopePlanSaveFeedback, value))
+            {
+                OnPropertyChanged(nameof(HasScopePlanSaveFeedback));
+            }
+        }
     }
+
+    public bool HasScopePlanSaveFeedback => !string.IsNullOrWhiteSpace(ScopePlanSaveFeedback);
+
+    public string ScopePlanFallbackHint
+    {
+        get => _scopePlanFallbackHint;
+        private set
+        {
+            if (SetProperty(ref _scopePlanFallbackHint, value))
+            {
+                OnPropertyChanged(nameof(HasScopePlanFallbackHint));
+            }
+        }
+    }
+
+    public bool HasScopePlanFallbackHint => !string.IsNullOrWhiteSpace(ScopePlanFallbackHint);
+
+    public string ScopeSaveButtonText
+    {
+        get => _scopeSaveButtonText;
+        private set => SetProperty(ref _scopeSaveButtonText, value);
+    }
+
+    public bool IsScopePlanSavePending => _scopePlanSaveVisualState == ScopePlanSaveVisualState.Saving;
+
+    public bool IsScopePlanSaveSuccess => _scopePlanSaveVisualState == ScopePlanSaveVisualState.Success;
+
+    public bool IsScopePlanSaveFailure => _scopePlanSaveVisualState == ScopePlanSaveVisualState.Failure;
 
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
@@ -719,6 +763,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         CurrentTask = workspace.CurrentTask;
         RecentTasks = workspace.RecentTasks;
         AvailableScopePlans = workspace.ScopePlanOptions;
+        ClearScopePlanSaveFeedback();
         ApplyScopePlanSelection(workspace, ResolveScopePlanSelection(workspace, null));
         UpdateTaskAbnormalFlowPresentation(workspace.TaskBoard.CurrentTask);
         _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
@@ -798,6 +843,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 ? TaskEmptyText
                 : workspace.ExecutionScopePlanName;
             ScopePlanAlignmentSummary = TaskEmptyText;
+            UpdateScopePlanFallbackHint(workspace);
+            _selectScopePlanCommand.RaiseCanExecuteChanged();
+            _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
             return;
         }
 
@@ -829,6 +877,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => point.IsInDefaultScope));
         ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => !point.IsInDefaultScope));
+        UpdateScopePlanFallbackHint(workspace);
+        _selectScopePlanCommand.RaiseCanExecuteChanged();
         _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
         SyncScopePointSelection(SelectedPoint?.Id);
     }
@@ -983,49 +1033,226 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint?.Id);
     }
 
-    private void SaveCurrentScopePlan()
+    private async void SaveCurrentScopePlan()
     {
         if (SelectedGroup is null
             || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
         {
-            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan);
+            SetScopePlanSaveFeedback(
+                ScopePlanSaveVisualState.Failure,
+                _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan));
             return;
         }
 
         var selectedPlanId = ResolveScopePlanSelection(workspace, null);
         if (string.IsNullOrWhiteSpace(selectedPlanId))
         {
-            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan);
+            SetScopePlanSaveFeedback(
+                ScopePlanSaveVisualState.Failure,
+                _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan));
             return;
         }
 
         if (_inspectionTaskService is not IInspectionScopePlanPersistenceService persistenceService)
         {
-            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveFailure);
+            SetScopePlanSaveFeedback(
+                ScopePlanSaveVisualState.Failure,
+                _textService.Resolve(TextTokens.InspectionScopeSaveFailure));
+            return;
+        }
+
+        if (IsScopePlanSavePending)
+        {
             return;
         }
 
         var selectedPointId = SelectedPoint?.Id;
-        var response = persistenceService.SaveDefaultScopePlan(workspace.Group.Id, selectedPlanId);
-        if (!response.IsSuccess)
+        SetScopePlanSaveFeedback(
+            ScopePlanSaveVisualState.Saving,
+            _textService.Resolve(TextTokens.InspectionScopeSavePending));
+
+        ServiceResponse<InspectionScopePlanSaveResult> response;
+        try
         {
-            ScopePlanSaveFeedback = string.IsNullOrWhiteSpace(response.Message)
-                ? _textService.Resolve(TextTokens.InspectionScopeSaveFailure)
-                : response.Message;
+            response = await Task.Run(() => persistenceService.SaveDefaultScopePlan(workspace.Group.Id, selectedPlanId));
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"scope plan save execution failed: groupId={workspace.Group.Id}, scopePlanId={selectedPlanId}, reason={exception.Message}");
+            SetScopePlanSaveFeedback(
+                ScopePlanSaveVisualState.Failure,
+                _textService.Resolve(TextTokens.InspectionScopeSaveFailure));
             return;
         }
 
-        if (!TryApplyWorkspaceSnapshot(response.Data, workspace.Group.Id, selectedPointId))
+        var saveResult = response.Data;
+        var shouldRollbackSelection = saveResult.Outcome is not InspectionScopePlanSaveOutcomeModel.Succeeded;
+        var applied = TrySyncWorkspaceAfterScopePlanSave(
+            saveResult.WorkspaceSnapshot,
+            workspace.Group.Id,
+            selectedPointId,
+            shouldRollbackSelection);
+
+        if (!applied)
         {
-            ScopePlanSaveFeedback = _textService.Resolve(TextTokens.InspectionScopeSaveRefreshRollback);
+            SetScopePlanSaveFeedback(
+                ScopePlanSaveVisualState.Failure,
+                _textService.Resolve(TextTokens.InspectionScopeSaveRefreshRollback));
             return;
         }
 
-        var savedPlanName = CurrentExecutionScopePlanName;
-        ScopePlanSaveFeedback = string.Format(
-            _textService.Resolve(TextTokens.InspectionScopeSaveSuccessPattern),
-            savedPlanName);
+        switch (saveResult.Outcome)
+        {
+            case InspectionScopePlanSaveOutcomeModel.Succeeded:
+                SetScopePlanSaveFeedback(
+                    ScopePlanSaveVisualState.Success,
+                    _textService.Resolve(TextTokens.InspectionScopeSaveSuccessPattern));
+                UpdateScopePlanFallbackHint(GetCurrentWorkspace());
+                return;
+            case InspectionScopePlanSaveOutcomeModel.RefreshRolledBack:
+                SetScopePlanSaveFeedback(
+                    ScopePlanSaveVisualState.Failure,
+                    _textService.Resolve(TextTokens.InspectionScopeSaveRefreshRollback));
+                UpdateScopePlanFallbackHint(GetCurrentWorkspace());
+                return;
+            case InspectionScopePlanSaveOutcomeModel.DefaultPlanMissing:
+                SetScopePlanSaveFeedback(
+                    ScopePlanSaveVisualState.Failure,
+                    _textService.Resolve(TextTokens.InspectionScopeSaveMissingPlan));
+                UpdateScopePlanFallbackHint(GetCurrentWorkspace(), saveResult.Outcome);
+                return;
+            case InspectionScopePlanSaveOutcomeModel.CurrentPlanInvalid:
+                SetScopePlanSaveFeedback(
+                    ScopePlanSaveVisualState.Failure,
+                    _textService.Resolve(TextTokens.InspectionScopeSaveFailure));
+                UpdateScopePlanFallbackHint(GetCurrentWorkspace(), saveResult.Outcome);
+                return;
+            default:
+                SetScopePlanSaveFeedback(
+                    ScopePlanSaveVisualState.Failure,
+                    _textService.Resolve(TextTokens.InspectionScopeSaveFailure));
+                UpdateScopePlanFallbackHint(GetCurrentWorkspace());
+                return;
+        }
     }
+
+    private bool TrySyncWorkspaceAfterScopePlanSave(
+        InspectionWorkspaceSnapshot snapshot,
+        string groupId,
+        string? selectedPointId,
+        bool rollbackSelectionToExecution)
+    {
+        if (rollbackSelectionToExecution)
+        {
+            ResetScopePlanSelection(groupId);
+        }
+
+        if (TryApplyWorkspaceSnapshot(snapshot, groupId, selectedPointId))
+        {
+            return true;
+        }
+
+        try
+        {
+            var refreshedSnapshot = _inspectionTaskService.GetWorkspace().Data;
+            if (rollbackSelectionToExecution)
+            {
+                ResetScopePlanSelection(groupId);
+            }
+
+            return TryApplyWorkspaceSnapshot(refreshedSnapshot, groupId, selectedPointId);
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"scope plan save workspace sync failed: groupId={groupId}, reason={exception.Message}");
+            return false;
+        }
+    }
+
+    private void ResetScopePlanSelection(string groupId)
+    {
+        _selectedScopePlanIdByGroupId.Remove(groupId);
+
+        if (_workspaceByGroupId.TryGetValue(groupId, out var workspace))
+        {
+            workspace.SelectedScopePlanId = workspace.ExecutionScopePlanId;
+        }
+    }
+
+    private void ClearScopePlanSaveFeedback()
+    {
+        SetScopePlanSaveFeedback(ScopePlanSaveVisualState.Idle, string.Empty);
+    }
+
+    private void SetScopePlanSaveFeedback(ScopePlanSaveVisualState state, string feedback)
+    {
+        ScopePlanSaveFeedback = feedback;
+        ScopeSaveButtonText = state == ScopePlanSaveVisualState.Saving
+            ? _textService.Resolve(TextTokens.InspectionScopeSavePending)
+            : ScopeSaveActionText;
+        SetScopePlanSaveVisualState(state);
+    }
+
+    private void SetScopePlanSaveVisualState(ScopePlanSaveVisualState state)
+    {
+        if (_scopePlanSaveVisualState == state)
+        {
+            _selectScopePlanCommand.RaiseCanExecuteChanged();
+            _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
+            return;
+        }
+
+        _scopePlanSaveVisualState = state;
+        OnPropertyChanged(nameof(IsScopePlanSavePending));
+        OnPropertyChanged(nameof(IsScopePlanSaveSuccess));
+        OnPropertyChanged(nameof(IsScopePlanSaveFailure));
+        OnPropertyChanged(nameof(HasScopePlanSaveFeedback));
+        OnPropertyChanged(nameof(CanSaveCurrentScopePlan));
+        _selectScopePlanCommand.RaiseCanExecuteChanged();
+        _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
+    }
+
+    private void UpdateScopePlanFallbackHint(
+        GroupWorkspaceState? workspace,
+        InspectionScopePlanSaveOutcomeModel? saveOutcome = null)
+    {
+        if (saveOutcome == InspectionScopePlanSaveOutcomeModel.CurrentPlanInvalid)
+        {
+            ScopePlanFallbackHint = _textService.Resolve(TextTokens.InspectionScopeCurrentPlanInvalidHint);
+            return;
+        }
+
+        if (saveOutcome == InspectionScopePlanSaveOutcomeModel.DefaultPlanMissing
+            || workspace is not null && IsFallbackScopePlanId(workspace.ExecutionScopePlanId))
+        {
+            ScopePlanFallbackHint = _textService.Resolve(TextTokens.InspectionScopeDefaultPlanMissingHint);
+            return;
+        }
+
+        if (workspace is not null && workspace.Points.Count == 0)
+        {
+            ScopePlanFallbackHint = _textService.Resolve(TextTokens.InspectionScopeWorkspaceEmptyHint);
+            return;
+        }
+
+        ScopePlanFallbackHint = string.Empty;
+    }
+
+    private static bool HasSavableScopePlan(GroupWorkspaceState workspace)
+    {
+        var selectedPlanId = string.IsNullOrWhiteSpace(workspace.SelectedScopePlanId)
+            ? workspace.ExecutionScopePlanId
+            : workspace.SelectedScopePlanId;
+        return !IsFallbackScopePlanId(selectedPlanId);
+    }
+
+    private static bool IsFallbackScopePlanId(string? scopePlanId)
+        => string.IsNullOrWhiteSpace(scopePlanId)
+            || string.Equals(scopePlanId, "__default_scope__", StringComparison.Ordinal);
 
     private void ToggleGroupEnabled()
     {
@@ -2178,6 +2405,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             InspectionPointStatus.Silent => MapPointVisualKind.Silent,
             _ => MapPointVisualKind.Normal
         };
+    }
+
+    private enum ScopePlanSaveVisualState
+    {
+        Idle,
+        Saving,
+        Success,
+        Failure
     }
 
     private sealed class GroupWorkspaceState

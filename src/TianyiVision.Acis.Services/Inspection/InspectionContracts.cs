@@ -665,6 +665,21 @@ public sealed record InspectionTaskBoardModel(
     InspectionTaskRecordModel? CurrentTask,
     IReadOnlyList<InspectionTaskRecordModel> RecentTasks);
 
+public enum InspectionScopePlanSaveOutcomeModel
+{
+    Succeeded,
+    SaveFailed,
+    RefreshRolledBack,
+    DefaultPlanMissing,
+    CurrentPlanInvalid
+}
+
+public sealed record InspectionScopePlanSaveResult(
+    InspectionScopePlanSaveOutcomeModel Outcome,
+    InspectionWorkspaceSnapshot WorkspaceSnapshot,
+    string ScopePlanId,
+    string ScopePlanName);
+
 public sealed record InspectionGroupWorkspaceModel(
     InspectionGroupModel Group,
     InspectionStrategyModel Strategy,
@@ -889,5 +904,5 @@ public interface IInspectionTaskService
 
 public interface IInspectionScopePlanPersistenceService
 {
-    ServiceResponse<InspectionWorkspaceSnapshot> SaveDefaultScopePlan(string groupId, string scopePlanId);
+    ServiceResponse<InspectionScopePlanSaveResult> SaveDefaultScopePlan(string groupId, string scopePlanId);
 }
