@@ -75,6 +75,17 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ScopePlanOptionButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="Margin" Value="0,0,10,10" />
+            <Setter Property="Padding" Value="12,8" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -194,6 +205,40 @@
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ScopePreviewTitle}" />
                                         <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePreviewDescription}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,16,0,10" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ScopePlanSelectionLabel}" />
+                                        <ItemsControl ItemsSource="{Binding AvailableScopePlans}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource ScopePlanOptionButtonStyle}"
+                                                            Command="{Binding DataContext.SelectScopePlanCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <TextBlock Text="{Binding DisplayName}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Grid Margin="0,6,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeCurrentViewingPlanLabel}" />
+                                            <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentViewingScopePlanName}" />
+                                            <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeCurrentExecutionPlanLabel}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding CurrentExecutionScopePlanName}" />
+                                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanAlignmentSummary}" TextWrapping="Wrap" />
+                                        </Grid>
+                                        <TextBlock Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopeReadonlyHint}" TextWrapping="Wrap" />
                                         <Grid Margin="0,16,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="130" />
@@ -226,7 +271,7 @@
                                 <ItemsControl ItemsSource="{Binding ScopeMatchedPoints}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Button Style="{StaticResource PointItemButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                            <Button Style="{StaticResource PointItemButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Id}">
                                                 <StackPanel>
                                                     <DockPanel LastChildFill="False">
                                                         <StackPanel Width="250">
@@ -248,7 +293,7 @@
                                     <ItemsControl ItemsSource="{Binding ScopeUnmatchedPoints}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Button Style="{StaticResource ScopeUnmatchedPointButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                <Button Style="{StaticResource ScopeUnmatchedPointButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding Id}">
                                                     <StackPanel>
                                                         <DockPanel LastChildFill="False">
                                                             <StackPanel Width="250">

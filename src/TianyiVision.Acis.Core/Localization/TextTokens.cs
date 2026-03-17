@@ -118,6 +118,7 @@ public static class TextTokens
     public const string InspectionWorkbenchDescription = "inspection.workbenchDescription";
     public const string InspectionScopePreviewTitle = "inspection.scopePreviewTitle";
     public const string InspectionScopePreviewDescription = "inspection.scopePreviewDescription";
+    public const string InspectionScopeSelectionLabel = "inspection.scopeSelectionLabel";
     public const string InspectionScopePlanNameLabel = "inspection.scopePlanNameLabel";
     public const string InspectionScopeMatchedCountLabel = "inspection.scopeMatchedCountLabel";
     public const string InspectionScopeUnmatchedCountLabel = "inspection.scopeUnmatchedCountLabel";
@@ -126,6 +127,11 @@ public static class TextTokens
     public const string InspectionScopeUnmatchedReasonLabel = "inspection.scopeUnmatchedReasonLabel";
     public const string InspectionScopeMatchedListLabel = "inspection.scopeMatchedListLabel";
     public const string InspectionScopeUnmatchedListLabel = "inspection.scopeUnmatchedListLabel";
+    public const string InspectionScopeCurrentViewingPlanLabel = "inspection.scopeCurrentViewingPlanLabel";
+    public const string InspectionScopeCurrentExecutionPlanLabel = "inspection.scopeCurrentExecutionPlanLabel";
+    public const string InspectionScopeReadonlyHint = "inspection.scopeReadonlyHint";
+    public const string InspectionScopeCurrentViewEqualsExecution = "inspection.scopeCurrentViewEqualsExecution";
+    public const string InspectionScopeCurrentViewDiffersExecutionPattern = "inspection.scopeCurrentViewDiffersExecutionPattern";
     public const string InspectionWorkbenchMapBadge = "inspection.workbenchMapBadge";
     public const string InspectionWorkbenchHint = "inspection.workbenchHint";
     public const string InspectionMapModeReal = "inspection.mapModeReal";

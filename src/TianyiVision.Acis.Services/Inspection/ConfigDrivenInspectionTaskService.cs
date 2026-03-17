@@ -9,6 +9,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private const string DefaultGroupId = "inspection-live-group";
     private const string DefaultGroupName = "实时点位巡检组";
     private const string DefaultScopePlanName = "当前组默认范围";
+    private const string FallbackScopePlanId = "__default_scope__";
     private const int TaskHistoryLimit = 20;
 
     private static readonly PointStageLayoutPreset InspectionStagePreset = new(
@@ -79,8 +80,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         }
 
         var points = pointCollectionResponse.Data.ToList();
-        var scopePlan = ResolveDefaultScopePlan(inspectionSettings.ScopePlans);
-        var scopeSelection = SelectScopePoints(scopePlan, points);
+        var scopePlanBundle = BuildScopePlanBundle(inspectionSettings.ScopePlans, points);
+        var executionScopePlan = scopePlanBundle.ExecutionPlan;
+        var scopeSelection = scopePlanBundle.ExecutionSelection;
         var stagePlacements = PointStageProjection.Project(points, InspectionStagePreset);
 
         var inspectionPoints = points
@@ -117,7 +119,10 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             taskBoard,
             inspectionPoints,
             recentFaults,
-            scopeSelection.Preview);
+            scopeSelection.Preview,
+            executionScopePlan.PlanId,
+            executionScopePlan.PlanName,
+            scopePlanBundle.Snapshots);
 
         var renderablePoints = points.Where(point => point.Coordinate.CanRenderOnMap).ToList();
         var sourceBreakdown = points
@@ -1518,7 +1523,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         InspectionTaskBoardModel taskBoard,
         InspectionSettingsSnapshot settings)
     {
-        var scopePlan = ResolveDefaultScopePlan(settings.ScopePlans);
+        var scopePlanBundle = BuildPendingScopePlanBundle(settings.ScopePlans);
         return new InspectionWorkspaceSnapshot([
             new InspectionGroupWorkspaceModel(
                 new InspectionGroupModel(DefaultGroupId, groupName, "点位状态待接入", true),
@@ -1529,7 +1534,10 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 taskBoard,
                 [],
                 [],
-                CreatePendingScopePreview(scopePlan))
+                scopePlanBundle.ExecutionPlan.Preview,
+                scopePlanBundle.ExecutionPlan.PlanId,
+                scopePlanBundle.ExecutionPlan.PlanName,
+                scopePlanBundle.Snapshots)
         ]);
     }
 
@@ -1651,7 +1659,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 point => new ScopePointSelectionDecision(
                     true,
                     "全组执行",
-                    "当前未配置启用中的默认范围方案，本次按本组全部点位执行。"),
+                    "当前未配置启用中的范围方案，本次按本组全部点位执行。"),
                 StringComparer.Ordinal);
             return new ScopeSelectionResult(
                 "默认范围巡检",
@@ -1660,9 +1668,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 new InspectionScopePlanPreviewModel(
                     string.Empty,
                     DefaultScopePlanName,
-                    "当前未配置启用中的默认范围方案。",
+                    "当前未配置启用中的范围方案。",
                     BuildScopeRuleSummary(null),
-                    "当前执行口径：未配置默认范围方案，本次按本组全部点位执行。",
+                    "当前执行口径：未配置启用中的范围方案，本次按本组全部点位执行。",
                     points.Count,
                     0,
                     "当前无未命中点位。"));
@@ -2195,13 +2203,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private static InspectionScopePlanPreviewModel CreatePendingScopePreview(InspectionScopePlanSettings? scopePlan)
     {
         return new InspectionScopePlanPreviewModel(
-            scopePlan?.PlanId ?? string.Empty,
+            scopePlan?.PlanId ?? FallbackScopePlanId,
             scopePlan?.PlanName ?? DefaultScopePlanName,
             scopePlan is null
-                ? "当前未配置启用中的默认范围方案。"
+                ? "当前未配置启用中的范围方案。"
                 : NormalizeScopePlanDescription(scopePlan.Description),
             BuildScopeRuleSummary(scopePlan),
-            "当前点位工作区尚未返回可巡检点位，待点位接入后显示本次范围命中结果。",
+            "当前点位工作区尚未返回可巡检点位，待点位接入后显示当前方案命中结果。",
             0,
             0,
             "待点位接入后统计未命中原因。");
@@ -2218,7 +2226,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             return new ScopePointSelectionDecision(
                 false,
                 "方案排除",
-                "已被默认范围方案排除，本次整组巡检不会执行该点位。");
+                $"已被方案“{scopePlan.PlanName}”排除，按当前查看口径不会执行该点位。");
         }
 
         if (matchedPointIds.Contains(point.PointId))
@@ -2228,18 +2236,18 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     true,
                     "全组回退纳入",
                     scopePlan.IncludedPointIds.Count == 0
-                        ? "默认范围方案未配置纳管点位ID，当前按本组点位纳入执行。"
-                        : "默认范围方案未命中纳管点位ID，当前按本组点位回退纳入执行。")
+                        ? $"方案“{scopePlan.PlanName}”未配置纳管点位ID，当前按本组点位纳入查看口径。"
+                        : $"方案“{scopePlan.PlanName}”未命中纳管点位ID，当前按本组点位回退纳入查看口径。")
                 : new ScopePointSelectionDecision(
                     true,
                     "命中纳管点位",
-                    "命中默认范围方案纳管点位，本次整组巡检会执行该点位。");
+                    $"命中方案“{scopePlan.PlanName}”纳管点位，按当前查看口径会执行该点位。");
         }
 
         return new ScopePointSelectionDecision(
             false,
             "未命中纳管点位",
-            "未命中默认范围方案纳管点位，本次整组巡检不会执行该点位。");
+            $"未命中方案“{scopePlan.PlanName}”纳管点位，按当前查看口径不会执行该点位。");
     }
 
     private static string BuildScopeRuleSummary(InspectionScopePlanSettings? scopePlan)
@@ -2258,18 +2266,18 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     {
         if (!fallbackToAllPoints)
         {
-            return "当前执行口径：按默认范围方案的点位ID命中结果执行，排除点位已剔除。";
+            return $"当前执行口径：按方案“{scopePlan.PlanName}”的点位ID命中结果执行，排除点位已剔除。";
         }
 
         return scopePlan.IncludedPointIds.Count == 0
-            ? "当前执行口径：默认范围方案未配置点位ID，当前按本组全部点位执行，排除点位仍然剔除。"
-            : "当前执行口径：默认范围方案未命中任何点位ID，当前按本组全部点位回退执行，排除点位仍然剔除。";
+            ? $"当前执行口径：方案“{scopePlan.PlanName}”未配置点位ID，当前按本组全部点位执行，排除点位仍然剔除。"
+            : $"当前执行口径：方案“{scopePlan.PlanName}”未命中任何点位ID，当前按本组全部点位回退执行，排除点位仍然剔除。";
     }
 
     private static string NormalizeScopePlanDescription(string? description)
     {
         return string.IsNullOrWhiteSpace(description)
-            ? "当前默认范围方案未填写补充说明。"
+            ? "当前范围方案未填写补充说明。"
             : description.Trim();
     }
 
@@ -2357,9 +2365,114 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         IReadOnlyDictionary<string, ScopePointSelectionDecision> Decisions,
         InspectionScopePlanPreviewModel Preview);
 
+    private sealed record ScopePlanBundle(
+        InspectionScopePlanSnapshotModel ExecutionPlan,
+        ScopeSelectionResult ExecutionSelection,
+        IReadOnlyList<InspectionScopePlanSnapshotModel> Snapshots);
+
+    private sealed record PendingScopePlanBundle(
+        InspectionScopePlanSnapshotModel ExecutionPlan,
+        IReadOnlyList<InspectionScopePlanSnapshotModel> Snapshots);
+
     private sealed record ResolvedPointPolicy(
         InspectionPointPolicySettings Policy,
         bool UsesOverridePolicy,
         bool IsFocusPoint,
         string PolicySnapshotSummary);
+
+    private static ScopePlanBundle BuildScopePlanBundle(
+        IReadOnlyList<InspectionScopePlanSettings> scopePlans,
+        IReadOnlyList<PointWorkspaceItemModel> points)
+    {
+        var defaultScopePlan = ResolveDefaultScopePlan(scopePlans);
+        var enabledPlans = (scopePlans ?? Array.Empty<InspectionScopePlanSettings>())
+            .Where(plan => plan.IsEnabled)
+            .ToList();
+
+        if (enabledPlans.Count == 0)
+        {
+            var selection = SelectScopePoints(null, points);
+            var snapshot = CreateScopePlanSnapshot(
+                FallbackScopePlanId,
+                DefaultScopePlanName,
+                true,
+                selection);
+            return new ScopePlanBundle(snapshot, selection, [snapshot]);
+        }
+
+        var snapshots = enabledPlans
+            .Select(plan => CreateScopePlanSnapshot(
+                plan.PlanId,
+                plan.PlanName,
+                string.Equals(plan.PlanId, defaultScopePlan?.PlanId, StringComparison.Ordinal),
+                SelectScopePoints(plan, points)))
+            .ToList();
+        var executionPlan = snapshots.FirstOrDefault(snapshot => snapshot.IsDefault)
+            ?? snapshots.First();
+        var executionSelection = SelectScopePoints(
+            enabledPlans.FirstOrDefault(plan => string.Equals(plan.PlanId, executionPlan.PlanId, StringComparison.Ordinal)),
+            points);
+
+        return new ScopePlanBundle(executionPlan, executionSelection, snapshots);
+    }
+
+    private static PendingScopePlanBundle BuildPendingScopePlanBundle(IReadOnlyList<InspectionScopePlanSettings> scopePlans)
+    {
+        var defaultScopePlan = ResolveDefaultScopePlan(scopePlans);
+        var enabledPlans = (scopePlans ?? Array.Empty<InspectionScopePlanSettings>())
+            .Where(plan => plan.IsEnabled)
+            .ToList();
+
+        if (enabledPlans.Count == 0)
+        {
+            var preview = CreatePendingScopePreview(null);
+            var snapshot = new InspectionScopePlanSnapshotModel(
+                FallbackScopePlanId,
+                DefaultScopePlanName,
+                true,
+                preview,
+                []);
+            return new PendingScopePlanBundle(snapshot, [snapshot]);
+        }
+
+        var snapshots = enabledPlans
+            .Select(plan => new InspectionScopePlanSnapshotModel(
+                plan.PlanId,
+                plan.PlanName,
+                string.Equals(plan.PlanId, defaultScopePlan?.PlanId, StringComparison.Ordinal),
+                CreatePendingScopePreview(plan),
+                []))
+            .ToList();
+        var executionPlan = snapshots.FirstOrDefault(snapshot => snapshot.IsDefault)
+            ?? snapshots.First();
+
+        return new PendingScopePlanBundle(executionPlan, snapshots);
+    }
+
+    private static InspectionScopePlanSnapshotModel CreateScopePlanSnapshot(
+        string planId,
+        string planName,
+        bool isDefault,
+        ScopeSelectionResult selection)
+    {
+        var preview = selection.Preview with
+        {
+            PlanId = string.IsNullOrWhiteSpace(planId) ? FallbackScopePlanId : planId,
+            PlanName = string.IsNullOrWhiteSpace(planName) ? selection.Preview.PlanName : planName
+        };
+
+        return new InspectionScopePlanSnapshotModel(
+            preview.PlanId,
+            preview.PlanName,
+            isDefault,
+            preview,
+            selection.Decisions
+                .Select(entry => new InspectionScopePlanPointDecisionModel(
+                    entry.Key,
+                    entry.Value.IsInScope,
+                    entry.Value.ReasonLabel,
+                    entry.Value.Summary))
+                .OrderBy(entry => entry.PointId, StringComparer.Ordinal)
+                .ToList());
+    }
 }

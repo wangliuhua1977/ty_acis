@@ -143,6 +143,19 @@ public sealed record InspectionScopePlanPreviewModel(
     int UnmatchedPointCount,
     string UnmatchedReasonSummary);
 
+public sealed record InspectionScopePlanPointDecisionModel(
+    string PointId,
+    bool IsInScope,
+    string ReasonLabel,
+    string Summary);
+
+public sealed record InspectionScopePlanSnapshotModel(
+    string PlanId,
+    string PlanName,
+    bool IsDefault,
+    InspectionScopePlanPreviewModel Preview,
+    IReadOnlyList<InspectionScopePlanPointDecisionModel> PointDecisions);
+
 public sealed record InspectionPointModel(
     string Id,
     string DeviceCode,
@@ -661,7 +674,10 @@ public sealed record InspectionGroupWorkspaceModel(
     InspectionTaskBoardModel TaskBoard,
     IReadOnlyList<InspectionPointModel> Points,
     IReadOnlyList<InspectionRecentFaultModel> RecentFaults,
-    InspectionScopePlanPreviewModel? ScopePlanPreview = null);
+    InspectionScopePlanPreviewModel? ScopePlanPreview = null,
+    string ExecutionScopePlanId = "",
+    string ExecutionScopePlanName = "",
+    IReadOnlyList<InspectionScopePlanSnapshotModel>? ScopePlanSnapshots = null);
 
 public sealed record InspectionWorkspaceSnapshot(
     IReadOnlyList<InspectionGroupWorkspaceModel> Groups);

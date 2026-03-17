@@ -178,6 +178,49 @@ public sealed class InspectionPointState : ViewModelBase
         set => SetProperty(ref _isCurrent, value);
     }
 
+    public InspectionPointState CreateScopeSnapshot(bool isInScope, string scopeDecisionSummary)
+    {
+        return new InspectionPointState(
+            Id,
+            DeviceCode,
+            Name,
+            UnitName,
+            CurrentHandlingUnit,
+            MapLongitude,
+            MapLatitude,
+            RegisteredLongitude,
+            RegisteredLatitude,
+            RegisteredCoordinateSystem,
+            MapCoordinateSystem,
+            CanRenderOnMap,
+            CoordinateStatusText,
+            RawLongitude,
+            RawLatitude,
+            CoordinateStatus,
+            MapSource,
+            X,
+            Y,
+            Status,
+            StatusText,
+            CompletionStatus,
+            OnlineStatus,
+            PlaybackStatus,
+            ImageStatus,
+            FaultType,
+            FaultDescription,
+            LastFaultTime,
+            DispatchPoolEntry,
+            LastInspectionConclusion,
+            isInScope,
+            scopeDecisionSummary,
+            IsPreviewAvailable,
+            BusinessSummary)
+        {
+            IsCurrent = IsCurrent,
+            IsSelected = IsSelected
+        };
+    }
+
     public static MapPointColorCategory ResolveMapColorCategory(
         InspectionPointStatus status,
         InspectionPointStatus completionStatus)

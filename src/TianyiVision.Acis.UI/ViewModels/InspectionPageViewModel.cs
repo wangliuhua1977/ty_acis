@@ -18,7 +18,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly IInspectionTaskService _inspectionTaskService;
-    private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId;
+    private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _selectedScopePlanIdByGroupId = new(StringComparer.Ordinal);
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _startSinglePointInspectionCommand;
     private readonly RelayCommand _openDispatchWorkspaceCommand;
@@ -54,8 +55,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string _reviewWallEntrySummary = string.Empty;
     private string _dispatchPoolCandidateSummary = string.Empty;
     private InspectionScopePlanPreviewModel _scopePlanPreview = new(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, 0, 0, string.Empty);
+    private ObservableCollection<InspectionScopePlanOptionState> _availableScopePlans = [];
     private ObservableCollection<InspectionPointState> _scopeMatchedPoints = [];
     private ObservableCollection<InspectionPointState> _scopeUnmatchedPoints = [];
+    private string _currentViewingScopePlanName = "--";
+    private string _currentExecutionScopePlanName = "--";
+    private string _scopePlanAlignmentSummary = string.Empty;
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -112,6 +117,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         WorkbenchDescription = textService.Resolve(TextTokens.InspectionWorkbenchDescription);
         ScopePreviewTitle = textService.Resolve(TextTokens.InspectionScopePreviewTitle);
         ScopePreviewDescription = textService.Resolve(TextTokens.InspectionScopePreviewDescription);
+        ScopePlanSelectionLabel = textService.Resolve(TextTokens.InspectionScopeSelectionLabel);
         ScopePlanNameLabel = textService.Resolve(TextTokens.InspectionScopePlanNameLabel);
         ScopeMatchedCountLabel = textService.Resolve(TextTokens.InspectionScopeMatchedCountLabel);
         ScopeUnmatchedCountLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedCountLabel);
@@ -120,6 +126,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ScopeUnmatchedReasonLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedReasonLabel);
         ScopeMatchedListLabel = textService.Resolve(TextTokens.InspectionScopeMatchedListLabel);
         ScopeUnmatchedListLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedListLabel);
+        ScopeCurrentViewingPlanLabel = textService.Resolve(TextTokens.InspectionScopeCurrentViewingPlanLabel);
+        ScopeCurrentExecutionPlanLabel = textService.Resolve(TextTokens.InspectionScopeCurrentExecutionPlanLabel);
+        ScopeReadonlyHint = textService.Resolve(TextTokens.InspectionScopeReadonlyHint);
         WorkbenchMapBadge = textService.Resolve(TextTokens.InspectionWorkbenchMapBadge);
         WorkbenchHint = textService.Resolve(TextTokens.InspectionWorkbenchHint);
         MapModeRealText = textService.Resolve(TextTokens.InspectionMapModeReal);
@@ -224,6 +233,28 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 }
             }
         });
+        SelectScopePlanCommand = new RelayCommand(parameter =>
+        {
+            if (parameter is not InspectionScopePlanOptionState option)
+            {
+                return;
+            }
+
+            var group = SelectedGroup;
+            if (group is null)
+            {
+                return;
+            }
+
+            var groupId = group.Id;
+            if (!_workspaceByGroupId.TryGetValue(groupId, out var workspace)
+                || workspace is null)
+            {
+                return;
+            }
+
+            ApplyScopePlanSelection(workspace, option.PlanId);
+        });
 
         _executeInspectionCommand = new RelayCommand(_ => StartGroupInspection(), _ => ExecutionState?.IsEnabled == true);
         _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspection(), _ => CanStartSinglePointInspection);
@@ -293,6 +324,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string WorkbenchDescription { get; }
     public string ScopePreviewTitle { get; }
     public string ScopePreviewDescription { get; }
+    public string ScopePlanSelectionLabel { get; }
     public string ScopePlanNameLabel { get; }
     public string ScopeMatchedCountLabel { get; }
     public string ScopeUnmatchedCountLabel { get; }
@@ -301,6 +333,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string ScopeUnmatchedReasonLabel { get; }
     public string ScopeMatchedListLabel { get; }
     public string ScopeUnmatchedListLabel { get; }
+    public string ScopeCurrentViewingPlanLabel { get; }
+    public string ScopeCurrentExecutionPlanLabel { get; }
+    public string ScopeReadonlyHint { get; }
     public string WorkbenchMapBadge { get; }
     public string WorkbenchHint { get; }
     public string MapModeRealText { get; }
@@ -565,6 +600,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         private set => SetProperty(ref _scopePlanPreview, value);
     }
 
+    public ObservableCollection<InspectionScopePlanOptionState> AvailableScopePlans
+    {
+        get => _availableScopePlans;
+        private set => SetProperty(ref _availableScopePlans, value);
+    }
+
     public ObservableCollection<InspectionPointState> ScopeMatchedPoints
     {
         get => _scopeMatchedPoints;
@@ -585,9 +626,28 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     public bool HasScopeUnmatchedPoints => ScopeUnmatchedPoints.Count > 0;
 
+    public string CurrentViewingScopePlanName
+    {
+        get => _currentViewingScopePlanName;
+        private set => SetProperty(ref _currentViewingScopePlanName, value);
+    }
+
+    public string CurrentExecutionScopePlanName
+    {
+        get => _currentExecutionScopePlanName;
+        private set => SetProperty(ref _currentExecutionScopePlanName, value);
+    }
+
+    public string ScopePlanAlignmentSummary
+    {
+        get => _scopePlanAlignmentSummary;
+        private set => SetProperty(ref _scopePlanAlignmentSummary, value);
+    }
+
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
+    public ICommand SelectScopePlanCommand { get; }
     public ICommand SelectFirstUnmappedPointCommand { get; }
     public ICommand ExecuteInspectionCommand { get; }
     public ICommand StartSinglePointInspectionCommand { get; }
@@ -634,14 +694,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ExecutionState = workspace.ExecutionState;
         RunSummary = workspace.RunSummary;
         Points = workspace.Points;
-        ScopePlanPreview = workspace.ScopePlanPreview;
-        ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Where(point => point.IsInDefaultScope));
-        ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Where(point => !point.IsInDefaultScope));
         MapPoints = workspace.MapPoints;
         UnmappedPoints = new ObservableCollection<MapPointState>(workspace.MapPoints.Where(point => !point.CanRenderOnMap));
         RecentFaults = workspace.RecentFaults;
         CurrentTask = workspace.CurrentTask;
         RecentTasks = workspace.RecentTasks;
+        AvailableScopePlans = workspace.ScopePlanOptions;
+        ApplyScopePlanSelection(workspace, ResolveScopePlanSelection(workspace, null));
         UpdateTaskAbnormalFlowPresentation(workspace.TaskBoard.CurrentTask);
         _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
 
@@ -670,6 +729,111 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         RefreshSummary(workspace);
         LoadReviewState(workspace, refreshFromPoints: false);
+    }
+
+    private string? ResolveScopePlanSelection(GroupWorkspaceState workspace, string? requestedPlanId)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedPlanId)
+            && workspace.ScopePlansById.ContainsKey(requestedPlanId))
+        {
+            return requestedPlanId;
+        }
+
+        if (_selectedScopePlanIdByGroupId.TryGetValue(workspace.Group.Id, out var selectedPlanId)
+            && workspace.ScopePlansById.ContainsKey(selectedPlanId))
+        {
+            return selectedPlanId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspace.SelectedScopePlanId)
+            && workspace.ScopePlansById.ContainsKey(workspace.SelectedScopePlanId))
+        {
+            return workspace.SelectedScopePlanId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanId)
+            && workspace.ScopePlansById.ContainsKey(workspace.ExecutionScopePlanId))
+        {
+            return workspace.ExecutionScopePlanId;
+        }
+
+        return workspace.ScopePlans.FirstOrDefault()?.PlanId;
+    }
+
+    private void ApplyScopePlanSelection(GroupWorkspaceState workspace, string? requestedPlanId)
+    {
+        var selectedPlanId = ResolveScopePlanSelection(workspace, requestedPlanId);
+        var selectedPlan = !string.IsNullOrWhiteSpace(selectedPlanId)
+            && workspace.ScopePlansById.TryGetValue(selectedPlanId, out var resolvedPlan)
+                ? resolvedPlan
+                : workspace.ScopePlans.FirstOrDefault();
+
+        if (selectedPlan is null)
+        {
+            ScopePlanPreview = CreateEmptyScopePlanPreview();
+            ScopeMatchedPoints = new ObservableCollection<InspectionPointState>();
+            ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>();
+            CurrentViewingScopePlanName = TaskEmptyText;
+            CurrentExecutionScopePlanName = string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanName)
+                ? TaskEmptyText
+                : workspace.ExecutionScopePlanName;
+            ScopePlanAlignmentSummary = TaskEmptyText;
+            return;
+        }
+
+        workspace.SelectedScopePlanId = selectedPlan.PlanId;
+        _selectedScopePlanIdByGroupId[workspace.Group.Id] = selectedPlan.PlanId;
+
+        foreach (var option in workspace.ScopePlanOptions)
+        {
+            option.IsSelected = string.Equals(option.PlanId, selectedPlan.PlanId, StringComparison.Ordinal);
+        }
+
+        ScopePlanPreview = selectedPlan.Preview;
+        CurrentViewingScopePlanName = selectedPlan.PlanName;
+        CurrentExecutionScopePlanName = string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanName)
+            ? selectedPlan.PlanName
+            : workspace.ExecutionScopePlanName;
+        ScopePlanAlignmentSummary = string.Equals(selectedPlan.PlanId, workspace.ExecutionScopePlanId, StringComparison.Ordinal)
+            ? _textService.Resolve(TextTokens.InspectionScopeCurrentViewEqualsExecution)
+            : string.Format(
+                _textService.Resolve(TextTokens.InspectionScopeCurrentViewDiffersExecutionPattern),
+                selectedPlan.PlanName,
+                CurrentExecutionScopePlanName);
+
+        var decisionsByPointId = selectedPlan.PointDecisions
+            .ToDictionary(decision => decision.PointId, decision => decision, StringComparer.Ordinal);
+        var scopePoints = workspace.Points
+            .Select(point => CreateScopePointState(point, decisionsByPointId.GetValueOrDefault(point.Id)))
+            .ToList();
+
+        ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => point.IsInDefaultScope));
+        ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => !point.IsInDefaultScope));
+        SyncScopePointSelection(SelectedPoint?.Id);
+    }
+
+    private InspectionPointState CreateScopePointState(
+        InspectionPointState point,
+        InspectionScopePlanPointDecisionModel? decision)
+    {
+        var scopePoint = point.CreateScopeSnapshot(
+            decision?.IsInScope ?? true,
+            string.IsNullOrWhiteSpace(decision?.Summary) ? TaskEmptyText : decision.Summary);
+        scopePoint.IsCurrent = point.IsCurrent;
+        return scopePoint;
+    }
+
+    private void SyncScopePointSelection(string? pointId)
+    {
+        foreach (var point in ScopeMatchedPoints)
+        {
+            point.IsSelected = string.Equals(point.Id, pointId, StringComparison.Ordinal);
+        }
+
+        foreach (var point in ScopeUnmatchedPoints)
+        {
+            point.IsSelected = string.Equals(point.Id, pointId, StringComparison.Ordinal);
+        }
     }
 
     private void HandleTaskBoardChanged(object? sender, InspectionTaskBoardChangedEventArgs e)
@@ -750,6 +914,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         {
             fault.IsSelected = fault.PointId == point.Id;
         }
+
+        SyncScopePointSelection(point.Id);
 
         SelectedPoint = point;
         SelectedMapPointId = point.Id;
@@ -1380,6 +1546,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 var inspectionPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Select(CreatePoint));
                 var mapPoints = new ObservableCollection<MapPointState>(inspectionPoints.Select(CreateMapPoint));
                 var taskBoard = workspace.TaskBoard;
+                var scopePlans = NormalizeScopePlans(workspace);
                 var currentTask = taskBoard.CurrentTask is null
                     ? null
                     : CreateTaskSummaryState(taskBoard.CurrentTask);
@@ -1391,7 +1558,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                         workspace.Group.Name,
                         workspace.Group.Summary,
                         workspace.Group.IsEnabled),
-                    workspace.ScopePlanPreview ?? CreateEmptyScopePlanPreview(),
+                    scopePlans,
+                    CreateScopePlanOptions(scopePlans),
+                    workspace.ScopePlanPreview ?? scopePlans.FirstOrDefault()?.Preview ?? CreateEmptyScopePlanPreview(),
+                    string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanId)
+                        ? scopePlans.FirstOrDefault()?.PlanId ?? string.Empty
+                        : workspace.ExecutionScopePlanId,
+                    string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanName)
+                        ? scopePlans.FirstOrDefault()?.PlanName ?? TaskEmptyText
+                        : workspace.ExecutionScopePlanName,
                     new InspectionStrategySummaryState(
                         workspace.Strategy.FirstRunTime,
                         workspace.Strategy.DailyExecutionCount,
@@ -1411,6 +1586,34 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 return groupWorkspace;
             })
             .ToDictionary(workspace => workspace.Group.Id, workspace => workspace);
+    }
+
+    private IReadOnlyList<InspectionScopePlanSnapshotModel> NormalizeScopePlans(InspectionGroupWorkspaceModel workspace)
+    {
+        if (workspace.ScopePlanSnapshots is { Count: > 0 })
+        {
+            return workspace.ScopePlanSnapshots;
+        }
+
+        var preview = workspace.ScopePlanPreview ?? CreateEmptyScopePlanPreview();
+        return
+        [
+            new InspectionScopePlanSnapshotModel(
+                string.IsNullOrWhiteSpace(preview.PlanId) ? "__default_scope__" : preview.PlanId,
+                string.IsNullOrWhiteSpace(preview.PlanName) ? TaskEmptyText : preview.PlanName,
+                true,
+                preview,
+                [])
+        ];
+    }
+
+    private ObservableCollection<InspectionScopePlanOptionState> CreateScopePlanOptions(
+        IReadOnlyList<InspectionScopePlanSnapshotModel> scopePlans)
+    {
+        return new ObservableCollection<InspectionScopePlanOptionState>(
+            scopePlans.Select(plan => new InspectionScopePlanOptionState(
+                plan.PlanId,
+                plan.IsDefault ? $"{plan.PlanName}（默认）" : plan.PlanName)));
     }
 
     private InspectionTaskExecutionState CreateExecutionState(InspectionExecutionModel execution)
@@ -1890,7 +2093,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         public GroupWorkspaceState(
             InspectionGroupSummaryState group,
+            IReadOnlyList<InspectionScopePlanSnapshotModel> scopePlans,
+            ObservableCollection<InspectionScopePlanOptionState> scopePlanOptions,
             InspectionScopePlanPreviewModel scopePlanPreview,
+            string executionScopePlanId,
+            string executionScopePlanName,
             InspectionStrategySummaryState strategySummary,
             InspectionTaskExecutionState executionState,
             InspectionRunSummaryState runSummary,
@@ -1903,7 +2110,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ObservableCollection<RecentFaultSummaryState> recentFaults)
         {
             Group = group;
+            ScopePlans = scopePlans;
+            ScopePlansById = scopePlans.ToDictionary(plan => plan.PlanId, plan => plan, StringComparer.Ordinal);
+            ScopePlanOptions = scopePlanOptions;
             ScopePlanPreview = scopePlanPreview;
+            ExecutionScopePlanId = executionScopePlanId;
+            ExecutionScopePlanName = executionScopePlanName;
             StrategySummary = strategySummary;
             ExecutionState = executionState;
             RunSummary = runSummary;
@@ -1917,7 +2129,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         public InspectionGroupSummaryState Group { get; }
+        public IReadOnlyList<InspectionScopePlanSnapshotModel> ScopePlans { get; }
+        public IReadOnlyDictionary<string, InspectionScopePlanSnapshotModel> ScopePlansById { get; }
+        public ObservableCollection<InspectionScopePlanOptionState> ScopePlanOptions { get; }
         public InspectionScopePlanPreviewModel ScopePlanPreview { get; }
+        public string ExecutionScopePlanId { get; }
+        public string ExecutionScopePlanName { get; }
+        public string SelectedScopePlanId { get; set; } = string.Empty;
         public InspectionStrategySummaryState StrategySummary { get; }
         public InspectionTaskExecutionState ExecutionState { get; }
         public InspectionRunSummaryState RunSummary { get; }
@@ -1931,5 +2149,26 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         public InspectionReviewTaskSummaryState? ReviewSummary { get; set; }
         public ObservableCollection<InspectionReviewCardState>? ReviewCards { get; set; }
         public InspectionReviewFilterState? ReviewFilter { get; set; }
+    }
+
+    public sealed class InspectionScopePlanOptionState : ViewModelBase
+    {
+        private bool _isSelected;
+
+        public InspectionScopePlanOptionState(string planId, string displayName)
+        {
+            PlanId = planId;
+            DisplayName = displayName;
+        }
+
+        public string PlanId { get; }
+
+        public string DisplayName { get; }
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set => SetProperty(ref _isSelected, value);
+        }
     }
 }
