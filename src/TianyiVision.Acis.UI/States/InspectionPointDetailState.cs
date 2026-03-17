@@ -78,6 +78,16 @@ public sealed record InspectionPointDetailState(
 
     public bool ManualReviewRequiredReserved { get; init; }
 
+    public string ReviewWallEntryStatus { get; init; } = string.Empty;
+
+    public string DispatchCandidateEntryStatus { get; init; } = string.Empty;
+
+    public string ManualSupplementEntryStatus { get; init; } = string.Empty;
+
+    public string BusinessRoutingDescription { get; init; } = string.Empty;
+
+    public string ManualSupplementEntryActionText { get; init; } = string.Empty;
+
     public bool HasGeneratedEvidence => ScreenshotSuccessCount > 0;
 
     public string ScreenshotReserved { get; init; } = "reserved";

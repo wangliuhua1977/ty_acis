@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using TianyiVision.Acis.Core.Localization;
+using TianyiVision.Acis.Services.Inspection;
 using TianyiVision.Acis.Services.Localization;
 using TianyiVision.Acis.UI.Mvvm;
 using TianyiVision.Acis.UI.States;
@@ -261,31 +262,47 @@ public sealed partial class InspectionPageViewModel
         IReadOnlyDictionary<string, InspectionReviewStatus> existingStatuses)
     {
         var startedAt = ParseDateTimeOrDefault(workspace.RunSummary.StartedAt, new DateTime(2026, 3, 12, 9, 0, 0));
-        var cards = workspace.Points
-            .Where(ShouldAppearOnReviewWall)
-            .Select((point, index) =>
+        var currentTask = workspace.TaskBoard.CurrentTask;
+        var abnormalFlow = currentTask?.AbnormalFlow ?? InspectionTaskAbnormalFlowModel.Empty;
+        var pointsById = workspace.Points.ToDictionary(point => point.Id, StringComparer.Ordinal);
+        var cards = abnormalFlow.ReviewWallPendingEntries
+            .Select((entry, index) =>
             {
+                if (!pointsById.TryGetValue(entry.PointId, out var point))
+                {
+                    return null;
+                }
+
                 var reviewStatus = existingStatuses.TryGetValue(point.Id, out var persistedStatus)
                     ? persistedStatus
                     : InspectionReviewStatus.Pending;
-                return CreateReviewCard(point, startedAt.AddMinutes(index * 3 + 2), reviewStatus);
-            });
+                return CreateReviewCard(point, entry, abnormalFlow, startedAt.AddMinutes(index * 3 + 2), reviewStatus);
+            })
+            .Where(card => card is not null)
+            .Select(card => card!);
 
         return new ObservableCollection<InspectionReviewCardState>(cards);
     }
 
     private InspectionReviewCardState CreateReviewCard(
         InspectionPointState point,
+        InspectionAbnormalFlowEntryModel reviewEntry,
+        InspectionTaskAbnormalFlowModel abnormalFlow,
         DateTime inspectedAt,
         InspectionReviewStatus reviewStatus)
     {
         var effectiveStatus = ResolveReviewEffectiveStatus(point);
         var isFault = effectiveStatus is InspectionPointStatus.Fault or InspectionPointStatus.PausedUntilRecovery;
+        var entersDispatchPool = abnormalFlow.DispatchPoolCandidateEntries.Any(entry =>
+            string.Equals(entry.PointId, point.Id, StringComparison.Ordinal));
         var screenshotTitle = effectiveStatus == InspectionPointStatus.PausedUntilRecovery
             ? _textService.Resolve(TextTokens.InspectionReviewCardPreviewPaused)
             : isFault
                 ? _textService.Resolve(TextTokens.InspectionReviewCardPreviewFault)
                 : _textService.Resolve(TextTokens.InspectionReviewCardPreviewNormal);
+        var faultDescription = string.IsNullOrWhiteSpace(reviewEntry.AiAnalysisSummary)
+            ? point.FaultDescription
+            : reviewEntry.AiAnalysisSummary;
 
         return new InspectionReviewCardState(
             point.Id,
@@ -293,8 +310,10 @@ public sealed partial class InspectionPageViewModel
             point.UnitName,
             screenshotTitle,
             ResolvePointStatus(effectiveStatus),
-            point.FaultDescription,
-            point.DispatchPoolEntry,
+            faultDescription,
+            entersDispatchPool
+                ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes)
+                : _textService.Resolve(TextTokens.InspectionDispatchPoolNo),
             point.FaultType,
             point.OnlineStatus,
             point.PlaybackStatus,
@@ -303,7 +322,7 @@ public sealed partial class InspectionPageViewModel
             point.LastInspectionConclusion,
             _textService.Resolve(TextTokens.InspectionReviewNotePlaceholder),
             isFault,
-            string.Equals(point.DispatchPoolEntry, _textService.Resolve(TextTokens.InspectionDispatchPoolYes), StringComparison.Ordinal),
+            entersDispatchPool,
             inspectedAt,
             reviewStatus,
             ResolveReviewStatusText(reviewStatus));
@@ -521,9 +540,6 @@ public sealed partial class InspectionPageViewModel
             ? point.CompletionStatus
             : point.Status;
     }
-
-    private bool ShouldAppearOnReviewWall(InspectionPointState point)
-        => point.Status != InspectionPointStatus.Silent;
 
     private GroupWorkspaceState? GetCurrentWorkspace()
     {

@@ -1,4 +1,4 @@
-using TianyiVision.Acis.Services.Contracts;
+﻿using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Devices;
 using TianyiVision.Acis.Services.Diagnostics;
 
@@ -398,6 +398,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 .ToList();
 
             var updatedPoint = queue.First(point => string.Equals(point.PointId, request.PointId, StringComparison.Ordinal));
+            var abnormalFlow = InspectionTaskModelExtensions.BuildAbnormalFlowSnapshot(queue);
             var baseSummary = BuildTaskSummary(
                 current.Status,
                 current.TotalPointCount,
@@ -410,7 +411,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             return current with
             {
                 PointExecutions = queue,
-                Summary = BuildTaskSummaryWithAi(baseSummary, updatedPoint)
+                AbnormalFlow = abnormalFlow,
+                Summary = BuildTaskSummaryWithAi(baseSummary, updatedPoint, abnormalFlow)
             };
         });
 
@@ -425,7 +427,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             $"pointId={request.PointId}, deviceCode={request.DeviceCode}, screenshotPlannedCount={Math.Max(1, request.ScreenshotPlannedCount)}, screenshotSuccessCount={Math.Max(0, request.ScreenshotSuccessCount)}, evidenceWritten={normalizedItems.Count > 0}, evidencePath={BuildEvidencePathLog(normalizedItems)}, evidenceRetentionMode={NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode)}, evidenceRetentionDays={Math.Max(0, request.EvidenceRetentionDays)}");
         MapPointSourceDiagnostics.Write(
             "InspectionAi",
-            $"pointId={request.PointId}, deviceCode={request.DeviceCode}, evidenceItemCount={normalizedItemsWithAi.Count}, aiAnalysisInvoked={aiAnalysis.AiAnalysisInvoked}, aiAnalysisStatus={aiAnalysis.AiAnalysisStatus}, aiAnalysisSummary={aiAnalysis.AiAnalysisSummary}, abnormalTags={string.Join('|', aiAnalysis.AbnormalTags)}, confidence={aiAnalysis.Confidence:0.00}");
+            $"pointId={request.PointId}, deviceCode={request.DeviceCode}, aiAnalysisStatus={aiAnalysis.AiAnalysisStatus}, abnormalTags={string.Join('|', aiAnalysis.AbnormalTags)}, routeToReviewWall={aiAnalysis.RouteToReviewWallReserved}, routeToDispatchPool={aiAnalysis.RouteToDispatchPoolReserved}, manualReviewRequired={aiAnalysis.ManualReviewRequiredReserved}, evidenceItemCount={normalizedItemsWithAi.Count}, aiAnalysisInvoked={aiAnalysis.AiAnalysisInvoked}, confidence={aiAnalysis.Confidence:0.00}");
 
         return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
     }
@@ -956,6 +958,47 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         }
 
         return $"{baseSummary} 最新AI结论：{pointExecution.PointName} - {pointExecution.AiAnalysisSummary}";
+    }
+
+    private static string BuildTaskSummaryWithAi(
+        string baseSummary,
+        InspectionTaskPointExecutionModel pointExecution,
+        InspectionTaskAbnormalFlowModel abnormalFlow)
+    {
+        var summary = BuildTaskSummaryWithAi(baseSummary, pointExecution);
+        var abnormalFlowSummary = BuildAbnormalFlowSummary(abnormalFlow);
+        return string.IsNullOrWhiteSpace(abnormalFlowSummary)
+            ? summary
+            : $"{summary} {abnormalFlowSummary}";
+    }
+
+    private static string BuildAbnormalFlowSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
+    {
+        var reviewWallCount = abnormalFlow.ReviewWallPendingCount;
+        var dispatchPoolCount = abnormalFlow.DispatchPoolCandidateCount;
+        var manualReviewCount = abnormalFlow.ManualReviewCompatibilityCount;
+        if (reviewWallCount == 0 && dispatchPoolCount == 0 && manualReviewCount == 0)
+        {
+            return string.Empty;
+        }
+
+        var segments = new List<string>();
+        if (reviewWallCount > 0)
+        {
+            segments.Add($"复核墙暂存 {reviewWallCount} 个");
+        }
+
+        if (dispatchPoolCount > 0)
+        {
+            segments.Add($"派单池候选 {dispatchPoolCount} 个");
+        }
+
+        if (manualReviewCount > 0)
+        {
+            segments.Add($"人工补图兼容标记 {manualReviewCount} 个");
+        }
+
+        return $"异常流转入口：{string.Join("，", segments)}。";
     }
 
     private static IReadOnlyList<InspectionPointEvidenceMetadataModel> ApplyAiAnalysisToEvidenceItems(
@@ -1577,6 +1620,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         var faultSummary = string.IsNullOrWhiteSpace(point.CurrentFaultSummary)
             ? taskPoint?.FailureReason ?? string.Empty
             : point.CurrentFaultSummary;
+        var entersDispatchPool = taskPoint?.RouteToDispatchPoolReserved ?? point.EntersDispatchPool;
 
         return new InspectionPointModel(
             point.PointId,
@@ -1602,7 +1646,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             point.IsOnline == true,
             faultSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
-            point.EntersDispatchPool,
+            entersDispatchPool,
             businessSummary,
             point.Coordinate.MapCoordinate?.Longitude,
             point.Coordinate.MapCoordinate?.Latitude,

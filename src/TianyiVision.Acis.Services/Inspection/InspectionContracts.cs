@@ -227,6 +227,28 @@ public sealed record InspectionPointEvidenceMetadataModel(
     public string AiAnalysisSummary { get; init; } = string.Empty;
 }
 
+public sealed record InspectionAbnormalFlowEntryModel(
+    string PointId,
+    string DeviceCode,
+    string PointName,
+    string AiAnalysisStatus,
+    IReadOnlyList<string> AbnormalTags,
+    string AiAnalysisSummary = "");
+
+public sealed record InspectionTaskAbnormalFlowModel(
+    IReadOnlyList<InspectionAbnormalFlowEntryModel> ReviewWallPendingEntries,
+    IReadOnlyList<InspectionAbnormalFlowEntryModel> DispatchPoolCandidateEntries,
+    IReadOnlyList<InspectionAbnormalFlowEntryModel> ManualReviewRequiredEntries)
+{
+    public static InspectionTaskAbnormalFlowModel Empty { get; } = new([], [], []);
+
+    public int ReviewWallPendingCount => ReviewWallPendingEntries.Count;
+
+    public int DispatchPoolCandidateCount => DispatchPoolCandidateEntries.Count;
+
+    public int ManualReviewCompatibilityCount => ManualReviewRequiredEntries.Count;
+}
+
 public sealed record InspectionTaskPointExecutionModel(
     string PointId,
     string DeviceCode,
@@ -327,7 +349,10 @@ public sealed record InspectionTaskRecordModel(
     string? CurrentPointId,
     string CurrentPointName,
     string Summary,
-    IReadOnlyList<InspectionTaskPointExecutionModel> PointExecutions);
+    IReadOnlyList<InspectionTaskPointExecutionModel> PointExecutions)
+{
+    public InspectionTaskAbnormalFlowModel AbnormalFlow { get; init; } = InspectionTaskAbnormalFlowModel.Empty;
+}
 
 public static class InspectionTaskModelExtensions
 {
@@ -398,6 +423,90 @@ public static class InspectionTaskModelExtensions
             InspectionPointExecutionStatusModel.Succeeded => $"点位“{pointExecution.PointName}”已完成巡检。",
             _ => string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary
         };
+    }
+
+    public static InspectionTaskAbnormalFlowModel BuildAbnormalFlowSnapshot(
+        IReadOnlyList<InspectionTaskPointExecutionModel>? pointExecutions)
+    {
+        var normalizedExecutions = pointExecutions ?? Array.Empty<InspectionTaskPointExecutionModel>();
+        var reviewWallEntries = CreateEntryList(normalizedExecutions, point => point.RouteToReviewWallReserved);
+        var dispatchPoolEntries = CreateEntryList(normalizedExecutions, point => point.RouteToDispatchPoolReserved);
+        var manualReviewEntries = CreateEntryList(normalizedExecutions, point => point.ManualReviewRequiredReserved);
+
+        return new InspectionTaskAbnormalFlowModel(
+            reviewWallEntries,
+            dispatchPoolEntries,
+            manualReviewEntries);
+    }
+
+    public static bool ShouldRouteToReviewWall(this InspectionTaskRecordModel task, string? pointId)
+        => ContainsFlowEntry(task.AbnormalFlow.ReviewWallPendingEntries, pointId);
+
+    public static bool ShouldRouteToDispatchPool(this InspectionTaskRecordModel task, string? pointId)
+        => ContainsFlowEntry(task.AbnormalFlow.DispatchPoolCandidateEntries, pointId);
+
+    public static bool RequiresManualReview(this InspectionTaskRecordModel task, string? pointId)
+        => ContainsFlowEntry(task.AbnormalFlow.ManualReviewRequiredEntries, pointId);
+
+    public static InspectionAbnormalFlowEntryModel? FindReviewWallEntry(this InspectionTaskRecordModel task, string? pointId)
+        => FindFlowEntry(task.AbnormalFlow.ReviewWallPendingEntries, pointId);
+
+    public static InspectionAbnormalFlowEntryModel? FindDispatchPoolEntry(this InspectionTaskRecordModel task, string? pointId)
+        => FindFlowEntry(task.AbnormalFlow.DispatchPoolCandidateEntries, pointId);
+
+    public static InspectionAbnormalFlowEntryModel? FindManualReviewCompatibilityEntry(this InspectionTaskRecordModel task, string? pointId)
+        => FindFlowEntry(task.AbnormalFlow.ManualReviewRequiredEntries, pointId);
+
+    private static InspectionAbnormalFlowEntryModel CreateAbnormalFlowEntry(InspectionTaskPointExecutionModel point)
+    {
+        return new InspectionAbnormalFlowEntryModel(
+            point.PointId,
+            point.DeviceCode,
+            point.PointName,
+            point.AiAnalysisStatus,
+            (point.AiAbnormalTags ?? Array.Empty<string>())
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            point.AiAnalysisSummary);
+    }
+
+    private static IReadOnlyList<InspectionAbnormalFlowEntryModel> CreateEntryList(
+        IEnumerable<InspectionTaskPointExecutionModel> pointExecutions,
+        Func<InspectionTaskPointExecutionModel, bool> predicate)
+    {
+        return pointExecutions
+            .Where(predicate)
+            .Select(CreateAbnormalFlowEntry)
+            .GroupBy(entry => entry.PointId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .OrderBy(entry => entry.PointName, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool ContainsFlowEntry(
+        IReadOnlyList<InspectionAbnormalFlowEntryModel>? entries,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId) || entries is null)
+        {
+            return false;
+        }
+
+        return entries.Any(entry => string.Equals(entry.PointId, pointId, StringComparison.Ordinal));
+    }
+
+    private static InspectionAbnormalFlowEntryModel? FindFlowEntry(
+        IReadOnlyList<InspectionAbnormalFlowEntryModel>? entries,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId) || entries is null)
+        {
+            return null;
+        }
+
+        return entries.FirstOrDefault(entry => string.Equals(entry.PointId, pointId, StringComparison.Ordinal));
     }
 }
 

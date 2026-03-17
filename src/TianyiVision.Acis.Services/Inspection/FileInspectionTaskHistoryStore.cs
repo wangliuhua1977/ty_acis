@@ -76,6 +76,7 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
             CurrentPointId = currentPoint.PointId,
             CurrentPointName = currentPoint.PointName,
             Summary = summary,
+            AbnormalFlow = InspectionTaskModelExtensions.BuildAbnormalFlowSnapshot(pointExecutions),
             PointExecutions = pointExecutions
         };
     }

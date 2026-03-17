@@ -273,6 +273,26 @@
                             </Border>
                             <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskSummaryLabel}" />
                             <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding CurrentTask.Summary}" TextWrapping="Wrap" />
+                            <Border Margin="0,12,0,0"
+                                    Padding="12"
+                                    Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                    BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
+                                               Text="{Binding TaskRoutingSummary}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Style="{StaticResource FieldValueTextStyle}"
+                                               Text="{Binding ReviewWallEntrySummary}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,6,0,0"
+                                               Style="{StaticResource FieldValueTextStyle}"
+                                               Text="{Binding DispatchPoolCandidateSummary}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                             <TextBlock Margin="0,18,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding TaskRecentListLabel}" />
                             <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding RecentTasks}">
                                 <ItemsControl.ItemTemplate>
@@ -347,14 +367,20 @@
                     </Border>
 
                     <Border Style="{StaticResource InspectionSectionCardStyle}">
-                        <WrapPanel>
-                            <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ExecuteInspectionCommand}" Content="{Binding ExecuteInspectionText}" />
-                            <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ViewHistoryCommand}" Content="{Binding ViewHistoryText}" />
-                            <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReviewWallCommand}" Content="{Binding OpenReviewWallText}" />
-                            <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenDispatchWorkspaceCommand}" Content="{Binding OpenDispatchWorkspaceText}" />
-                            <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReportsCenterCommand}" Content="{Binding OpenReportsCenterText}" />
-                            <Button Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ToggleGroupCommand}" Content="{Binding ToggleGroupActionText}" />
-                        </WrapPanel>
+                        <StackPanel>
+                            <WrapPanel>
+                                <Button Style="{StaticResource PrimaryActionButtonStyle}" Command="{Binding ExecuteInspectionCommand}" Content="{Binding ExecuteInspectionText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding ViewHistoryCommand}" Content="{Binding ViewHistoryText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReviewWallCommand}" Content="{Binding OpenReviewWallText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenDispatchWorkspaceCommand}" Content="{Binding OpenDispatchWorkspaceText}" />
+                                <Button Style="{StaticResource SecondaryActionButtonStyle}" Command="{Binding OpenReportsCenterCommand}" Content="{Binding OpenReportsCenterText}" />
+                                <Button Style="{StaticResource DangerActionButtonStyle}" Command="{Binding ToggleGroupCommand}" Content="{Binding ToggleGroupActionText}" />
+                            </WrapPanel>
+                            <TextBlock Margin="0,12,0,0"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding ReviewWallEntrySummary}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource InspectionSectionCardStyle}">
@@ -760,6 +786,26 @@
                                                Style="{StaticResource PageDescriptionTextStyle}"
                                                Text="{Binding SelectedPointDetail.AiAnalysisSummary}"
                                                TextWrapping="Wrap" />
+                                    <Border Margin="0,12,0,0"
+                                            Padding="12"
+                                            Background="{DynamicResource Theme.PanelMutedBackgroundBrush}"
+                                            BorderBrush="{DynamicResource Theme.PanelBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="12">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
+                                                       Text="{Binding SelectedPointDetail.BusinessRoutingDescription}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,8,0,0"
+                                                       Style="{StaticResource FieldValueTextStyle}"
+                                                       Text="{Binding SelectedPointDetail.ReviewWallEntryStatus}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,6,0,0"
+                                                       Style="{StaticResource FieldValueTextStyle}"
+                                                       Text="{Binding SelectedPointDetail.DispatchCandidateEntryStatus}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 

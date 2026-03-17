@@ -50,6 +50,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string _singlePointInspectionTaskStatus = "暂无记录";
     private string _singlePointInspectionLastTime = "暂无记录";
     private string _singlePointInspectionResultSummary = "暂无记录";
+    private string _taskRoutingSummary = string.Empty;
+    private string _reviewWallEntrySummary = string.Empty;
+    private string _dispatchPoolCandidateSummary = string.Empty;
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -516,6 +519,24 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         private set => SetProperty(ref _singlePointInspectionResultSummary, value);
     }
 
+    public string TaskRoutingSummary
+    {
+        get => _taskRoutingSummary;
+        private set => SetProperty(ref _taskRoutingSummary, value);
+    }
+
+    public string ReviewWallEntrySummary
+    {
+        get => _reviewWallEntrySummary;
+        private set => SetProperty(ref _reviewWallEntrySummary, value);
+    }
+
+    public string DispatchPoolCandidateSummary
+    {
+        get => _dispatchPoolCandidateSummary;
+        private set => SetProperty(ref _dispatchPoolCandidateSummary, value);
+    }
+
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
@@ -570,6 +591,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         RecentFaults = workspace.RecentFaults;
         CurrentTask = workspace.CurrentTask;
         RecentTasks = workspace.RecentTasks;
+        UpdateTaskAbnormalFlowPresentation(workspace.TaskBoard.CurrentTask);
         _selectFirstUnmappedPointCommand.RaiseCanExecuteChanged();
 
         ToggleGroupActionText = group.IsEnabled
@@ -713,6 +735,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (!response.IsSuccess)
         {
             CurrentTask = CreateTaskSummaryState(response.Data);
+            UpdateTaskAbnormalFlowPresentation(response.Data);
             ApplySinglePointInspectionRecord(response.Data, SelectedPoint);
             return;
         }
@@ -731,6 +754,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (!response.IsSuccess)
         {
             CurrentTask = CreateTaskSummaryState(response.Data);
+            UpdateTaskAbnormalFlowPresentation(response.Data);
             workspace.ExecutionState.CurrentTaskStatus = ResolveTaskStatusText(response.Data.Status);
             workspace.ExecutionState.CurrentPointName = "--";
             workspace.ExecutionState.SimulationNote = response.Data.Summary;
@@ -792,6 +816,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ? workspace.ExecutionState.CurrentTaskStatus
             : ResolveTaskStatusText(currentTask.Status);
         workspace.ExecutionState.SimulationNote = currentTask?.Summary ?? workspace.ExecutionState.SimulationNote;
+        UpdateTaskAbnormalFlowPresentation(currentTask);
     }
 
     private void RefreshSinglePointInspectionSummary(GroupWorkspaceState? workspace, InspectionPointState? point)
@@ -836,16 +861,19 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointState point,
         PointBusinessSummaryState summary)
     {
-        var execution = ResolvePointExecution(GetCurrentWorkspace(), point.Id);
+        var workspace = GetCurrentWorkspace();
+        var task = ResolveTaskRecord(workspace, point.Id);
+        var execution = ResolvePointExecution(workspace, point.Id);
         var playbackStatus = ResolveDetailPlaybackStatus(point, execution);
         var faultType = ResolveDetailFaultType(point, summary, execution);
         var faultDescription = AppendAiSummary(ResolveDetailSummary(point, summary, execution), execution);
         var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, point);
         var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescription(execution, point), execution);
         var previewHostUri = ResolvePreviewHostUri(execution);
+        var pointId = execution?.PointId ?? point.Id;
 
         return new InspectionPointDetailState(
-            ResolveExecutionTaskId(GetCurrentWorkspace(), point.Id),
+            ResolveExecutionTaskId(workspace, point.Id),
             point.Id,
             point.DeviceCode,
             summary.DeviceName,
@@ -862,7 +890,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             previewHostUri is not null,
             summary.IsCoordinatePending,
             point.LastFaultTime,
-            point.DispatchPoolEntry,
+            ResolveDispatchPoolEntryText(task, pointId),
             !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
                 ? execution.AiAnalysisSummary
                 : execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
@@ -894,13 +922,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             RouteToReviewWallReserved = execution?.RouteToReviewWallReserved ?? false,
             RouteToDispatchPoolReserved = execution?.RouteToDispatchPoolReserved ?? false,
             ManualReviewRequiredReserved = execution?.ManualReviewRequiredReserved ?? false,
+            ReviewWallEntryStatus = ResolveReviewWallEntryStatus(task, pointId),
+            DispatchCandidateEntryStatus = ResolveDispatchCandidateEntryStatus(task, pointId),
+            ManualSupplementEntryStatus = ResolveManualSupplementEntryStatus(task, pointId),
+            BusinessRoutingDescription = BuildBusinessRoutingDescription(task, pointId),
+            ManualSupplementEntryActionText = ResolveManualSupplementEntryActionText(execution),
             ScreenshotReserved = execution?.ScreenshotReserved ?? "reserved",
             EvidenceReserved = execution?.EvidenceReserved ?? "reserved",
             AiAnalysisReserved = execution?.AiAnalysisReserved ?? "reserved"
         };
     }
 
-    private InspectionTaskPointExecutionModel? ResolvePointExecution(GroupWorkspaceState? workspace, string pointId)
+    private InspectionTaskRecordModel? ResolveTaskRecord(GroupWorkspaceState? workspace, string pointId)
     {
         if (workspace is null)
         {
@@ -909,32 +942,153 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         foreach (var task in EnumerateTaskCandidates(workspace))
         {
-            var pointExecution = task.FindPointExecution(pointId);
-            if (pointExecution is not null)
+            if (task.FindPointExecution(pointId) is not null)
             {
-                return pointExecution;
+                return task;
             }
         }
 
         return null;
     }
 
+    private InspectionTaskPointExecutionModel? ResolvePointExecution(GroupWorkspaceState? workspace, string pointId)
+    {
+        return ResolveTaskRecord(workspace, pointId)?.FindPointExecution(pointId);
+    }
+
     private string ResolveExecutionTaskId(GroupWorkspaceState? workspace, string pointId)
     {
-        if (workspace is null)
+        return ResolveTaskRecord(workspace, pointId)?.TaskId ?? string.Empty;
+    }
+
+    private string ResolveReviewWallEntryStatus(
+        InspectionTaskRecordModel? task,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId))
         {
-            return string.Empty;
+            return "复核墙暂存：当前点位尚未形成异常流转写回。";
         }
 
-        foreach (var task in EnumerateTaskCandidates(workspace))
+        return task?.FindReviewWallEntry(pointId) is not null
+            ? "复核墙暂存：已进入复核墙暂存集合，待人工复核。"
+            : "复核墙暂存：当前未进入复核墙暂存集合。";
+    }
+
+    private string ResolveDispatchCandidateEntryStatus(
+        InspectionTaskRecordModel? task,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId))
         {
-            if (task.FindPointExecution(pointId) is not null)
-            {
-                return task.TaskId;
-            }
+            return "派单池候选：当前点位尚未形成异常流转写回。";
         }
 
+        return task?.FindDispatchPoolEntry(pointId) is not null
+            ? "派单池候选：已写入派单池候选集合，待派单处理模块承接。"
+            : "派单池候选：当前未写入派单池候选集合。";
+    }
+
+    private string ResolveManualSupplementEntryStatus(
+        InspectionTaskRecordModel? task,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId))
+        {
+            return "人工补图兼容标记：当前点位尚未形成兼容标记。";
+        }
+
+        return task?.FindManualReviewCompatibilityEntry(pointId) is not null
+            ? "人工补图兼容标记：字段仍保留兼容，本轮不再作为主线入口。"
+            : "人工补图兼容标记：当前无兼容标记。";
+    }
+
+    private string BuildBusinessRoutingDescription(
+        InspectionTaskRecordModel? task,
+        string? pointId)
+    {
+        if (string.IsNullOrWhiteSpace(pointId))
+        {
+            return "AI智能巡检中心尚未为当前点位写回异常流转入口。";
+        }
+
+        var abnormalFlow = task?.AbnormalFlow ?? InspectionTaskAbnormalFlowModel.Empty;
+        var pointSegments = new List<string>();
+
+        if (task?.FindReviewWallEntry(pointId) is not null)
+        {
+            pointSegments.Add("已进入复核墙暂存");
+        }
+
+        if (task?.FindDispatchPoolEntry(pointId) is not null)
+        {
+            pointSegments.Add("已进入派单池候选");
+        }
+
+        if (task?.FindManualReviewCompatibilityEntry(pointId) is not null)
+        {
+            pointSegments.Add("保留人工补图兼容标记");
+        }
+
+        if (pointSegments.Count == 0)
+        {
+            pointSegments.Add("当前未触发正式处置入口");
+        }
+
+        var compatibilitySuffix = abnormalFlow.ManualReviewCompatibilityCount > 0
+            ? $" 人工补图仅保留兼容标记 {abnormalFlow.ManualReviewCompatibilityCount} 个。"
+            : string.Empty;
+        return $"AI智能巡检中心异常流转：{string.Join("，", pointSegments)}。当前任务累计复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个，派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个。{compatibilitySuffix}".Trim();
+    }
+
+    private static string ResolveManualSupplementEntryActionText(InspectionTaskPointExecutionModel? execution)
+    {
         return string.Empty;
+    }
+
+    private string ResolveDispatchPoolEntryText(InspectionTaskRecordModel? task, string? pointId)
+    {
+        return task?.FindDispatchPoolEntry(pointId) is not null
+            ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes)
+            : _textService.Resolve(TextTokens.InspectionDispatchPoolNo);
+    }
+
+    private void UpdateTaskAbnormalFlowPresentation(InspectionTaskRecordModel? task)
+    {
+        var abnormalFlow = task?.AbnormalFlow ?? InspectionTaskAbnormalFlowModel.Empty;
+        TaskRoutingSummary = BuildTaskRoutingSummary(abnormalFlow);
+        ReviewWallEntrySummary = BuildReviewWallEntrySummary(abnormalFlow);
+        DispatchPoolCandidateSummary = BuildDispatchPoolCandidateSummary(abnormalFlow);
+    }
+
+    private static string BuildTaskRoutingSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
+    {
+        var segments = new List<string>
+        {
+            $"复核墙暂存 {abnormalFlow.ReviewWallPendingCount} 个",
+            $"派单池候选 {abnormalFlow.DispatchPoolCandidateCount} 个"
+        };
+
+        if (abnormalFlow.ManualReviewCompatibilityCount > 0)
+        {
+            segments.Add($"人工补图兼容标记 {abnormalFlow.ManualReviewCompatibilityCount} 个");
+        }
+
+        return $"AI智能巡检中心任务级异常流转快照：{string.Join("，", segments)}。";
+    }
+
+    private static string BuildReviewWallEntrySummary(InspectionTaskAbnormalFlowModel abnormalFlow)
+    {
+        return abnormalFlow.ReviewWallPendingCount > 0
+            ? $"复核墙入口：当前任务已有 {abnormalFlow.ReviewWallPendingCount} 个点位进入复核墙暂存集合。"
+            : "复核墙入口：当前任务暂无待复核暂存点位。";
+    }
+
+    private static string BuildDispatchPoolCandidateSummary(InspectionTaskAbnormalFlowModel abnormalFlow)
+    {
+        return abnormalFlow.DispatchPoolCandidateCount > 0
+            ? $"派单池候选：当前任务已有 {abnormalFlow.DispatchPoolCandidateCount} 个点位进入派单池候选集合。"
+            : "派单池候选：当前任务暂无可承接的派单池候选点位。";
     }
 
     private static Uri? ResolvePreviewHostUri(InspectionTaskPointExecutionModel? execution)
