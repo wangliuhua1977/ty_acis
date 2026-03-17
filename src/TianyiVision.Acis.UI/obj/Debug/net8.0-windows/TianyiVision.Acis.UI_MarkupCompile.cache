@@ -12,7 +12,7 @@ TRACE;DEBUG;NET;NET8_0;NETCOREAPP
 
 111075631129
 4-851879208
-78195545189
+791238289122
 204-1197724992
 Resources\Styles\CoreControlStyles.xaml;Resources\Styles\GlobalStyles.xaml;Resources\Templates\ViewTemplates.xaml;Views\Controls\RealMapHost.xaml;Views\Pages\DispatchPageView.xaml;Views\Pages\HomePageView.xaml;Views\Pages\InspectionPageView.xaml;Views\Pages\InspectionReviewWallView.xaml;Views\Pages\ReportsPageView.xaml;Views\Pages\SettingsPageView.xaml;Views\ShellWindow.xaml;
 

@@ -641,6 +641,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
     }
 
+    public bool TryWritePointEvidence(InspectionPointEvidenceWriteRequest request)
+    {
+        var response = _inspectionTaskService.WritePointEvidence(request);
+        if (!response.IsSuccess)
+        {
+            return false;
+        }
+
+        RequestRefreshWorkspace(response.Data.GroupId, request.PointId);
+        return true;
+    }
+
     public void UpdateMapAvailability(bool isAvailable)
     {
         IsMapAvailabilityKnown = true;
@@ -824,7 +836,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointState point,
         PointBusinessSummaryState summary)
     {
+        var execution = ResolvePointExecution(GetCurrentWorkspace(), point.Id);
+        var playbackStatus = ResolveDetailPlaybackStatus(point, execution);
+        var faultType = ResolveDetailFaultType(point, summary, execution);
+        var faultDescription = ResolveDetailSummary(point, summary, execution);
+        var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, point);
+        var previewBusinessDescription = ResolvePreviewBusinessDescription(execution, point);
+        var previewHostUri = ResolvePreviewHostUri(execution);
+
         return new InspectionPointDetailState(
+            ResolveExecutionTaskId(GetCurrentWorkspace(), point.Id),
+            point.Id,
+            point.DeviceCode,
             summary.DeviceName,
             point.UnitName,
             point.CurrentHandlingUnit,
@@ -832,15 +855,165 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             summary.CoordinateStatus,
             summary.LastSyncTime,
             summary.OnlineStatus,
-            point.PlaybackStatus,
+            playbackStatus,
             point.ImageStatus,
-            ResolveDetailFaultType(point, summary),
-            ResolveDetailSummary(point, summary),
-            point.IsPreviewAvailable,
+            faultType,
+            faultDescription,
+            previewHostUri is not null,
             summary.IsCoordinatePending,
             point.LastFaultTime,
             point.DispatchPoolEntry,
-            point.LastInspectionConclusion);
+            execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
+        {
+            PreviewHostUri = previewHostUri,
+            PreviewHostKind = execution?.PreviewHostKind ?? string.Empty,
+            PreviewBusinessTitle = previewBusinessTitle,
+            PreviewBusinessDescription = previewBusinessDescription,
+            OnlineCheckResult = execution?.OnlineCheckResult ?? string.Empty,
+            StreamUrlAcquireResult = execution?.StreamUrlAcquireResult ?? string.Empty,
+            FinalPlaybackResult = execution?.FinalPlaybackResult ?? string.Empty,
+            PlaybackAttemptCount = execution?.PlaybackAttemptCount ?? 0,
+            ProtocolFallbackUsed = execution?.ProtocolFallbackUsed ?? false,
+            ScreenshotPlannedCount = execution?.ScreenshotPlannedCount ?? 0,
+            ScreenshotIntervalSeconds = execution?.ScreenshotIntervalSeconds ?? 0,
+            ScreenshotSuccessCount = execution?.ScreenshotSuccessCount ?? 0,
+            EvidenceCaptureState = execution?.EvidenceCaptureState ?? InspectionEvidenceValueKeys.CaptureStateNone,
+            EvidenceSummary = execution?.EvidenceSummary ?? string.Empty,
+            AllowManualSupplementScreenshot = execution?.AllowManualSupplementScreenshot ?? false,
+            EvidenceRetentionMode = execution?.EvidenceRetentionMode ?? string.Empty,
+            EvidenceRetentionDays = execution?.EvidenceRetentionDays ?? 0,
+            AiAnalysisStatus = execution?.AiAnalysisStatus ?? InspectionEvidenceValueKeys.AiAnalysisReserved,
+            AiAnalysisSummary = execution?.AiAnalysisSummary ?? string.Empty,
+            ScreenshotReserved = execution?.ScreenshotReserved ?? "reserved",
+            EvidenceReserved = execution?.EvidenceReserved ?? "reserved",
+            AiAnalysisReserved = execution?.AiAnalysisReserved ?? "reserved"
+        };
+    }
+
+    private InspectionTaskPointExecutionModel? ResolvePointExecution(GroupWorkspaceState? workspace, string pointId)
+    {
+        if (workspace is null)
+        {
+            return null;
+        }
+
+        foreach (var task in EnumerateTaskCandidates(workspace))
+        {
+            var pointExecution = task.FindPointExecution(pointId);
+            if (pointExecution is not null)
+            {
+                return pointExecution;
+            }
+        }
+
+        return null;
+    }
+
+    private string ResolveExecutionTaskId(GroupWorkspaceState? workspace, string pointId)
+    {
+        if (workspace is null)
+        {
+            return string.Empty;
+        }
+
+        foreach (var task in EnumerateTaskCandidates(workspace))
+        {
+            if (task.FindPointExecution(pointId) is not null)
+            {
+                return task.TaskId;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static Uri? ResolvePreviewHostUri(InspectionTaskPointExecutionModel? execution)
+    {
+        if (execution is null || string.IsNullOrWhiteSpace(execution.PreviewUrl))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(execution.PreviewUrl, UriKind.Absolute, out var previewUri)
+            ? previewUri
+            : null;
+    }
+
+    private string ResolveDetailPlaybackStatus(
+        InspectionPointState point,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? point.PlaybackStatus
+            : execution.FinalPlaybackResult;
+    }
+
+    private static string ResolveDetailFaultType(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            && !string.Equals(execution.FinalPlaybackResult, "播放成功", StringComparison.Ordinal))
+        {
+            return execution.FinalPlaybackResult;
+        }
+
+        return summary.FaultType == "暂无" ? point.FaultType : summary.FaultType;
+    }
+
+    private static string ResolveDetailSummary(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
+        {
+            return execution.ExecutionSummary;
+        }
+
+        return string.IsNullOrWhiteSpace(summary.StatusSummary) || summary.StatusSummary == "暂无"
+            ? point.FaultDescription
+            : summary.StatusSummary;
+    }
+
+    private static string ResolvePreviewBusinessTitle(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointState point)
+    {
+        return execution?.FinalPlaybackResult switch
+        {
+            "播放成功" => "实时预览已接入",
+            "在线检查失败" => "设备未通过在线检查",
+            "无流地址" => "未获取到可用流地址",
+            "播放超时" => "播放校验超时",
+            "协议切换后仍失败" => "协议切换后仍未恢复",
+            _ => point.IsPreviewAvailable ? "实时预览已接入" : "预览待建立"
+        };
+    }
+
+    private static string ResolvePreviewBusinessDescription(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointState point)
+    {
+        var playbackDescription = execution?.FinalPlaybackResult switch
+        {
+            "播放成功" => "已完成在线检查、流地址获取和播放校验，右侧已切换为实时预览宿主。",
+            "在线检查失败" => "设备当前未通过在线检查，本轮未继续推进流地址获取与播放校验。",
+            "无流地址" => "设备在线，但平台未返回可用流地址，本轮无法建立右侧实时预览。",
+            "播放超时" => "已获取流地址，但在本轮设定超时内未建立可用播放，右侧保留业务失败说明。",
+            "协议切换后仍失败" => "已执行播放失败重试和协议切换重试，但仍未建立可用播放，下一轮可继续承接截图取证。",
+            _ => point.IsPreviewAvailable
+                ? "当前点位已具备预览条件，可在右侧查看实时画面。"
+                : "当前点位尚未形成可用预览，本轮先展示业务状态说明。"
+        };
+
+        if (execution is null || string.IsNullOrWhiteSpace(execution.EvidenceSummary))
+        {
+            return playbackDescription;
+        }
+
+        return $"{playbackDescription} {execution.EvidenceSummary}";
     }
 
     private string ResolvePointStatus(InspectionPointStatus status)

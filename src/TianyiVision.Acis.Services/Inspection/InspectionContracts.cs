@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Devices;
 
@@ -54,7 +55,12 @@ public enum InspectionPointFailureCategoryModel
     ConcurrencyReserved,
     OnlineStatusPending,
     DeviceOffline,
+    OnlineCheckFailed,
+    NoStreamAddress,
     PlaybackCheckFailed,
+    PlaybackTimeout,
+    ProtocolFallbackStillFailed,
+    PlaybackSucceeded,
     ImageAbnormalDetected,
     ReservedForNextRound,
     Unknown
@@ -68,6 +74,24 @@ public enum InspectionExecutionReservationStepModel
     AutoScreenshot,
     ManualSupplementScreenshot,
     AiDecision
+}
+
+public static class InspectionEvidenceValueKeys
+{
+    public const string CaptureStateNone = "none";
+    public const string CaptureStatePending = "pending_capture";
+    public const string CaptureStateCompleted = "completed";
+    public const string CaptureStateFailed = "capture_failed";
+
+    public const string EvidenceKindPlaybackScreenshot = "playback_screenshot";
+    public const string EvidenceKindFailureSnapshot = "failure_snapshot";
+
+    public const string EvidenceSourcePreviewHost = "preview_host";
+    public const string EvidenceSourceFailureCard = "failure_card";
+
+    public const string AiAnalysisReserved = "reserved";
+    public const string AiAnalysisPending = "pending";
+    public const string AiAnalysisCompleted = "completed";
 }
 
 public sealed record InspectionGroupModel(
@@ -185,6 +209,23 @@ public sealed record InspectionRecentFaultModel(
     string FaultType,
     string LatestFaultTime);
 
+public sealed record InspectionPointEvidenceMetadataModel(
+    string TaskId,
+    string PointId,
+    string DeviceCode,
+    DateTime ScreenshotTime,
+    string LocalFilePath,
+    string EvidenceSummary)
+{
+    public string EvidenceKind { get; init; } = InspectionEvidenceValueKeys.EvidenceKindPlaybackScreenshot;
+
+    public string EvidenceSource { get; init; } = InspectionEvidenceValueKeys.EvidenceSourcePreviewHost;
+
+    public string AiAnalysisStatus { get; init; } = InspectionEvidenceValueKeys.AiAnalysisReserved;
+
+    public string AiAnalysisSummary { get; init; } = string.Empty;
+}
+
 public sealed record InspectionTaskPointExecutionModel(
     string PointId,
     string DeviceCode,
@@ -196,7 +237,55 @@ public sealed record InspectionTaskPointExecutionModel(
     string FailureReason,
     bool IsFocusPoint,
     bool UsesOverridePolicy,
-    string PolicySnapshotSummary);
+    string PolicySnapshotSummary)
+{
+    public string ExecutionSummary { get; init; } = string.Empty;
+
+    public string OnlineCheckResult { get; init; } = string.Empty;
+
+    public string StreamUrlAcquireResult { get; init; } = string.Empty;
+
+    public int PlaybackAttemptCount { get; init; }
+
+    public bool ProtocolFallbackUsed { get; init; }
+
+    public string FinalPlaybackResult { get; init; } = string.Empty;
+
+    public string PreviewUrl { get; init; } = string.Empty;
+
+    public string PreviewHostKind { get; init; } = string.Empty;
+
+    public int ScreenshotPlannedCount { get; init; }
+
+    public int ScreenshotIntervalSeconds { get; init; }
+
+    public int ScreenshotSuccessCount { get; init; }
+
+    public string EvidenceCaptureState { get; init; } = InspectionEvidenceValueKeys.CaptureStateNone;
+
+    public string EvidenceSummary { get; init; } = string.Empty;
+
+    public string EvidenceRetentionMode { get; init; } = string.Empty;
+
+    public int EvidenceRetentionDays { get; init; }
+
+    public bool AllowManualSupplementScreenshot { get; init; }
+
+    public string AiAnalysisStatus { get; init; } = InspectionEvidenceValueKeys.AiAnalysisReserved;
+
+    public string AiAnalysisSummary { get; init; } = string.Empty;
+
+    public IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems { get; init; } = [];
+
+    [JsonPropertyName("screenshotReserved")]
+    public string ScreenshotReserved { get; init; } = "reserved";
+
+    [JsonPropertyName("evidenceReserved")]
+    public string EvidenceReserved { get; init; } = "reserved";
+
+    [JsonPropertyName("aiAnalysisReserved")]
+    public string AiAnalysisReserved { get; init; } = "reserved";
+}
 
 public sealed record InspectionReservedStepModel(
     InspectionExecutionReservationStepModel Step,
@@ -265,6 +354,11 @@ public static class InspectionTaskModelExtensions
             return string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary;
         }
 
+        if (!string.IsNullOrWhiteSpace(pointExecution.ExecutionSummary))
+        {
+            return pointExecution.ExecutionSummary;
+        }
+
         if (pointExecution.Status == InspectionPointExecutionStatusModel.Failed
             && !string.IsNullOrWhiteSpace(pointExecution.FailureReason))
         {
@@ -323,7 +417,55 @@ public sealed record InspectionPointCheckResult(
     InspectionPointExecutionStatusModel Status,
     InspectionPointFailureCategoryModel FailureCategory,
     string ResultSummary,
-    IReadOnlyList<InspectionReservedStepModel> ReservedSteps);
+    IReadOnlyList<InspectionReservedStepModel> ReservedSteps)
+{
+    public string OnlineCheckResult { get; init; } = string.Empty;
+
+    public string StreamUrlAcquireResult { get; init; } = string.Empty;
+
+    public int PlaybackAttemptCount { get; init; }
+
+    public bool ProtocolFallbackUsed { get; init; }
+
+    public string FinalPlaybackResult { get; init; } = string.Empty;
+
+    public string FailureReason { get; init; } = string.Empty;
+
+    public string PreviewUrl { get; init; } = string.Empty;
+
+    public string PreviewHostKind { get; init; } = string.Empty;
+
+    public int ScreenshotPlannedCount { get; init; }
+
+    public int ScreenshotIntervalSeconds { get; init; }
+
+    public int ScreenshotSuccessCount { get; init; }
+
+    public string EvidenceCaptureState { get; init; } = InspectionEvidenceValueKeys.CaptureStateNone;
+
+    public string EvidenceSummary { get; init; } = string.Empty;
+
+    public string EvidenceRetentionMode { get; init; } = string.Empty;
+
+    public int EvidenceRetentionDays { get; init; }
+
+    public bool AllowManualSupplementScreenshot { get; init; }
+
+    public string AiAnalysisStatus { get; init; } = InspectionEvidenceValueKeys.AiAnalysisReserved;
+
+    public string AiAnalysisSummary { get; init; } = string.Empty;
+
+    public IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems { get; init; } = [];
+
+    [JsonPropertyName("screenshotReserved")]
+    public string ScreenshotReserved { get; init; } = "reserved";
+
+    [JsonPropertyName("evidenceReserved")]
+    public string EvidenceReserved { get; init; } = "reserved";
+
+    [JsonPropertyName("aiAnalysisReserved")]
+    public string AiAnalysisReserved { get; init; } = "reserved";
+}
 
 public sealed class InspectionTaskBoardChangedEventArgs : EventArgs
 {
@@ -333,6 +475,24 @@ public sealed class InspectionTaskBoardChangedEventArgs : EventArgs
     }
 
     public string GroupId { get; }
+}
+
+public sealed record InspectionPointEvidenceWriteRequest(
+    string TaskId,
+    string PointId,
+    string DeviceCode,
+    int ScreenshotPlannedCount,
+    int ScreenshotSuccessCount,
+    string EvidenceCaptureState,
+    string EvidenceSummary,
+    string EvidenceRetentionMode,
+    int EvidenceRetentionDays,
+    bool AllowManualSupplementScreenshot,
+    IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems)
+{
+    public string AiAnalysisStatus { get; init; } = InspectionEvidenceValueKeys.AiAnalysisPending;
+
+    public string AiAnalysisSummary { get; init; } = string.Empty;
 }
 
 public interface IInspectionPointCheckExecutor
@@ -358,4 +518,6 @@ public interface IInspectionTaskService
     ServiceResponse<InspectionTaskRecordModel> StartBatchInspection(string groupId, IReadOnlyList<string> pointIds);
 
     ServiceResponse<InspectionTaskRecordModel> StartDefaultScopeInspection(string groupId);
+
+    ServiceResponse<InspectionTaskRecordModel> WritePointEvidence(InspectionPointEvidenceWriteRequest request);
 }

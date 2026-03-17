@@ -303,6 +303,95 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             []);
     }
 
+    public ServiceResponse<InspectionTaskRecordModel> WritePointEvidence(InspectionPointEvidenceWriteRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.TaskId) || string.IsNullOrWhiteSpace(request.PointId))
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    "截图取证",
+                    InspectionTaskTypeModel.SinglePoint,
+                    InspectionTaskStatusModel.Failed,
+                    "证据写回请求缺少任务或点位标识。"),
+                "证据写回请求无效。");
+        }
+
+        InspectionTaskRecordModel? existingTask;
+        lock (_syncRoot)
+        {
+            existingTask = _taskHistory.FirstOrDefault(task => string.Equals(task.TaskId, request.TaskId, StringComparison.Ordinal));
+        }
+
+        if (existingTask is null)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    DefaultGroupId,
+                    BuildGroupName(),
+                    request.PointId,
+                    InspectionTaskTypeModel.SinglePoint,
+                    InspectionTaskStatusModel.Failed,
+                    "未找到需要写回证据的巡检任务。"),
+                "未找到需要写回证据的巡检任务。");
+        }
+
+        if (existingTask.FindPointExecution(request.PointId) is null)
+        {
+            return ServiceResponse<InspectionTaskRecordModel>.Failure(
+                CreateRejectedTask(
+                    existingTask.GroupId,
+                    existingTask.GroupName,
+                    request.PointId,
+                    existingTask.TaskType,
+                    InspectionTaskStatusModel.Failed,
+                    "未找到需要写回证据的点位记录。"),
+                "未找到需要写回证据的点位记录。");
+        }
+
+        var normalizedItems = NormalizeEvidenceItems(request);
+        var evidenceCaptureState = NormalizeEvidenceCaptureState(request.EvidenceCaptureState, normalizedItems.Count);
+        var evidenceSummary = NormalizeEvidenceSummary(request, evidenceCaptureState, normalizedItems.Count);
+
+        var updatedTask = UpdateTask(request.TaskId, current =>
+        {
+            var queue = current.PointExecutions
+                .Select(point => string.Equals(point.PointId, request.PointId, StringComparison.Ordinal)
+                    ? point with
+                    {
+                        ScreenshotPlannedCount = Math.Max(1, request.ScreenshotPlannedCount),
+                        ScreenshotSuccessCount = Math.Max(0, request.ScreenshotSuccessCount),
+                        EvidenceCaptureState = evidenceCaptureState,
+                        EvidenceSummary = evidenceSummary,
+                        EvidenceRetentionMode = NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode),
+                        EvidenceRetentionDays = Math.Max(0, request.EvidenceRetentionDays),
+                        AllowManualSupplementScreenshot = request.AllowManualSupplementScreenshot,
+                        AiAnalysisStatus = string.IsNullOrWhiteSpace(request.AiAnalysisStatus)
+                            ? InspectionEvidenceValueKeys.AiAnalysisPending
+                            : request.AiAnalysisStatus.Trim(),
+                        AiAnalysisSummary = request.AiAnalysisSummary?.Trim() ?? string.Empty,
+                        EvidenceItems = normalizedItems
+                    }
+                    : point)
+                .ToList();
+
+            return current with { PointExecutions = queue };
+        });
+
+        ApplyEvidenceRetention(
+            request.TaskId,
+            request.PointId,
+            NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode),
+            request.EvidenceRetentionDays);
+
+        MapPointSourceDiagnostics.Write(
+            "InspectionEvidence",
+            $"pointId={request.PointId}, deviceCode={request.DeviceCode}, screenshotPlannedCount={Math.Max(1, request.ScreenshotPlannedCount)}, screenshotSuccessCount={Math.Max(0, request.ScreenshotSuccessCount)}, evidenceWritten={normalizedItems.Count > 0}, evidencePath={BuildEvidencePathLog(normalizedItems)}, evidenceRetentionMode={NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode)}, evidenceRetentionDays={Math.Max(0, request.EvidenceRetentionDays)}");
+
+        return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
+    }
+
     private ServiceResponse<InspectionTaskRecordModel> TryStartTask(
         string groupId,
         string groupName,
@@ -520,14 +609,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                         []);
                 }
 
-                currentTask = UpdateTask(currentTask.TaskId, current =>
-                    ApplyPointResult(
-                        current,
-                        point.PointId,
-                        result.Status,
-                        result.FailureCategory,
-                        result.Status == InspectionPointExecutionStatusModel.Skipped ? result.ResultSummary : string.Empty,
-                        result.Status == InspectionPointExecutionStatusModel.Failed ? result.ResultSummary : string.Empty));
+                currentTask = UpdateTask(currentTask.TaskId, current => ApplyPointResult(current, point.PointId, result));
             }
 
             FinalizeTask(currentTask.TaskId);
@@ -676,6 +758,61 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 task.SkippedCount,
                 task.ScopePlanName,
                 currentPoint.PointName)
+        };
+    }
+
+    private static InspectionTaskRecordModel ApplyPointResult(
+        InspectionTaskRecordModel task,
+        string pointId,
+        InspectionPointCheckResult result)
+    {
+        var queue = task.PointExecutions
+            .Select(point => string.Equals(point.PointId, pointId, StringComparison.Ordinal)
+                ? point with
+                {
+                    Status = result.Status,
+                    SkipReason = result.Status == InspectionPointExecutionStatusModel.Skipped ? result.ResultSummary : string.Empty,
+                    FailureCategory = result.FailureCategory,
+                    FailureReason = result.Status == InspectionPointExecutionStatusModel.Failed ? result.ResultSummary : string.Empty,
+                    ExecutionSummary = result.ResultSummary,
+                    OnlineCheckResult = result.OnlineCheckResult,
+                    StreamUrlAcquireResult = result.StreamUrlAcquireResult,
+                    PlaybackAttemptCount = result.PlaybackAttemptCount,
+                    ProtocolFallbackUsed = result.ProtocolFallbackUsed,
+                    FinalPlaybackResult = string.IsNullOrWhiteSpace(result.FinalPlaybackResult)
+                        ? result.ResultSummary
+                        : result.FinalPlaybackResult,
+                    PreviewUrl = result.PreviewUrl ?? string.Empty,
+                    PreviewHostKind = result.PreviewHostKind ?? string.Empty,
+                    EvidenceCaptureState = ResolvePendingEvidenceCaptureState(point, result),
+                    EvidenceSummary = ResolvePendingEvidenceSummary(point, result),
+                    AiAnalysisStatus = InspectionEvidenceValueKeys.AiAnalysisReserved,
+                    AiAnalysisSummary = string.Empty
+                }
+                : point)
+            .ToList();
+
+        var successCount = queue.Count(point => point.Status == InspectionPointExecutionStatusModel.Succeeded);
+        var failureCount = queue.Count(point => point.Status == InspectionPointExecutionStatusModel.Failed);
+        var skippedCount = queue.Count(point => point.Status == InspectionPointExecutionStatusModel.Skipped);
+        var nextPendingPoint = queue.FirstOrDefault(point => point.Status == InspectionPointExecutionStatusModel.Pending);
+
+        return task with
+        {
+            PointExecutions = queue,
+            SuccessCount = successCount,
+            FailureCount = failureCount,
+            SkippedCount = skippedCount,
+            CurrentPointId = nextPendingPoint?.PointId,
+            CurrentPointName = nextPendingPoint?.PointName ?? "--",
+            Summary = BuildTaskSummary(
+                InspectionTaskStatusModel.Running,
+                task.TotalPointCount,
+                successCount,
+                failureCount,
+                skippedCount,
+                task.ScopePlanName,
+                nextPendingPoint?.PointName ?? "--")
         };
     }
 
@@ -996,9 +1133,177 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     string.Empty,
                     policy.IsFocusPoint,
                     policy.UsesOverridePolicy,
-                    policy.PolicySnapshotSummary);
+                    policy.PolicySnapshotSummary)
+                {
+                    ScreenshotPlannedCount = Math.Max(1, settings.VideoInspection.ScreenshotCount),
+                    ScreenshotIntervalSeconds = Math.Max(1, settings.VideoInspection.ScreenshotIntervalSeconds),
+                    EvidenceCaptureState = InspectionEvidenceValueKeys.CaptureStateNone,
+                    EvidenceSummary = "待播放结果确定后生成截图证据。",
+                    EvidenceRetentionMode = NormalizeEvidenceRetentionMode(settings.VideoInspection.EvidenceRetentionMode),
+                    EvidenceRetentionDays = Math.Max(0, settings.VideoInspection.EvidenceRetentionDays),
+                    AllowManualSupplementScreenshot = settings.VideoInspection.AllowManualSupplementScreenshot,
+                    AiAnalysisStatus = InspectionEvidenceValueKeys.AiAnalysisReserved,
+                    AiAnalysisSummary = string.Empty
+                };
             })
             .ToList();
+    }
+
+    private static string ResolvePendingEvidenceCaptureState(
+        InspectionTaskPointExecutionModel point,
+        InspectionPointCheckResult result)
+    {
+        if (result.Status is InspectionPointExecutionStatusModel.Succeeded or InspectionPointExecutionStatusModel.Failed)
+        {
+            return InspectionEvidenceValueKeys.CaptureStatePending;
+        }
+
+        return point.EvidenceCaptureState;
+    }
+
+    private static string ResolvePendingEvidenceSummary(
+        InspectionTaskPointExecutionModel point,
+        InspectionPointCheckResult result)
+    {
+        if (result.Status == InspectionPointExecutionStatusModel.Succeeded)
+        {
+            return $"播放成功，待按策略生成 {Math.Max(1, point.ScreenshotPlannedCount)} 张截图证据。";
+        }
+
+        if (result.Status == InspectionPointExecutionStatusModel.Failed)
+        {
+            return "播放失败，待生成失败证据快照。";
+        }
+
+        return point.EvidenceSummary;
+    }
+
+    private static IReadOnlyList<InspectionPointEvidenceMetadataModel> NormalizeEvidenceItems(InspectionPointEvidenceWriteRequest request)
+    {
+        return (request.EvidenceItems ?? Array.Empty<InspectionPointEvidenceMetadataModel>())
+            .Where(item => item is not null && !string.IsNullOrWhiteSpace(item.LocalFilePath))
+            .Select(item => item with
+            {
+                TaskId = string.IsNullOrWhiteSpace(item.TaskId) ? request.TaskId : item.TaskId.Trim(),
+                PointId = string.IsNullOrWhiteSpace(item.PointId) ? request.PointId : item.PointId.Trim(),
+                DeviceCode = string.IsNullOrWhiteSpace(item.DeviceCode) ? request.DeviceCode : item.DeviceCode.Trim(),
+                LocalFilePath = item.LocalFilePath.Trim(),
+                EvidenceSummary = item.EvidenceSummary?.Trim() ?? string.Empty,
+                EvidenceKind = string.IsNullOrWhiteSpace(item.EvidenceKind)
+                    ? InspectionEvidenceValueKeys.EvidenceKindPlaybackScreenshot
+                    : item.EvidenceKind.Trim(),
+                EvidenceSource = string.IsNullOrWhiteSpace(item.EvidenceSource)
+                    ? InspectionEvidenceValueKeys.EvidenceSourcePreviewHost
+                    : item.EvidenceSource.Trim(),
+                AiAnalysisStatus = string.IsNullOrWhiteSpace(item.AiAnalysisStatus)
+                    ? InspectionEvidenceValueKeys.AiAnalysisPending
+                    : item.AiAnalysisStatus.Trim(),
+                AiAnalysisSummary = item.AiAnalysisSummary?.Trim() ?? string.Empty
+            })
+            .OrderBy(item => item.ScreenshotTime)
+            .ToList();
+    }
+
+    private static string NormalizeEvidenceCaptureState(string captureState, int evidenceCount)
+    {
+        if (!string.IsNullOrWhiteSpace(captureState))
+        {
+            return captureState.Trim();
+        }
+
+        return evidenceCount > 0
+            ? InspectionEvidenceValueKeys.CaptureStateCompleted
+            : InspectionEvidenceValueKeys.CaptureStateFailed;
+    }
+
+    private static string NormalizeEvidenceSummary(
+        InspectionPointEvidenceWriteRequest request,
+        string captureState,
+        int evidenceCount)
+    {
+        if (!string.IsNullOrWhiteSpace(request.EvidenceSummary))
+        {
+            return request.EvidenceSummary.Trim();
+        }
+
+        return captureState switch
+        {
+            InspectionEvidenceValueKeys.CaptureStateCompleted when evidenceCount > 0 => $"已写入 {evidenceCount} 份证据。",
+            InspectionEvidenceValueKeys.CaptureStateFailed => "截图取证未成功写入，待人工补充。",
+            InspectionEvidenceValueKeys.CaptureStatePending => "截图取证待执行。",
+            _ => string.Empty
+        };
+    }
+
+    private static string NormalizeEvidenceRetentionMode(string retentionMode)
+    {
+        return retentionMode?.Trim() switch
+        {
+            InspectionSettingsValueKeys.EvidenceRetentionKeepLatestTask => InspectionSettingsValueKeys.EvidenceRetentionKeepLatestTask,
+            InspectionSettingsValueKeys.EvidenceRetentionManualCleanup => InspectionSettingsValueKeys.EvidenceRetentionManualCleanup,
+            _ => InspectionSettingsValueKeys.EvidenceRetentionKeepDays
+        };
+    }
+
+    private static string BuildEvidencePathLog(IReadOnlyList<InspectionPointEvidenceMetadataModel> evidenceItems)
+    {
+        return evidenceItems.Count == 0
+            ? string.Empty
+            : string.Join(" | ", evidenceItems.Select(item => item.LocalFilePath));
+    }
+
+    private static void ApplyEvidenceRetention(
+        string taskId,
+        string pointId,
+        string retentionMode,
+        int retentionDays)
+    {
+        try
+        {
+            var currentTaskDirectory = InspectionEvidencePathBuilder.GetPointTaskDirectory(taskId, pointId);
+            var pointDirectory = Directory.GetParent(currentTaskDirectory)?.FullName;
+            if (string.IsNullOrWhiteSpace(pointDirectory) || !Directory.Exists(pointDirectory))
+            {
+                return;
+            }
+
+            switch (NormalizeEvidenceRetentionMode(retentionMode))
+            {
+                case InspectionSettingsValueKeys.EvidenceRetentionKeepLatestTask:
+                    foreach (var candidate in Directory.GetDirectories(pointDirectory))
+                    {
+                        if (!string.Equals(candidate, currentTaskDirectory, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Directory.Delete(candidate, true);
+                        }
+                    }
+
+                    break;
+                case InspectionSettingsValueKeys.EvidenceRetentionKeepDays:
+                    var cutoff = DateTime.Now.AddDays(-Math.Max(1, retentionDays));
+                    foreach (var candidate in Directory.GetDirectories(pointDirectory))
+                    {
+                        if (string.Equals(candidate, currentTaskDirectory, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        var lastWriteTime = Directory.GetLastWriteTime(candidate);
+                        if (lastWriteTime < cutoff)
+                        {
+                            Directory.Delete(candidate, true);
+                        }
+                    }
+
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionEvidence",
+                $"evidence retention skipped: pointId={pointId}, reason={NormalizeReason(ex.Message, "证据保留清理失败。")}");
+        }
     }
 
     private static IEnumerable<InspectionTaskPointExecutionModel> BuildMissingPointQueue(

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:TianyiVision.Acis.UI.Views.Controls"
              xmlns:state="clr-namespace:TianyiVision.Acis.UI.States"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              xmlns:views="clr-namespace:TianyiVision.Acis.UI.Views.Pages">
     <UserControl.Resources>
         <Style x:Key="WorkspaceVisibilityStyle" TargetType="FrameworkElement">
@@ -297,10 +298,9 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <TextBlock Margin="0,4,0,0"
-                                       Style="{StaticResource PageDescriptionTextStyle}"
                                        Text="{Binding TaskEmptyText}">
                                 <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource PageDescriptionTextStyle}">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding RecentTasks.Count}" Value="0">
@@ -748,6 +748,10 @@
                                         <TextBlock Grid.Row="3" Margin="0,12,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding SinglePointInspectionResultSummaryLabel}" />
                                         <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SinglePointInspectionResultSummary}" TextWrapping="Wrap" />
                                     </Grid>
+                                    <TextBlock Margin="0,12,0,0"
+                                               Style="{StaticResource PageDescriptionTextStyle}"
+                                               Text="{Binding SelectedPointDetail.EvidenceSummary}"
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 
@@ -762,13 +766,32 @@
                                                 BorderThickness="1"
                                                 CornerRadius="18"
                                                 Visibility="{Binding SelectedPointDetail.IsPreviewAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Style="{StaticResource AccentTextStyle}" HorizontalAlignment="Center" Text="{Binding PreviewPlayableBadge}" />
-                                                <TextBlock Margin="0,18,0,0" FontSize="24" FontWeight="SemiBold" Text="{Binding PreviewPlayableCanvas}" />
-                                                <TextBlock Margin="0,18,0,0" Width="220" TextAlignment="Center" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreviewPlayableHint}" />
-                                            </StackPanel>
+                                            <Grid ClipToBounds="True">
+                                                <wv2:WebView2 x:Name="PreviewWebView"
+                                                              Source="{Binding SelectedPointDetail.PreviewHostUri}" />
+                                                <Border Margin="12"
+                                                        Padding="10,6"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Top"
+                                                        Background="#CC0F172A"
+                                                        CornerRadius="12">
+                                                    <TextBlock Style="{StaticResource AccentTextStyle}"
+                                                               Text="{Binding SelectedPointDetail.PreviewBusinessTitle}" />
+                                                </Border>
+                                                <Border Margin="12"
+                                                        Padding="12"
+                                                        HorizontalAlignment="Stretch"
+                                                        VerticalAlignment="Bottom"
+                                                        Background="#CC0F172A"
+                                                        CornerRadius="14">
+                                                    <TextBlock Style="{StaticResource PageDescriptionTextStyle}"
+                                                               Text="{Binding SelectedPointDetail.PreviewBusinessDescription}"
+                                                               TextWrapping="Wrap" />
+                                                </Border>
+                                            </Grid>
                                         </Border>
-                                        <Border Height="220"
+                                        <Border x:Name="PreviewFailureCard"
+                                                Height="220"
                                                 Background="{DynamicResource Theme.DangerSoftBrush}"
                                                 BorderBrush="{DynamicResource Theme.DangerBrush}"
                                                 BorderThickness="1"
@@ -782,12 +805,25 @@
                                                             <Setter Property="Visibility" Value="Visible" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
-                                                </Style>
+                                                    </Style>
                                             </Border.Style>
                                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Style="{StaticResource AccentTextStyle}" HorizontalAlignment="Center" Text="{Binding PreviewUnavailableBadge}" />
-                                                <TextBlock Margin="0,18,0,0" FontSize="24" FontWeight="SemiBold" Text="{Binding PreviewUnavailableCanvas}" />
-                                                <TextBlock Margin="0,18,0,0" Width="220" TextAlignment="Center" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreviewUnavailableHint}" />
+                                                <TextBlock Style="{StaticResource AccentTextStyle}"
+                                                           HorizontalAlignment="Center"
+                                                           Text="{Binding SelectedPointDetail.PreviewBusinessTitle}" />
+                                                <TextBlock Margin="0,18,0,0"
+                                                           Width="240"
+                                                           TextAlignment="Center"
+                                                           TextWrapping="Wrap"
+                                                           FontSize="18"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding SelectedPointDetail.PlaybackStatus}" />
+                                                <TextBlock Margin="0,18,0,0"
+                                                           Width="240"
+                                                           TextAlignment="Center"
+                                                           Style="{StaticResource PageDescriptionTextStyle}"
+                                                           Text="{Binding SelectedPointDetail.PreviewBusinessDescription}"
+                                                           TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>

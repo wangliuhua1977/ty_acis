@@ -67,7 +67,12 @@ public sealed record InspectionVideoInspectionSettings(
     string EvidenceRetentionMode,
     int EvidenceRetentionDays,
     bool AllowManualSupplementScreenshot,
-    bool EnableProtocolFallbackRetry);
+    bool EnableProtocolFallbackRetry)
+{
+    public int EffectivePlaybackTimeoutSeconds => Math.Max(3, PlaybackTimeoutSeconds);
+
+    public int EffectivePlaybackFailureRetryCount => Math.Max(0, PlaybackFailureRetryCount);
+}
 
 public sealed record InspectionTaskExecutionSettings(
     bool EnableSinglePointInspection,

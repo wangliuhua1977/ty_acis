@@ -82,6 +82,11 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
 
     private static InspectionTaskPointExecutionModel NormalizePointExecution(InspectionTaskPointExecutionModel point, int fallbackSequence)
     {
+        var evidenceItems = (point.EvidenceItems ?? Array.Empty<InspectionPointEvidenceMetadataModel>())
+            .Where(item => item is not null)
+            .OrderBy(item => item.ScreenshotTime)
+            .ToList();
+
         return point with
         {
             DeviceCode = string.IsNullOrWhiteSpace(point.DeviceCode) ? point.PointId : point.DeviceCode.Trim(),
@@ -89,7 +94,21 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
             Sequence = point.Sequence > 0 ? point.Sequence : fallbackSequence,
             SkipReason = point.SkipReason?.Trim() ?? string.Empty,
             FailureReason = point.FailureReason?.Trim() ?? string.Empty,
-            PolicySnapshotSummary = point.PolicySnapshotSummary?.Trim() ?? string.Empty
+            PolicySnapshotSummary = point.PolicySnapshotSummary?.Trim() ?? string.Empty,
+            ScreenshotPlannedCount = Math.Max(0, point.ScreenshotPlannedCount),
+            ScreenshotIntervalSeconds = Math.Max(0, point.ScreenshotIntervalSeconds),
+            ScreenshotSuccessCount = Math.Max(0, point.ScreenshotSuccessCount),
+            EvidenceCaptureState = string.IsNullOrWhiteSpace(point.EvidenceCaptureState)
+                ? InspectionEvidenceValueKeys.CaptureStateNone
+                : point.EvidenceCaptureState.Trim(),
+            EvidenceSummary = point.EvidenceSummary?.Trim() ?? string.Empty,
+            EvidenceRetentionMode = point.EvidenceRetentionMode?.Trim() ?? string.Empty,
+            EvidenceRetentionDays = Math.Max(0, point.EvidenceRetentionDays),
+            AiAnalysisStatus = string.IsNullOrWhiteSpace(point.AiAnalysisStatus)
+                ? InspectionEvidenceValueKeys.AiAnalysisReserved
+                : point.AiAnalysisStatus.Trim(),
+            AiAnalysisSummary = point.AiAnalysisSummary?.Trim() ?? string.Empty,
+            EvidenceItems = evidenceItems
         };
     }
 

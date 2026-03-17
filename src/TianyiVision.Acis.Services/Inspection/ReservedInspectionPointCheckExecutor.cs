@@ -1,3 +1,5 @@
+using TianyiVision.Acis.Services.Devices;
+
 namespace TianyiVision.Acis.Services.Inspection;
 
 public sealed class ReservedInspectionPointCheckExecutor : IInspectionPointCheckExecutor

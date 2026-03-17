@@ -64,6 +64,11 @@ public sealed class DemoInspectionTaskService : IInspectionTaskService
             CreateRejectedTask(groupId, "演示范围任务", InspectionTaskTypeModel.ScopePlan),
             "演示分支未接入任务执行。");
 
+    public ServiceResponse<InspectionTaskRecordModel> WritePointEvidence(InspectionPointEvidenceWriteRequest request)
+        => ServiceResponse<InspectionTaskRecordModel>.Failure(
+            CreateRejectedTask(request.TaskId, "婕旂ず鍙栬瘉鍐欏洖", InspectionTaskTypeModel.SinglePoint),
+            "婕旂ず鍒嗘敮鏈帴鍏ョ湡瀹炲彇璇侀摼璺€?");
+
     private static InspectionTaskRecordModel CreateRejectedTask(
         string groupId,
         string taskName,
