@@ -53,6 +53,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private string _taskRoutingSummary = string.Empty;
     private string _reviewWallEntrySummary = string.Empty;
     private string _dispatchPoolCandidateSummary = string.Empty;
+    private InspectionScopePlanPreviewModel _scopePlanPreview = new(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, 0, 0, string.Empty);
+    private ObservableCollection<InspectionPointState> _scopeMatchedPoints = [];
+    private ObservableCollection<InspectionPointState> _scopeUnmatchedPoints = [];
 
     public InspectionPageViewModel(
         ITextService textService,
@@ -107,6 +110,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         WorkbenchTitle = textService.Resolve(TextTokens.InspectionWorkbenchTitle);
         WorkbenchDescription = textService.Resolve(TextTokens.InspectionWorkbenchDescription);
+        ScopePreviewTitle = textService.Resolve(TextTokens.InspectionScopePreviewTitle);
+        ScopePreviewDescription = textService.Resolve(TextTokens.InspectionScopePreviewDescription);
+        ScopePlanNameLabel = textService.Resolve(TextTokens.InspectionScopePlanNameLabel);
+        ScopeMatchedCountLabel = textService.Resolve(TextTokens.InspectionScopeMatchedCountLabel);
+        ScopeUnmatchedCountLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedCountLabel);
+        ScopeRuleSummaryLabel = textService.Resolve(TextTokens.InspectionScopeRuleSummaryLabel);
+        ScopeExecutionSummaryLabel = textService.Resolve(TextTokens.InspectionScopeExecutionSummaryLabel);
+        ScopeUnmatchedReasonLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedReasonLabel);
+        ScopeMatchedListLabel = textService.Resolve(TextTokens.InspectionScopeMatchedListLabel);
+        ScopeUnmatchedListLabel = textService.Resolve(TextTokens.InspectionScopeUnmatchedListLabel);
         WorkbenchMapBadge = textService.Resolve(TextTokens.InspectionWorkbenchMapBadge);
         WorkbenchHint = textService.Resolve(TextTokens.InspectionWorkbenchHint);
         MapModeRealText = textService.Resolve(TextTokens.InspectionMapModeReal);
@@ -278,6 +291,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     public string RecentFaultTimeLabel { get; }
     public string WorkbenchTitle { get; }
     public string WorkbenchDescription { get; }
+    public string ScopePreviewTitle { get; }
+    public string ScopePreviewDescription { get; }
+    public string ScopePlanNameLabel { get; }
+    public string ScopeMatchedCountLabel { get; }
+    public string ScopeUnmatchedCountLabel { get; }
+    public string ScopeRuleSummaryLabel { get; }
+    public string ScopeExecutionSummaryLabel { get; }
+    public string ScopeUnmatchedReasonLabel { get; }
+    public string ScopeMatchedListLabel { get; }
+    public string ScopeUnmatchedListLabel { get; }
     public string WorkbenchMapBadge { get; }
     public string WorkbenchHint { get; }
     public string MapModeRealText { get; }
@@ -536,6 +559,32 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         private set => SetProperty(ref _dispatchPoolCandidateSummary, value);
     }
 
+    public InspectionScopePlanPreviewModel ScopePlanPreview
+    {
+        get => _scopePlanPreview;
+        private set => SetProperty(ref _scopePlanPreview, value);
+    }
+
+    public ObservableCollection<InspectionPointState> ScopeMatchedPoints
+    {
+        get => _scopeMatchedPoints;
+        private set => SetProperty(ref _scopeMatchedPoints, value);
+    }
+
+    public ObservableCollection<InspectionPointState> ScopeUnmatchedPoints
+    {
+        get => _scopeUnmatchedPoints;
+        private set
+        {
+            if (SetProperty(ref _scopeUnmatchedPoints, value))
+            {
+                OnPropertyChanged(nameof(HasScopeUnmatchedPoints));
+            }
+        }
+    }
+
+    public bool HasScopeUnmatchedPoints => ScopeUnmatchedPoints.Count > 0;
+
     public ICommand SelectGroupCommand { get; }
     public ICommand SelectPointCommand { get; }
     public ICommand SelectRecentFaultCommand { get; }
@@ -585,6 +634,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         ExecutionState = workspace.ExecutionState;
         RunSummary = workspace.RunSummary;
         Points = workspace.Points;
+        ScopePlanPreview = workspace.ScopePlanPreview;
+        ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Where(point => point.IsInDefaultScope));
+        ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(workspace.Points.Where(point => !point.IsInDefaultScope));
         MapPoints = workspace.MapPoints;
         UnmappedPoints = new ObservableCollection<MapPointState>(workspace.MapPoints.Where(point => !point.CanRenderOnMap));
         RecentFaults = workspace.RecentFaults;
@@ -1339,6 +1391,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                         workspace.Group.Name,
                         workspace.Group.Summary,
                         workspace.Group.IsEnabled),
+                    workspace.ScopePlanPreview ?? CreateEmptyScopePlanPreview(),
                     new InspectionStrategySummaryState(
                         workspace.Strategy.FirstRunTime,
                         workspace.Strategy.DailyExecutionCount,
@@ -1388,6 +1441,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             CurrentPointName = "--"
         };
     }
+
+    private static InspectionScopePlanPreviewModel CreateEmptyScopePlanPreview()
+        => new(string.Empty, "--", string.Empty, string.Empty, string.Empty, 0, 0, string.Empty);
 
     private RecentFaultSummaryState CreateRecentFault(InspectionRecentFaultModel recentFault)
         => new(recentFault.PointId, recentFault.PointName, recentFault.FaultType, recentFault.LatestFaultTime);
@@ -1490,7 +1546,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             point.FaultSummary,
             point.LastFaultTime,
             point.EntersDispatchPool,
-            point.BusinessSummary);
+            point.BusinessSummary,
+            point.IsInDefaultScope,
+            point.ScopeDecisionSummary);
     }
 
     private InspectionPointState CreatePoint(
@@ -1523,7 +1581,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         string faultSummary,
         string lastFaultTime,
         bool entersDispatchPool,
-        PointBusinessSummaryModel? businessSummary)
+        PointBusinessSummaryModel? businessSummary,
+        bool isInDefaultScope,
+        string scopeDecisionSummary)
     {
         var faultType = ResolveFaultType(status, completionStatus, isOnline, isPlayable, isImageAbnormal);
         var pointSummary = businessSummary is not null
@@ -1585,6 +1645,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             lastFaultTime,
             entersDispatchPool ? _textService.Resolve(TextTokens.InspectionDispatchPoolYes) : _textService.Resolve(TextTokens.InspectionDispatchPoolNo),
             ResolveConclusion(status, completionStatus, businessSummary?.StatusSummary, faultSummary),
+            isInDefaultScope,
+            string.IsNullOrWhiteSpace(scopeDecisionSummary) ? TaskEmptyText : scopeDecisionSummary,
             isPreviewAvailable,
             pointSummary)
         {
@@ -1828,6 +1890,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         public GroupWorkspaceState(
             InspectionGroupSummaryState group,
+            InspectionScopePlanPreviewModel scopePlanPreview,
             InspectionStrategySummaryState strategySummary,
             InspectionTaskExecutionState executionState,
             InspectionRunSummaryState runSummary,
@@ -1840,6 +1903,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ObservableCollection<RecentFaultSummaryState> recentFaults)
         {
             Group = group;
+            ScopePlanPreview = scopePlanPreview;
             StrategySummary = strategySummary;
             ExecutionState = executionState;
             RunSummary = runSummary;
@@ -1853,6 +1917,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         public InspectionGroupSummaryState Group { get; }
+        public InspectionScopePlanPreviewModel ScopePlanPreview { get; }
         public InspectionStrategySummaryState StrategySummary { get; }
         public InspectionTaskExecutionState ExecutionState { get; }
         public InspectionRunSummaryState RunSummary { get; }

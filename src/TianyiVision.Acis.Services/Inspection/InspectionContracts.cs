@@ -133,6 +133,16 @@ public sealed record InspectionRunSummaryModel(
     string GroupName,
     string StartedAt);
 
+public sealed record InspectionScopePlanPreviewModel(
+    string PlanId,
+    string PlanName,
+    string Description,
+    string RuleSummary,
+    string ExecutionSummary,
+    int MatchedPointCount,
+    int UnmatchedPointCount,
+    string UnmatchedReasonSummary);
+
 public sealed record InspectionPointModel(
     string Id,
     string DeviceCode,
@@ -164,7 +174,9 @@ public sealed record InspectionPointModel(
     double? RegisteredLongitude = null,
     double? RegisteredLatitude = null,
     CoordinateSystemKind RegisteredCoordinateSystem = CoordinateSystemKind.Unknown,
-    CoordinateSystemKind MapCoordinateSystem = CoordinateSystemKind.Unknown)
+    CoordinateSystemKind MapCoordinateSystem = CoordinateSystemKind.Unknown,
+    bool IsInDefaultScope = true,
+    string ScopeDecisionSummary = "")
 {
     public InspectionPointModel(
         string id,
@@ -213,7 +225,9 @@ public sealed record InspectionPointModel(
             null,
             null,
             CoordinateSystemKind.Unknown,
-            CoordinateSystemKind.Unknown)
+            CoordinateSystemKind.Unknown,
+            true,
+            string.Empty)
     {
     }
 }
@@ -646,7 +660,8 @@ public sealed record InspectionGroupWorkspaceModel(
     string TaskFinishedAt,
     InspectionTaskBoardModel TaskBoard,
     IReadOnlyList<InspectionPointModel> Points,
-    IReadOnlyList<InspectionRecentFaultModel> RecentFaults);
+    IReadOnlyList<InspectionRecentFaultModel> RecentFaults,
+    InspectionScopePlanPreviewModel? ScopePlanPreview = null);
 
 public sealed record InspectionWorkspaceSnapshot(
     IReadOnlyList<InspectionGroupWorkspaceModel> Groups);

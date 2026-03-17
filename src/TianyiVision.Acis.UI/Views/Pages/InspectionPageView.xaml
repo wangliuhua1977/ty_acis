@@ -61,6 +61,20 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ScopeUnmatchedPointButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryActionButtonStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Background" Value="{DynamicResource Theme.WarningSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.WarningBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SelectionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.SelectionBorderBrush}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -176,7 +190,40 @@
                                         <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ExecutionState.CurrentPointName, TargetNullValue=--}" />
                                     </Grid>
                                 </Border>
-                                <ItemsControl ItemsSource="{Binding Points}">
+                                <Border Margin="0,0,0,14" Style="{StaticResource MutedPanelStyle}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource SectionTitleTextStyle}" Text="{Binding ScopePreviewTitle}" />
+                                        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePreviewDescription}" TextWrapping="Wrap" />
+                                        <Grid Margin="0,16,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="130" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopePlanNameLabel}" />
+                                            <TextBlock Grid.Column="1" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ScopePlanPreview.PlanName, TargetNullValue=--}" />
+                                            <TextBlock Grid.Row="1" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeMatchedCountLabel}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ScopePlanPreview.MatchedPointCount, StringFormat={}{0} 个}" />
+                                            <TextBlock Grid.Row="2" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeUnmatchedCountLabel}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding ScopePlanPreview.UnmatchedPointCount, StringFormat={}{0} 个}" />
+                                            <TextBlock Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeRuleSummaryLabel}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanPreview.RuleSummary}" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="4" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeExecutionSummaryLabel}" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanPreview.ExecutionSummary}" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="5" Margin="0,10,0,0" Style="{StaticResource FieldLabelTextStyle}" Text="{Binding ScopeUnmatchedReasonLabel}" />
+                                            <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopePlanPreview.UnmatchedReasonSummary}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Margin="0,0,0,10" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ScopeMatchedListLabel}" />
+                                <ItemsControl ItemsSource="{Binding ScopeMatchedPoints}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Button Style="{StaticResource PointItemButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
@@ -188,14 +235,35 @@
                                                         </StackPanel>
                                                         <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding StatusText}" />
                                                     </DockPanel>
-                                                    <TextBlock Margin="0,10,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding OnlineStatus}" />
+                                                    <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopeDecisionSummary}" TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding OnlineStatus}" />
                                                     <TextBlock Margin="0,6,0,0" Style="{StaticResource FieldValueTextStyle}" Text="{Binding PlaybackStatus}" />
-                                                    <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding LastInspectionConclusion}" TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <StackPanel Visibility="{Binding HasScopeUnmatchedPoints, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Margin="0,10,0,10" Style="{StaticResource SectionLabelTextStyle}" Text="{Binding ScopeUnmatchedListLabel}" />
+                                    <ItemsControl ItemsSource="{Binding ScopeUnmatchedPoints}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource ScopeUnmatchedPointButtonStyle}" Command="{Binding DataContext.SelectPointCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                                    <StackPanel>
+                                                        <DockPanel LastChildFill="False">
+                                                            <StackPanel Width="250">
+                                                                <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding DeviceCode}" />
+                                                            </StackPanel>
+                                                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource FieldValueTextStyle}" Text="{Binding UnitName}" />
+                                                        </DockPanel>
+                                                        <TextBlock Margin="0,10,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding ScopeDecisionSummary}" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

@@ -79,6 +79,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         }
 
         var points = pointCollectionResponse.Data.ToList();
+        var scopePlan = ResolveDefaultScopePlan(inspectionSettings.ScopePlans);
+        var scopeSelection = SelectScopePoints(scopePlan, points);
         var stagePlacements = PointStageProjection.Project(points, InspectionStagePreset);
 
         var inspectionPoints = points
@@ -86,7 +88,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             {
                 var taskPoint = taskBoard.CurrentTask?.PointExecutions
                     .FirstOrDefault(candidate => string.Equals(candidate.PointId, point.PointId, StringComparison.Ordinal));
-                return CreatePoint(point, stagePlacements[point.PointId], index, taskPoint);
+                var scopeDecision = scopeSelection.Decisions.GetValueOrDefault(point.PointId);
+                return CreatePoint(point, stagePlacements[point.PointId], index, scopeDecision, taskPoint);
             })
             .ToList();
 
@@ -113,7 +116,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             taskBoard.CurrentTask?.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--",
             taskBoard,
             inspectionPoints,
-            recentFaults);
+            recentFaults,
+            scopeSelection.Preview);
 
         var renderablePoints = points.Where(point => point.Coordinate.CanRenderOnMap).ToList();
         var sourceBreakdown = points
@@ -1514,6 +1518,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         InspectionTaskBoardModel taskBoard,
         InspectionSettingsSnapshot settings)
     {
+        var scopePlan = ResolveDefaultScopePlan(settings.ScopePlans);
         return new InspectionWorkspaceSnapshot([
             new InspectionGroupWorkspaceModel(
                 new InspectionGroupModel(DefaultGroupId, groupName, "点位状态待接入", true),
@@ -1523,7 +1528,8 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 taskBoard.CurrentTask?.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "--",
                 taskBoard,
                 [],
-                [])
+                [],
+                CreatePendingScopePreview(scopePlan))
         ]);
     }
 
@@ -1640,19 +1646,37 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     {
         if (scopePlan is null)
         {
-            return new ScopeSelectionResult("默认范围巡检", points.ToList());
+            var defaultDecisions = points.ToDictionary(
+                point => point.PointId,
+                point => new ScopePointSelectionDecision(
+                    true,
+                    "全组执行",
+                    "当前未配置启用中的默认范围方案，本次按本组全部点位执行。"),
+                StringComparer.Ordinal);
+            return new ScopeSelectionResult(
+                "默认范围巡检",
+                points.ToList(),
+                defaultDecisions,
+                new InspectionScopePlanPreviewModel(
+                    string.Empty,
+                    DefaultScopePlanName,
+                    "当前未配置启用中的默认范围方案。",
+                    BuildScopeRuleSummary(null),
+                    "当前执行口径：未配置默认范围方案，本次按本组全部点位执行。",
+                    points.Count,
+                    0,
+                    "当前无未命中点位。"));
         }
 
         var byPointId = points.ToDictionary(point => point.PointId, point => point, StringComparer.Ordinal);
-        var matchedPoints = scopePlan.IncludedPointIds
+        var matchedByPointIds = scopePlan.IncludedPointIds
             .Where(pointId => byPointId.ContainsKey(pointId))
             .Select(pointId => byPointId[pointId])
             .ToList();
-
-        if (matchedPoints.Count == 0)
-        {
-            matchedPoints = points.ToList();
-        }
+        var fallbackToAllPoints = matchedByPointIds.Count == 0;
+        var matchedPoints = fallbackToAllPoints
+            ? points.ToList()
+            : matchedByPointIds;
 
         if (scopePlan.ExcludedPointIds.Count > 0)
         {
@@ -1661,7 +1685,35 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 .ToList();
         }
 
-        return new ScopeSelectionResult(scopePlan.PlanName, matchedPoints);
+        var matchedPointIds = matchedPoints
+            .Select(point => point.PointId)
+            .ToHashSet(StringComparer.Ordinal);
+        var decisions = points.ToDictionary(
+            point => point.PointId,
+            point => BuildScopeDecision(point, scopePlan, matchedPointIds, fallbackToAllPoints),
+            StringComparer.Ordinal);
+        var unmatchedReasons = decisions.Values
+            .Where(decision => !decision.IsInScope)
+            .GroupBy(decision => decision.ReasonLabel, StringComparer.Ordinal)
+            .Select(group => $"{group.Key} {group.Count()} 个")
+            .ToList();
+        var executionSummary = BuildScopeExecutionSummary(scopePlan, fallbackToAllPoints);
+
+        return new ScopeSelectionResult(
+            scopePlan.PlanName,
+            matchedPoints,
+            decisions,
+            new InspectionScopePlanPreviewModel(
+                scopePlan.PlanId,
+                scopePlan.PlanName,
+                NormalizeScopePlanDescription(scopePlan.Description),
+                BuildScopeRuleSummary(scopePlan),
+                executionSummary,
+                matchedPoints.Count,
+                points.Count - matchedPoints.Count,
+                unmatchedReasons.Count == 0
+                    ? "当前无未命中点位。"
+                    : string.Join(" / ", unmatchedReasons)));
     }
 
     private List<InspectionTaskPointExecutionModel> BuildExecutionQueue(
@@ -2084,6 +2136,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         PointWorkspaceItemModel point,
         PointStagePlacementModel placement,
         int index,
+        ScopePointSelectionDecision? scopeDecision,
         InspectionTaskPointExecutionModel? taskPoint)
     {
         var businessSummary = PointBusinessSummaryFactory.Create(point);
@@ -2134,7 +2187,90 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             point.Coordinate.RegisteredCoordinate?.Longitude,
             point.Coordinate.RegisteredCoordinate?.Latitude,
             point.Coordinate.RegisteredCoordinateSystem,
-            point.Coordinate.MapCoordinateSystem);
+            point.Coordinate.MapCoordinateSystem,
+            scopeDecision?.IsInScope ?? true,
+            scopeDecision?.Summary ?? string.Empty);
+    }
+
+    private static InspectionScopePlanPreviewModel CreatePendingScopePreview(InspectionScopePlanSettings? scopePlan)
+    {
+        return new InspectionScopePlanPreviewModel(
+            scopePlan?.PlanId ?? string.Empty,
+            scopePlan?.PlanName ?? DefaultScopePlanName,
+            scopePlan is null
+                ? "当前未配置启用中的默认范围方案。"
+                : NormalizeScopePlanDescription(scopePlan.Description),
+            BuildScopeRuleSummary(scopePlan),
+            "当前点位工作区尚未返回可巡检点位，待点位接入后显示本次范围命中结果。",
+            0,
+            0,
+            "待点位接入后统计未命中原因。");
+    }
+
+    private static ScopePointSelectionDecision BuildScopeDecision(
+        PointWorkspaceItemModel point,
+        InspectionScopePlanSettings scopePlan,
+        IReadOnlySet<string> matchedPointIds,
+        bool fallbackToAllPoints)
+    {
+        if (scopePlan.ExcludedPointIds.Contains(point.PointId, StringComparer.OrdinalIgnoreCase))
+        {
+            return new ScopePointSelectionDecision(
+                false,
+                "方案排除",
+                "已被默认范围方案排除，本次整组巡检不会执行该点位。");
+        }
+
+        if (matchedPointIds.Contains(point.PointId))
+        {
+            return fallbackToAllPoints
+                ? new ScopePointSelectionDecision(
+                    true,
+                    "全组回退纳入",
+                    scopePlan.IncludedPointIds.Count == 0
+                        ? "默认范围方案未配置纳管点位ID，当前按本组点位纳入执行。"
+                        : "默认范围方案未命中纳管点位ID，当前按本组点位回退纳入执行。")
+                : new ScopePointSelectionDecision(
+                    true,
+                    "命中纳管点位",
+                    "命中默认范围方案纳管点位，本次整组巡检会执行该点位。");
+        }
+
+        return new ScopePointSelectionDecision(
+            false,
+            "未命中纳管点位",
+            "未命中默认范围方案纳管点位，本次整组巡检不会执行该点位。");
+    }
+
+    private static string BuildScopeRuleSummary(InspectionScopePlanSettings? scopePlan)
+    {
+        if (scopePlan is null)
+        {
+            return "区域 0 项 / 目录 0 项 / 点位ID 0 项 / 排除 0 项 / 重点关注 0 项";
+        }
+
+        return $"区域 {scopePlan.IncludedRegions.Count} 项 / 目录 {scopePlan.IncludedDirectories.Count} 项 / 点位ID {scopePlan.IncludedPointIds.Count} 项 / 排除 {scopePlan.ExcludedPointIds.Count} 项 / 重点关注 {scopePlan.FocusPointIds.Count} 项";
+    }
+
+    private static string BuildScopeExecutionSummary(
+        InspectionScopePlanSettings scopePlan,
+        bool fallbackToAllPoints)
+    {
+        if (!fallbackToAllPoints)
+        {
+            return "当前执行口径：按默认范围方案的点位ID命中结果执行，排除点位已剔除。";
+        }
+
+        return scopePlan.IncludedPointIds.Count == 0
+            ? "当前执行口径：默认范围方案未配置点位ID，当前按本组全部点位执行，排除点位仍然剔除。"
+            : "当前执行口径：默认范围方案未命中任何点位ID，当前按本组全部点位回退执行，排除点位仍然剔除。";
+    }
+
+    private static string NormalizeScopePlanDescription(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description)
+            ? "当前默认范围方案未填写补充说明。"
+            : description.Trim();
     }
 
     private static InspectionPointStatusModel ResolveRuntimeStatus(
@@ -2210,7 +2346,16 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             : $"{board.CurrentTask.TaskName} / {board.CurrentTask.Status} / recent={board.RecentTasks.Count}";
     }
 
-    private sealed record ScopeSelectionResult(string TaskName, IReadOnlyList<PointWorkspaceItemModel> Points);
+    private sealed record ScopePointSelectionDecision(
+        bool IsInScope,
+        string ReasonLabel,
+        string Summary);
+
+    private sealed record ScopeSelectionResult(
+        string TaskName,
+        IReadOnlyList<PointWorkspaceItemModel> Points,
+        IReadOnlyDictionary<string, ScopePointSelectionDecision> Decisions,
+        InspectionScopePlanPreviewModel Preview);
 
     private sealed record ResolvedPointPolicy(
         InspectionPointPolicySettings Policy,

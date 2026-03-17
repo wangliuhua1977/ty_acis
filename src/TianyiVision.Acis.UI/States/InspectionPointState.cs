@@ -40,6 +40,8 @@ public sealed class InspectionPointState : ViewModelBase
         string lastFaultTime,
         string dispatchPoolEntry,
         string lastInspectionConclusion,
+        bool isInDefaultScope,
+        string scopeDecisionSummary,
         bool isPreviewAvailable,
         PointBusinessSummaryState businessSummary)
     {
@@ -73,6 +75,8 @@ public sealed class InspectionPointState : ViewModelBase
         LastFaultTime = lastFaultTime;
         DispatchPoolEntry = dispatchPoolEntry;
         LastInspectionConclusion = lastInspectionConclusion;
+        IsInDefaultScope = isInDefaultScope;
+        ScopeDecisionSummary = scopeDecisionSummary;
         IsPreviewAvailable = isPreviewAvailable;
         BusinessSummary = businessSummary;
     }
@@ -150,6 +154,10 @@ public sealed class InspectionPointState : ViewModelBase
     public string DispatchPoolEntry { get; }
 
     public string LastInspectionConclusion { get; }
+
+    public bool IsInDefaultScope { get; }
+
+    public string ScopeDecisionSummary { get; }
 
     public bool IsPreviewAvailable { get; }
 

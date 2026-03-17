@@ -116,6 +116,16 @@ public static class TextTokens
     public const string InspectionRecentFaultTimeLabel = "inspection.recentFaultTimeLabel";
     public const string InspectionWorkbenchTitle = "inspection.workbenchTitle";
     public const string InspectionWorkbenchDescription = "inspection.workbenchDescription";
+    public const string InspectionScopePreviewTitle = "inspection.scopePreviewTitle";
+    public const string InspectionScopePreviewDescription = "inspection.scopePreviewDescription";
+    public const string InspectionScopePlanNameLabel = "inspection.scopePlanNameLabel";
+    public const string InspectionScopeMatchedCountLabel = "inspection.scopeMatchedCountLabel";
+    public const string InspectionScopeUnmatchedCountLabel = "inspection.scopeUnmatchedCountLabel";
+    public const string InspectionScopeRuleSummaryLabel = "inspection.scopeRuleSummaryLabel";
+    public const string InspectionScopeExecutionSummaryLabel = "inspection.scopeExecutionSummaryLabel";
+    public const string InspectionScopeUnmatchedReasonLabel = "inspection.scopeUnmatchedReasonLabel";
+    public const string InspectionScopeMatchedListLabel = "inspection.scopeMatchedListLabel";
+    public const string InspectionScopeUnmatchedListLabel = "inspection.scopeUnmatchedListLabel";
     public const string InspectionWorkbenchMapBadge = "inspection.workbenchMapBadge";
     public const string InspectionWorkbenchHint = "inspection.workbenchHint";
     public const string InspectionMapModeReal = "inspection.mapModeReal";
