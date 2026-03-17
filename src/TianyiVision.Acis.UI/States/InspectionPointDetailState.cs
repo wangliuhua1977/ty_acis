@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TianyiVision.Acis.Services.Inspection;
 
 namespace TianyiVision.Acis.UI.States;
@@ -60,6 +61,22 @@ public sealed record InspectionPointDetailState(
     public string AiAnalysisStatus { get; init; } = InspectionEvidenceValueKeys.AiAnalysisReserved;
 
     public string AiAnalysisSummary { get; init; } = string.Empty;
+
+    public bool IsAiAbnormalDetected { get; init; }
+
+    public string AiRecognitionSummary { get; init; } = string.Empty;
+
+    public IReadOnlyList<string> AiAbnormalTags { get; init; } = [];
+
+    public double AiConfidence { get; init; }
+
+    public string AiSuggestedAction { get; init; } = string.Empty;
+
+    public bool RouteToReviewWallReserved { get; init; }
+
+    public bool RouteToDispatchPoolReserved { get; init; }
+
+    public bool ManualReviewRequiredReserved { get; init; }
 
     public bool HasGeneratedEvidence => ScreenshotSuccessCount > 0;
 

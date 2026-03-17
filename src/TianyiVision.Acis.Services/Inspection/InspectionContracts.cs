@@ -92,6 +92,7 @@ public static class InspectionEvidenceValueKeys
     public const string AiAnalysisReserved = "reserved";
     public const string AiAnalysisPending = "pending";
     public const string AiAnalysisCompleted = "completed";
+    public const string AiAnalysisFailed = "failed";
 }
 
 public sealed record InspectionGroupModel(
@@ -275,6 +276,20 @@ public sealed record InspectionTaskPointExecutionModel(
 
     public string AiAnalysisSummary { get; init; } = string.Empty;
 
+    public bool IsAiAbnormalDetected { get; init; }
+
+    public IReadOnlyList<string> AiAbnormalTags { get; init; } = [];
+
+    public double AiConfidence { get; init; }
+
+    public string AiSuggestedAction { get; init; } = string.Empty;
+
+    public bool RouteToReviewWallReserved { get; init; }
+
+    public bool RouteToDispatchPoolReserved { get; init; }
+
+    public bool ManualReviewRequiredReserved { get; init; }
+
     public IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems { get; init; } = [];
 
     [JsonPropertyName("screenshotReserved")]
@@ -352,6 +367,11 @@ public static class InspectionTaskModelExtensions
         if (pointExecution is null)
         {
             return string.IsNullOrWhiteSpace(task.Summary) ? "--" : task.Summary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary))
+        {
+            return pointExecution.AiAnalysisSummary;
         }
 
         if (!string.IsNullOrWhiteSpace(pointExecution.ExecutionSummary))
@@ -495,9 +515,38 @@ public sealed record InspectionPointEvidenceWriteRequest(
     public string AiAnalysisSummary { get; init; } = string.Empty;
 }
 
+public sealed record InspectionPointAiAnalysisRequest(
+    string TaskId,
+    string PointId,
+    string DeviceCode,
+    string CurrentPointContextSummary,
+    IReadOnlyList<InspectionPointEvidenceMetadataModel> EvidenceItems)
+{
+    public string EvidenceCaptureState { get; init; } = InspectionEvidenceValueKeys.CaptureStateNone;
+
+    public string EvidenceSummary { get; init; } = string.Empty;
+}
+
+public sealed record InspectionPointAiAnalysisResult(
+    string AiAnalysisStatus,
+    string AiAnalysisSummary,
+    bool IsAiAbnormalDetected,
+    IReadOnlyList<string> AbnormalTags,
+    double Confidence,
+    string SuggestedAction,
+    bool AiAnalysisInvoked,
+    bool RouteToReviewWallReserved,
+    bool RouteToDispatchPoolReserved,
+    bool ManualReviewRequiredReserved);
+
 public interface IInspectionPointCheckExecutor
 {
     Task<InspectionPointCheckResult> ExecuteAsync(InspectionPointCheckRequest request, CancellationToken cancellationToken);
+}
+
+public interface IInspectionEvidenceAiAnalysisService
+{
+    InspectionPointAiAnalysisResult Analyze(InspectionPointAiAnalysisRequest request);
 }
 
 public interface IInspectionTaskHistoryStore

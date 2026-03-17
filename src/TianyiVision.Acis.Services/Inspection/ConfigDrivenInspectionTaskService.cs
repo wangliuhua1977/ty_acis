@@ -27,6 +27,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
     private readonly IInspectionSettingsService _inspectionSettingsService;
     private readonly IInspectionTaskHistoryStore _taskHistoryStore;
     private readonly IInspectionPointCheckExecutor _pointCheckExecutor;
+    private readonly IInspectionEvidenceAiAnalysisService _inspectionEvidenceAiAnalysisService;
     private readonly List<InspectionTaskRecordModel> _taskHistory;
     private readonly Dictionary<string, InspectionTaskRecordModel> _latestTaskByGroupId;
 
@@ -34,12 +35,14 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         IPointWorkspaceService pointWorkspaceService,
         IInspectionSettingsService inspectionSettingsService,
         IInspectionTaskHistoryStore taskHistoryStore,
-        IInspectionPointCheckExecutor pointCheckExecutor)
+        IInspectionPointCheckExecutor pointCheckExecutor,
+        IInspectionEvidenceAiAnalysisService inspectionEvidenceAiAnalysisService)
     {
         _pointWorkspaceService = pointWorkspaceService;
         _inspectionSettingsService = inspectionSettingsService;
         _taskHistoryStore = taskHistoryStore;
         _pointCheckExecutor = pointCheckExecutor;
+        _inspectionEvidenceAiAnalysisService = inspectionEvidenceAiAnalysisService;
 
         _taskHistory = _taskHistoryStore.Load()
             .OrderByDescending(task => task.CreatedAt)
@@ -350,9 +353,22 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                 "未找到需要写回证据的点位记录。");
         }
 
+        var pointExecution = existingTask.FindPointExecution(request.PointId)!;
         var normalizedItems = NormalizeEvidenceItems(request);
         var evidenceCaptureState = NormalizeEvidenceCaptureState(request.EvidenceCaptureState, normalizedItems.Count);
         var evidenceSummary = NormalizeEvidenceSummary(request, evidenceCaptureState, normalizedItems.Count);
+        var aiAnalysis = _inspectionEvidenceAiAnalysisService.Analyze(
+            new InspectionPointAiAnalysisRequest(
+                request.TaskId,
+                request.PointId,
+                request.DeviceCode,
+                BuildPointContextSummary(existingTask, pointExecution, evidenceSummary),
+                normalizedItems)
+            {
+                EvidenceCaptureState = evidenceCaptureState,
+                EvidenceSummary = evidenceSummary
+            });
+        var normalizedItemsWithAi = ApplyAiAnalysisToEvidenceItems(normalizedItems, aiAnalysis);
 
         var updatedTask = UpdateTask(request.TaskId, current =>
         {
@@ -367,16 +383,35 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                         EvidenceRetentionMode = NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode),
                         EvidenceRetentionDays = Math.Max(0, request.EvidenceRetentionDays),
                         AllowManualSupplementScreenshot = request.AllowManualSupplementScreenshot,
-                        AiAnalysisStatus = string.IsNullOrWhiteSpace(request.AiAnalysisStatus)
-                            ? InspectionEvidenceValueKeys.AiAnalysisPending
-                            : request.AiAnalysisStatus.Trim(),
-                        AiAnalysisSummary = request.AiAnalysisSummary?.Trim() ?? string.Empty,
-                        EvidenceItems = normalizedItems
+                        AiAnalysisStatus = aiAnalysis.AiAnalysisStatus,
+                        AiAnalysisSummary = aiAnalysis.AiAnalysisSummary,
+                        IsAiAbnormalDetected = aiAnalysis.IsAiAbnormalDetected,
+                        AiAbnormalTags = aiAnalysis.AbnormalTags,
+                        AiConfidence = aiAnalysis.Confidence,
+                        AiSuggestedAction = aiAnalysis.SuggestedAction,
+                        RouteToReviewWallReserved = aiAnalysis.RouteToReviewWallReserved,
+                        RouteToDispatchPoolReserved = aiAnalysis.RouteToDispatchPoolReserved,
+                        ManualReviewRequiredReserved = aiAnalysis.ManualReviewRequiredReserved,
+                        EvidenceItems = normalizedItemsWithAi
                     }
                     : point)
                 .ToList();
 
-            return current with { PointExecutions = queue };
+            var updatedPoint = queue.First(point => string.Equals(point.PointId, request.PointId, StringComparison.Ordinal));
+            var baseSummary = BuildTaskSummary(
+                current.Status,
+                current.TotalPointCount,
+                current.SuccessCount,
+                current.FailureCount,
+                current.SkippedCount,
+                current.ScopePlanName,
+                current.CurrentPointName);
+
+            return current with
+            {
+                PointExecutions = queue,
+                Summary = BuildTaskSummaryWithAi(baseSummary, updatedPoint)
+            };
         });
 
         ApplyEvidenceRetention(
@@ -388,6 +423,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
         MapPointSourceDiagnostics.Write(
             "InspectionEvidence",
             $"pointId={request.PointId}, deviceCode={request.DeviceCode}, screenshotPlannedCount={Math.Max(1, request.ScreenshotPlannedCount)}, screenshotSuccessCount={Math.Max(0, request.ScreenshotSuccessCount)}, evidenceWritten={normalizedItems.Count > 0}, evidencePath={BuildEvidencePathLog(normalizedItems)}, evidenceRetentionMode={NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode)}, evidenceRetentionDays={Math.Max(0, request.EvidenceRetentionDays)}");
+        MapPointSourceDiagnostics.Write(
+            "InspectionAi",
+            $"pointId={request.PointId}, deviceCode={request.DeviceCode}, evidenceItemCount={normalizedItemsWithAi.Count}, aiAnalysisInvoked={aiAnalysis.AiAnalysisInvoked}, aiAnalysisStatus={aiAnalysis.AiAnalysisStatus}, aiAnalysisSummary={aiAnalysis.AiAnalysisSummary}, abnormalTags={string.Join('|', aiAnalysis.AbnormalTags)}, confidence={aiAnalysis.Confidence:0.00}");
 
         return ServiceResponse<InspectionTaskRecordModel>.Success(updatedTask);
     }
@@ -782,15 +820,22 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
                     FinalPlaybackResult = string.IsNullOrWhiteSpace(result.FinalPlaybackResult)
                         ? result.ResultSummary
                         : result.FinalPlaybackResult,
-                    PreviewUrl = result.PreviewUrl ?? string.Empty,
-                    PreviewHostKind = result.PreviewHostKind ?? string.Empty,
-                    EvidenceCaptureState = ResolvePendingEvidenceCaptureState(point, result),
-                    EvidenceSummary = ResolvePendingEvidenceSummary(point, result),
-                    AiAnalysisStatus = InspectionEvidenceValueKeys.AiAnalysisReserved,
-                    AiAnalysisSummary = string.Empty
-                }
-                : point)
-            .ToList();
+                     PreviewUrl = result.PreviewUrl ?? string.Empty,
+                     PreviewHostKind = result.PreviewHostKind ?? string.Empty,
+                     EvidenceCaptureState = ResolvePendingEvidenceCaptureState(point, result),
+                     EvidenceSummary = ResolvePendingEvidenceSummary(point, result),
+                     AiAnalysisStatus = InspectionEvidenceValueKeys.AiAnalysisReserved,
+                     AiAnalysisSummary = string.Empty,
+                     IsAiAbnormalDetected = false,
+                     AiAbnormalTags = [],
+                     AiConfidence = 0d,
+                     AiSuggestedAction = string.Empty,
+                     RouteToReviewWallReserved = false,
+                     RouteToDispatchPoolReserved = false,
+                     ManualReviewRequiredReserved = false
+                 }
+                 : point)
+             .ToList();
 
         var successCount = queue.Count(point => point.Status == InspectionPointExecutionStatusModel.Succeeded);
         var failureCount = queue.Count(point => point.Status == InspectionPointExecutionStatusModel.Failed);
@@ -901,6 +946,52 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService
             InspectionTaskStatusModel.Cancelled => "任务已取消，本轮未进入点位执行。",
             _ => "任务状态待更新。"
         };
+    }
+
+    private static string BuildTaskSummaryWithAi(string baseSummary, InspectionTaskPointExecutionModel pointExecution)
+    {
+        if (string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary))
+        {
+            return baseSummary;
+        }
+
+        return $"{baseSummary} 最新AI结论：{pointExecution.PointName} - {pointExecution.AiAnalysisSummary}";
+    }
+
+    private static IReadOnlyList<InspectionPointEvidenceMetadataModel> ApplyAiAnalysisToEvidenceItems(
+        IReadOnlyList<InspectionPointEvidenceMetadataModel> evidenceItems,
+        InspectionPointAiAnalysisResult aiAnalysis)
+    {
+        return evidenceItems
+            .Select(item => item with
+            {
+                AiAnalysisStatus = aiAnalysis.AiAnalysisStatus,
+                AiAnalysisSummary = aiAnalysis.AiAnalysisSummary
+            })
+            .ToList();
+    }
+
+    private static string BuildPointContextSummary(
+        InspectionTaskRecordModel task,
+        InspectionTaskPointExecutionModel pointExecution,
+        string evidenceSummary)
+    {
+        var segments = new[]
+        {
+            $"task={task.TaskName}",
+            $"scope={task.ScopePlanName}",
+            $"point={pointExecution.PointName}",
+            $"execution={pointExecution.ExecutionSummary}",
+            $"failure={pointExecution.FailureReason}",
+            $"playback={pointExecution.FinalPlaybackResult}",
+            $"evidence={evidenceSummary}"
+        };
+
+        return string.Join(
+            " | ",
+            segments.Where(segment =>
+                !segment.EndsWith("=", StringComparison.Ordinal)
+                && !segment.EndsWith("=--", StringComparison.Ordinal)));
     }
 
     private InspectionTaskBoardModel BuildTaskBoard(string groupId, string groupName)

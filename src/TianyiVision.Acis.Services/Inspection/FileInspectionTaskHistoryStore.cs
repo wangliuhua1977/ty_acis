@@ -108,6 +108,17 @@ public sealed class FileInspectionTaskHistoryStore : IInspectionTaskHistoryStore
                 ? InspectionEvidenceValueKeys.AiAnalysisReserved
                 : point.AiAnalysisStatus.Trim(),
             AiAnalysisSummary = point.AiAnalysisSummary?.Trim() ?? string.Empty,
+            IsAiAbnormalDetected = point.IsAiAbnormalDetected,
+            AiAbnormalTags = (point.AiAbnormalTags ?? Array.Empty<string>())
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => tag.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            AiConfidence = Math.Clamp(point.AiConfidence, 0d, 1d),
+            AiSuggestedAction = point.AiSuggestedAction?.Trim() ?? string.Empty,
+            RouteToReviewWallReserved = point.RouteToReviewWallReserved,
+            RouteToDispatchPoolReserved = point.RouteToDispatchPoolReserved,
+            ManualReviewRequiredReserved = point.ManualReviewRequiredReserved,
             EvidenceItems = evidenceItems
         };
     }

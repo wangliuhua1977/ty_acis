@@ -752,6 +752,14 @@
                                                Style="{StaticResource PageDescriptionTextStyle}"
                                                Text="{Binding SelectedPointDetail.EvidenceSummary}"
                                                TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Style="{StaticResource FieldValueTextStyle}"
+                                               Text="{Binding SelectedPointDetail.AiRecognitionSummary}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Style="{StaticResource PageDescriptionTextStyle}"
+                                               Text="{Binding SelectedPointDetail.AiAnalysisSummary}"
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 

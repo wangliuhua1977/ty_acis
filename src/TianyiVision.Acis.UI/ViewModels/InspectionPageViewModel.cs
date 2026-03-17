@@ -839,9 +839,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var execution = ResolvePointExecution(GetCurrentWorkspace(), point.Id);
         var playbackStatus = ResolveDetailPlaybackStatus(point, execution);
         var faultType = ResolveDetailFaultType(point, summary, execution);
-        var faultDescription = ResolveDetailSummary(point, summary, execution);
+        var faultDescription = AppendAiSummary(ResolveDetailSummary(point, summary, execution), execution);
         var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, point);
-        var previewBusinessDescription = ResolvePreviewBusinessDescription(execution, point);
+        var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescription(execution, point), execution);
         var previewHostUri = ResolvePreviewHostUri(execution);
 
         return new InspectionPointDetailState(
@@ -863,7 +863,9 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             summary.IsCoordinatePending,
             point.LastFaultTime,
             point.DispatchPoolEntry,
-            execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
+            !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
+                ? execution.AiAnalysisSummary
+                : execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
         {
             PreviewHostUri = previewHostUri,
             PreviewHostKind = execution?.PreviewHostKind ?? string.Empty,
@@ -884,6 +886,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             EvidenceRetentionDays = execution?.EvidenceRetentionDays ?? 0,
             AiAnalysisStatus = execution?.AiAnalysisStatus ?? InspectionEvidenceValueKeys.AiAnalysisReserved,
             AiAnalysisSummary = execution?.AiAnalysisSummary ?? string.Empty,
+            IsAiAbnormalDetected = execution?.IsAiAbnormalDetected ?? false,
+            AiRecognitionSummary = ResolveAiRecognitionSummary(execution),
+            AiAbnormalTags = execution?.AiAbnormalTags ?? [],
+            AiConfidence = execution?.AiConfidence ?? 0d,
+            AiSuggestedAction = execution?.AiSuggestedAction ?? string.Empty,
+            RouteToReviewWallReserved = execution?.RouteToReviewWallReserved ?? false,
+            RouteToDispatchPoolReserved = execution?.RouteToDispatchPoolReserved ?? false,
+            ManualReviewRequiredReserved = execution?.ManualReviewRequiredReserved ?? false,
             ScreenshotReserved = execution?.ScreenshotReserved ?? "reserved",
             EvidenceReserved = execution?.EvidenceReserved ?? "reserved",
             AiAnalysisReserved = execution?.AiAnalysisReserved ?? "reserved"
@@ -1014,6 +1024,40 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
 
         return $"{playbackDescription} {execution.EvidenceSummary}";
+    }
+
+    private static string AppendAiSummary(string baseSummary, InspectionTaskPointExecutionModel? execution)
+    {
+        if (execution is null || string.IsNullOrWhiteSpace(execution.AiAnalysisSummary))
+        {
+            return baseSummary;
+        }
+
+        if (string.IsNullOrWhiteSpace(baseSummary))
+        {
+            return execution.AiAnalysisSummary;
+        }
+
+        return $"{baseSummary} {execution.AiAnalysisSummary}";
+    }
+
+    private static string ResolveAiRecognitionSummary(InspectionTaskPointExecutionModel? execution)
+    {
+        if (execution is null)
+        {
+            return "AI画面分析待执行";
+        }
+
+        return execution.AiAnalysisStatus switch
+        {
+            InspectionEvidenceValueKeys.AiAnalysisCompleted when execution.IsAiAbnormalDetected
+                => $"AI识别异常，置信度 {execution.AiConfidence:P0}",
+            InspectionEvidenceValueKeys.AiAnalysisCompleted
+                => $"AI未识别异常，置信度 {execution.AiConfidence:P0}",
+            InspectionEvidenceValueKeys.AiAnalysisFailed => "AI画面分析未完成",
+            InspectionEvidenceValueKeys.AiAnalysisPending => "AI画面分析进行中",
+            _ => "AI画面分析待执行"
+        };
     }
 
     private string ResolvePointStatus(InspectionPointStatus status)

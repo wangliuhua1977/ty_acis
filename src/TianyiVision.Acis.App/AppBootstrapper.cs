@@ -82,6 +82,7 @@ public sealed class AppBootstrapper
         var inspectionSettingsService = new FileInspectionSettingsService(paths, documentStore);
         var inspectionTaskHistoryStore = new FileInspectionTaskHistoryStore(paths, documentStore);
         var inspectionPointCheckExecutor = new ReservedInspectionPointCheckExecutor();
+        var inspectionEvidenceAiAnalysisService = new StageOneInspectionEvidenceAiAnalysisService();
         var platformSettings = platformIntegrationSettingsService.Load();
         var ctyunConfigurationIssues = platformSettings.GetCtyunConfigurationIssues();
         var demoDeviceCatalogService = new DemoDeviceCatalogService();
@@ -139,7 +140,8 @@ public sealed class AppBootstrapper
             pointWorkspaceService,
             inspectionSettingsService,
             inspectionTaskHistoryStore,
-            inspectionPointCheckExecutor);
+            inspectionPointCheckExecutor,
+            inspectionEvidenceAiAnalysisService);
         _dispatchNotificationService = new ConfigDrivenDispatchNotificationService(
             faultPoolService,
             dispatchNotificationSender,
