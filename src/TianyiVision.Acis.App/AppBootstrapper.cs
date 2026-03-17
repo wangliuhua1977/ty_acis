@@ -81,7 +81,6 @@ public sealed class AppBootstrapper
         var workOrderSnapshotService = new FileDispatchWorkOrderSnapshotService(paths, documentStore);
         var inspectionSettingsService = new FileInspectionSettingsService(paths, documentStore);
         var inspectionTaskHistoryStore = new FileInspectionTaskHistoryStore(paths, documentStore);
-        var inspectionPointCheckExecutor = new ReservedInspectionPointCheckExecutor();
         var inspectionEvidenceAiAnalysisService = new StageOneInspectionEvidenceAiAnalysisService();
         var platformSettings = platformIntegrationSettingsService.Load();
         var ctyunConfigurationIssues = platformSettings.GetCtyunConfigurationIssues();
@@ -118,6 +117,7 @@ public sealed class AppBootstrapper
             notificationSettingsService);
 
         var ctyunRuntime = CreateCtyunRuntime(platformSettings);
+        var inspectionPointCheckExecutor = new ReservedInspectionPointCheckExecutor(ctyunRuntime);
         var deviceCatalogService = BuildDeviceCatalogService(platformSettings, demoDeviceCatalogService, ctyunRuntime);
         var alertQueryService = BuildAlertQueryService(platformSettings, demoAlertQueryService, ctyunRuntime);
         var pointDetailService = BuildPointDetailService(platformSettings, demoDeviceCatalogService, deviceCatalogService, ctyunRuntime);

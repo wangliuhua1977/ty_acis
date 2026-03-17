@@ -710,7 +710,10 @@ public sealed record InspectionPointCheckRequest(
     InspectionVideoInspectionSettings VideoInspection,
     bool IsFocusPoint,
     bool UsesOverridePolicy,
-    string PolicySnapshotSummary);
+    string PolicySnapshotSummary)
+{
+    public bool PreviewOnly { get; init; }
+}
 
 public sealed record InspectionPointCheckResult(
     InspectionPointExecutionStatusModel Status,
@@ -768,12 +771,36 @@ public sealed record InspectionPointCheckResult(
 
 public sealed class InspectionTaskBoardChangedEventArgs : EventArgs
 {
-    public InspectionTaskBoardChangedEventArgs(string groupId)
+    public InspectionTaskBoardChangedEventArgs(
+        string groupId,
+        InspectionTaskBoardModel taskBoard)
     {
         GroupId = groupId;
+        TaskBoard = taskBoard;
     }
 
     public string GroupId { get; }
+
+    public InspectionTaskBoardModel TaskBoard { get; }
+}
+
+public sealed record InspectionPointPreviewSessionModel(
+    string GroupId,
+    string PointId,
+    string DeviceCode,
+    string PreviewUrl,
+    string PreviewHostKind,
+    string ResultSummary)
+{
+    public string OnlineCheckResult { get; init; } = string.Empty;
+
+    public string StreamUrlAcquireResult { get; init; } = string.Empty;
+
+    public int PlaybackAttemptCount { get; init; }
+
+    public bool ProtocolFallbackUsed { get; init; }
+
+    public string FinalPlaybackResult { get; init; } = string.Empty;
 }
 
 public sealed record InspectionPointEvidenceWriteRequest(
@@ -888,6 +915,11 @@ public interface IInspectionTaskService
     event EventHandler<InspectionTaskBoardChangedEventArgs>? TaskBoardChanged;
 
     ServiceResponse<InspectionWorkspaceSnapshot> GetWorkspace();
+
+    Task<ServiceResponse<InspectionPointPreviewSessionModel>> PreparePointPreviewAsync(
+        string groupId,
+        string pointId,
+        CancellationToken cancellationToken = default);
 
     ServiceResponse<InspectionTaskRecordModel> StartSinglePointInspection(string groupId, string pointId);
 

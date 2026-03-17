@@ -49,6 +49,24 @@ public sealed class DemoInspectionTaskService : IInspectionTaskService
         return ServiceResponse<InspectionWorkspaceSnapshot>.Success(snapshot);
     }
 
+    public Task<ServiceResponse<InspectionPointPreviewSessionModel>> PreparePointPreviewAsync(
+        string groupId,
+        string pointId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.FromResult(ServiceResponse<InspectionPointPreviewSessionModel>.Failure(
+            new InspectionPointPreviewSessionModel(
+                string.IsNullOrWhiteSpace(groupId) ? DemoGroupId : groupId,
+                pointId ?? string.Empty,
+                pointId ?? string.Empty,
+                string.Empty,
+                string.Empty,
+                "演示分支未接入真实预览。"),
+            "演示分支未接入真实预览。"));
+    }
+
     public ServiceResponse<InspectionTaskRecordModel> StartSinglePointInspection(string groupId, string pointId)
         => ServiceResponse<InspectionTaskRecordModel>.Failure(
             CreateRejectedTask(groupId, $"演示点位 {pointId}", InspectionTaskTypeModel.SinglePoint),

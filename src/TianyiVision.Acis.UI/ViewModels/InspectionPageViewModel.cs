@@ -22,6 +22,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private readonly IInspectionTaskService _inspectionTaskService;
     private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedScopePlanIdByGroupId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, InspectionPointPreviewSessionModel> _previewSessionByPointId = new(StringComparer.Ordinal);
     private readonly RelayCommand _selectScopePlanCommand;
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _saveCurrentScopePlanCommand;
@@ -45,6 +46,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private PointBusinessSummaryState? _selectedPointSummary;
     private InspectionPointDetailState? _selectedPointDetail;
     private InspectionPointState? _selectedPoint;
+    private InspectionPointState? _selectedScopePoint;
+    private MapPointState? _selectedMapPoint;
+    private RecentFaultSummaryState? _selectedRecentFault;
+    private CancellationTokenSource? _selectedPointPreviewCts;
+    private long _selectedPointPreviewToken;
     private string _currentPointSourceType = string.Empty;
     private string _toggleGroupActionText = string.Empty;
     private string _selectedMapPointId = string.Empty;
@@ -269,8 +275,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
         SelectScopePlanCommand = _selectScopePlanCommand;
         _saveCurrentScopePlanCommand = new RelayCommand(_ => SaveCurrentScopePlan(), _ => CanSaveCurrentScopePlan);
-        _executeInspectionCommand = new RelayCommand(_ => StartGroupInspection(), _ => ExecutionState?.IsEnabled == true);
-        _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspection(), _ => CanStartSinglePointInspection);
+        _executeInspectionCommand = new RelayCommand(_ => StartGroupInspectionAsyncSafe(), _ => ExecutionState?.IsEnabled == true);
+        _startSinglePointInspectionCommand = new RelayCommand(_ => StartSinglePointInspectionAsyncSafe(), _ => CanStartSinglePointInspection);
         _openDispatchWorkspaceCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Dispatch));
         _openReportsCenterCommand = new RelayCommand(_ => RequestNavigate(AppSectionId.Reports));
         _selectFirstUnmappedPointCommand = new RelayCommand(
@@ -646,7 +652,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             && SelectedGroup is not null
             && _workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace)
             && !string.IsNullOrWhiteSpace(ResolveScopePlanSelection(workspace, null))
-            && HasSavableScopePlan(workspace);
+            && HasSavableScopePlan(workspace)
+            && HasPendingScopePlanSelection(workspace);
 
     public string CurrentViewingScopePlanName
     {
@@ -836,8 +843,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (selectedPlan is null)
         {
             ScopePlanPreview = CreateEmptyScopePlanPreview();
-            ScopeMatchedPoints = new ObservableCollection<InspectionPointState>();
-            ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>();
+            workspace.ScopeMatchedPoints = new ObservableCollection<InspectionPointState>();
+            workspace.ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>();
+            ScopeMatchedPoints = workspace.ScopeMatchedPoints;
+            ScopeUnmatchedPoints = workspace.ScopeUnmatchedPoints;
             CurrentViewingScopePlanName = TaskEmptyText;
             CurrentExecutionScopePlanName = string.IsNullOrWhiteSpace(workspace.ExecutionScopePlanName)
                 ? TaskEmptyText
@@ -875,8 +884,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             .Select(point => CreateScopePointState(point, decisionsByPointId.GetValueOrDefault(point.Id)))
             .ToList();
 
-        ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => point.IsInDefaultScope));
-        ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => !point.IsInDefaultScope));
+        workspace.ScopeMatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => point.IsInDefaultScope));
+        workspace.ScopeUnmatchedPoints = new ObservableCollection<InspectionPointState>(scopePoints.Where(point => !point.IsInDefaultScope));
+        ScopeMatchedPoints = workspace.ScopeMatchedPoints;
+        ScopeUnmatchedPoints = workspace.ScopeUnmatchedPoints;
         UpdateScopePlanFallbackHint(workspace);
         _selectScopePlanCommand.RaiseCanExecuteChanged();
         _saveCurrentScopePlanCommand.RaiseCanExecuteChanged();
@@ -913,15 +924,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         {
             if (dispatcher.CheckAccess())
             {
-                RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id);
+                ApplyTaskBoardChanged(e.GroupId, e.TaskBoard);
                 return;
             }
 
-            dispatcher.Invoke(() => RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id));
+            dispatcher.Invoke(() => ApplyTaskBoardChanged(e.GroupId, e.TaskBoard));
             return;
         }
 
-        RequestRefreshWorkspace(e.GroupId, SelectedPoint?.Id);
+        ApplyTaskBoardChanged(e.GroupId, e.TaskBoard);
     }
 
     private void RequestRefreshWorkspace(string? preferredGroupId = null, string? preferredPointId = null)
@@ -930,16 +941,135 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         TryApplyWorkspaceSnapshot(snapshot, preferredGroupId, preferredPointId);
     }
 
+    private void ApplyTaskBoardChanged(string groupId, InspectionTaskBoardModel taskBoard)
+    {
+        if (!_workspaceByGroupId.TryGetValue(groupId, out var workspace))
+        {
+            RequestRefreshWorkspace(groupId, SelectedPoint?.Id);
+            return;
+        }
+
+        workspace.TaskBoard = taskBoard;
+        workspace.CurrentTask = taskBoard.CurrentTask is null
+            ? null
+            : CreateTaskSummaryState(taskBoard.CurrentTask);
+        ReplaceRecentTasks(workspace.RecentTasks, taskBoard.RecentTasks.Select(CreateTaskSummaryState));
+
+        var currentTask = taskBoard.CurrentTask;
+        var executionsByPointId = currentTask?.PointExecutions.ToDictionary(point => point.PointId, StringComparer.Ordinal)
+            ?? new Dictionary<string, InspectionTaskPointExecutionModel>(StringComparer.Ordinal);
+
+        foreach (var point in workspace.Points)
+        {
+            ApplyPointExecutionState(point, currentTask, executionsByPointId.GetValueOrDefault(point.Id));
+            SyncMapPoint(point, workspace.MapPoints);
+        }
+
+        foreach (var scopePoint in workspace.ScopeMatchedPoints)
+        {
+            if (workspace.PointsById.TryGetValue(scopePoint.Id, out var sourcePoint))
+            {
+                MirrorPointVisualState(scopePoint, sourcePoint);
+            }
+        }
+
+        foreach (var scopePoint in workspace.ScopeUnmatchedPoints)
+        {
+            if (workspace.PointsById.TryGetValue(scopePoint.Id, out var sourcePoint))
+            {
+                MirrorPointVisualState(scopePoint, sourcePoint);
+            }
+        }
+
+        if (SelectedGroup?.Id == groupId)
+        {
+            CurrentTask = workspace.CurrentTask;
+            ReplaceRecentTasks(RecentTasks, workspace.RecentTasks);
+            RefreshSummary(workspace);
+            RefreshSinglePointInspectionSummary(workspace, SelectedPoint);
+
+            if (SelectedPoint is not null && workspace.PointsById.TryGetValue(SelectedPoint.Id, out var selectedPoint))
+            {
+                _selectedPoint = selectedPoint;
+                SelectedPoint = selectedPoint;
+                SelectedPointDetail = CreatePointDetail(selectedPoint, selectedPoint.BusinessSummary);
+            }
+        }
+    }
+
+    private static void ReplaceRecentTasks(
+        ObservableCollection<InspectionTaskSummaryState> target,
+        IEnumerable<InspectionTaskSummaryState> source)
+    {
+        target.Clear();
+        foreach (var item in source)
+        {
+            target.Add(item);
+        }
+    }
+
+    private void ApplyPointExecutionState(
+        InspectionPointState point,
+        InspectionTaskRecordModel? currentTask,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        point.Status = ResolvePointStatusFromExecution(point, execution);
+        point.StatusText = ResolvePointStatus(point.Status);
+        point.IsCurrent = execution?.Status == InspectionPointExecutionStatusModel.Running;
+        point.PlaybackStatus = ResolveDetailPlaybackStatus(point, execution);
+        point.FaultType = ResolveDetailFaultType(point, point.BusinessSummary, execution);
+        point.FaultDescription = AppendAiSummary(ResolveDetailSummary(point, point.BusinessSummary, execution), execution);
+        point.DispatchPoolEntry = ResolveDispatchPoolEntryText(currentTask, point.Id);
+        point.LastInspectionConclusion = !string.IsNullOrWhiteSpace(execution?.RecoverySummary)
+            ? execution.RecoverySummary
+            : !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
+                ? execution.AiAnalysisSummary
+                : string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+                    ? point.LastInspectionConclusion
+                    : execution.FinalPlaybackResult;
+        point.IsPreviewAvailable = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
+            || _previewSessionByPointId.ContainsKey(point.Id);
+    }
+
+    private static void MirrorPointVisualState(InspectionPointState target, InspectionPointState source)
+    {
+        target.Status = source.Status;
+        target.StatusText = source.StatusText;
+        target.IsCurrent = source.IsCurrent;
+        target.PlaybackStatus = source.PlaybackStatus;
+        target.FaultType = source.FaultType;
+        target.FaultDescription = source.FaultDescription;
+        target.DispatchPoolEntry = source.DispatchPoolEntry;
+        target.LastInspectionConclusion = source.LastInspectionConclusion;
+        target.IsPreviewAvailable = source.IsPreviewAvailable;
+    }
+
+    private InspectionPointStatus ResolvePointStatusFromExecution(
+        InspectionPointState point,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (execution is null)
+        {
+            return point.Status;
+        }
+
+        return execution.Status switch
+        {
+            InspectionPointExecutionStatusModel.Pending => InspectionPointStatus.Pending,
+            InspectionPointExecutionStatusModel.Running => InspectionPointStatus.Inspecting,
+            InspectionPointExecutionStatusModel.Succeeded => InspectionPointStatus.Normal,
+            InspectionPointExecutionStatusModel.Skipped => InspectionPointStatus.Silent,
+            InspectionPointExecutionStatusModel.Failed => execution.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline
+                ? InspectionPointStatus.PausedUntilRecovery
+                : InspectionPointStatus.Fault,
+            _ => point.Status
+        };
+    }
+
     public bool TryWritePointEvidence(InspectionPointEvidenceWriteRequest request)
     {
         var response = _inspectionTaskService.WritePointEvidence(request);
-        if (!response.IsSuccess)
-        {
-            return false;
-        }
-
-        RequestRefreshWorkspace(response.Data.GroupId, request.PointId);
-        return true;
+        return response.IsSuccess;
     }
 
     public void UpdateMapAvailability(bool isAvailable)
@@ -951,23 +1081,20 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     private void SelectPoint(InspectionPointState point)
     {
-        foreach (var candidate in Points)
+        if (!ReferenceEquals(_selectedPoint, point))
         {
-            candidate.IsSelected = candidate.Id == point.Id;
+            if (_selectedPoint is not null)
+            {
+                _selectedPoint.IsSelected = false;
+            }
+
+            point.IsSelected = true;
+            _selectedPoint = point;
         }
 
-        foreach (var mapPoint in MapPoints)
-        {
-            mapPoint.IsSelected = mapPoint.PointId == point.Id;
-            mapPoint.IsCurrent = mapPoint.PointId == point.Id && point.IsCurrent;
-        }
-
-        foreach (var fault in RecentFaults)
-        {
-            fault.IsSelected = fault.PointId == point.Id;
-        }
-
-        SyncScopePointSelection(point.Id);
+        UpdateMapSelection(point);
+        UpdateRecentFaultSelection(point.Id);
+        UpdateScopeSelection(point.Id);
 
         SelectedPoint = point;
         SelectedMapPointId = point.Id;
@@ -977,6 +1104,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         SelectedPointDetail = CreatePointDetail(point, summary);
         RefreshSinglePointInspectionSummary(GetCurrentWorkspace(), point);
         _pointSelectionContext.Update(summary, nameof(InspectionPageViewModel));
+        _ = PrepareSelectedPointPreviewAsync(point);
 
         MapPointSourceDiagnostics.Write(
             "InspectionSummary",
@@ -992,7 +1120,118 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         }
     }
 
-    private void StartSinglePointInspection()
+    private void UpdateMapSelection(InspectionPointState point)
+    {
+        if (_selectedMapPoint is not null && !string.Equals(_selectedMapPoint.PointId, point.Id, StringComparison.Ordinal))
+        {
+            _selectedMapPoint.IsSelected = false;
+            _selectedMapPoint.IsCurrent = false;
+        }
+
+        var mapPoint = MapPoints.FirstOrDefault(candidate => candidate.PointId == point.Id);
+        if (mapPoint is null)
+        {
+            _selectedMapPoint = null;
+            return;
+        }
+
+        mapPoint.IsSelected = true;
+        mapPoint.IsCurrent = point.IsCurrent;
+        _selectedMapPoint = mapPoint;
+    }
+
+    private void UpdateRecentFaultSelection(string pointId)
+    {
+        if (_selectedRecentFault is not null
+            && !string.Equals(_selectedRecentFault.PointId, pointId, StringComparison.Ordinal))
+        {
+            _selectedRecentFault.IsSelected = false;
+        }
+
+        _selectedRecentFault = RecentFaults.FirstOrDefault(candidate => candidate.PointId == pointId);
+        if (_selectedRecentFault is not null)
+        {
+            _selectedRecentFault.IsSelected = true;
+        }
+    }
+
+    private void UpdateScopeSelection(string pointId)
+    {
+        if (_selectedScopePoint is not null
+            && !string.Equals(_selectedScopePoint.Id, pointId, StringComparison.Ordinal))
+        {
+            _selectedScopePoint.IsSelected = false;
+        }
+
+        _selectedScopePoint = ScopeMatchedPoints.FirstOrDefault(candidate => candidate.Id == pointId)
+            ?? ScopeUnmatchedPoints.FirstOrDefault(candidate => candidate.Id == pointId);
+        if (_selectedScopePoint is not null)
+        {
+            _selectedScopePoint.IsSelected = true;
+        }
+    }
+
+    private async Task PrepareSelectedPointPreviewAsync(InspectionPointState point)
+    {
+        if (SelectedGroup is null || SelectedPoint?.Id != point.Id)
+        {
+            return;
+        }
+
+        var currentDetail = SelectedPointDetail;
+        if (currentDetail is null || currentDetail.PreviewHostUri is not null)
+        {
+            return;
+        }
+
+        _selectedPointPreviewCts?.Cancel();
+        _selectedPointPreviewCts?.Dispose();
+        _selectedPointPreviewCts = new CancellationTokenSource();
+        var previewToken = Interlocked.Increment(ref _selectedPointPreviewToken);
+
+        SelectedPointDetail = currentDetail with
+        {
+            PlaybackStatus = "实时预览加载中",
+            PreviewBusinessTitle = "实时预览准备中",
+            PreviewBusinessDescription = "AI智能巡检中心正在为当前点位加载真实预览。"
+        };
+
+        ServiceResponse<InspectionPointPreviewSessionModel> response;
+        try
+        {
+            response = await _inspectionTaskService.PreparePointPreviewAsync(
+                SelectedGroup.Id,
+                point.Id,
+                _selectedPointPreviewCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreview",
+                $"preview prepare failed: pointId={point.Id}, reason={exception.Message}");
+            return;
+        }
+
+        if (previewToken != _selectedPointPreviewToken
+            || SelectedPoint?.Id != point.Id)
+        {
+            return;
+        }
+
+        if (response.IsSuccess)
+        {
+            _previewSessionByPointId[point.Id] = response.Data;
+            point.IsPreviewAvailable = true;
+        }
+
+        SelectedPointDetail = CreatePointDetail(point, point.BusinessSummary);
+    }
+
+    private async void StartSinglePointInspection()
     {
         var workspace = GetCurrentWorkspace();
         if (workspace is null || SelectedPoint is null)
@@ -1000,26 +1239,36 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
-        var response = _inspectionTaskService.StartSinglePointInspection(workspace.Group.Id, SelectedPoint.Id);
+        SinglePointInspectionTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
+        SinglePointInspectionResultSummary = "AI智能巡检中心已启动当前点位巡检。";
+        ExecutionState?.GetType();
+
+        var selectedPoint = SelectedPoint;
+        var response = await Task.Run(() => _inspectionTaskService.StartSinglePointInspection(workspace.Group.Id, selectedPoint.Id));
         if (!response.IsSuccess)
         {
             CurrentTask = CreateTaskSummaryState(response.Data);
             UpdateTaskAbnormalFlowPresentation(response.Data);
-            ApplySinglePointInspectionRecord(response.Data, SelectedPoint);
+            ApplySinglePointInspectionRecord(response.Data, selectedPoint);
             return;
         }
-
-        RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint.Id);
     }
 
-    private void StartGroupInspection()
+    private async void StartGroupInspection()
     {
         if (SelectedGroup is null || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
         {
             return;
         }
 
-        var response = _inspectionTaskService.StartDefaultScopeInspection(workspace.Group.Id);
+        workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
+        workspace.ExecutionState.SimulationNote = "AI智能巡检中心已启动本组巡检。";
+        if (ReferenceEquals(ExecutionState, workspace.ExecutionState))
+        {
+            ExecutionState = workspace.ExecutionState;
+        }
+
+        var response = await Task.Run(() => _inspectionTaskService.StartDefaultScopeInspection(workspace.Group.Id));
         if (!response.IsSuccess)
         {
             CurrentTask = CreateTaskSummaryState(response.Data);
@@ -1029,8 +1278,172 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             workspace.ExecutionState.SimulationNote = response.Data.Summary;
             return;
         }
+    }
 
-        RequestRefreshWorkspace(workspace.Group.Id, SelectedPoint?.Id);
+    private async void StartSinglePointInspectionAsyncSafe()
+    {
+        var workspace = GetCurrentWorkspace();
+        var selectedPoint = SelectedPoint;
+        if (workspace is null || selectedPoint is null)
+        {
+            return;
+        }
+
+        var pendingSummary = "AI智能巡检中心已启动当前点位巡检。";
+        workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
+        workspace.ExecutionState.CurrentPointName = selectedPoint.Name;
+        workspace.ExecutionState.CurrentProgressText = "0 / 1";
+        workspace.ExecutionState.CurrentProgressValue = 0;
+        workspace.ExecutionState.SimulationNote = pendingSummary;
+        if (ReferenceEquals(ExecutionState, workspace.ExecutionState))
+        {
+            ExecutionState = workspace.ExecutionState;
+        }
+
+        SinglePointInspectionTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
+        SinglePointInspectionLastTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        SinglePointInspectionResultSummary = pendingSummary;
+        workspace.CurrentTask = CreatePendingTaskSummary(
+            selectedPoint.Name,
+            InspectionTaskTypeModel.SinglePoint,
+            selectedPoint.Name,
+            pendingSummary);
+        if (SelectedGroup?.Id == workspace.Group.Id)
+        {
+            CurrentTask = workspace.CurrentTask;
+        }
+
+        ServiceResponse<InspectionTaskRecordModel> response;
+        try
+        {
+            response = await Task.Run(() => _inspectionTaskService.StartSinglePointInspection(workspace.Group.Id, selectedPoint.Id));
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"single inspection start failed: groupId={workspace.Group.Id}, pointId={selectedPoint.Id}, reason={exception.Message}");
+            ApplyInspectionStartFailure(workspace, "AI智能巡检中心启动单点巡检失败，请稍后重试。", selectedPoint.Name);
+            return;
+        }
+
+        if (response.IsSuccess)
+        {
+            workspace.CurrentTask = CreateTaskSummaryState(response.Data);
+            if (SelectedGroup?.Id == workspace.Group.Id)
+            {
+                CurrentTask = workspace.CurrentTask;
+            }
+
+            UpdateTaskAbnormalFlowPresentation(response.Data);
+            ApplySinglePointInspectionRecord(response.Data, selectedPoint);
+            return;
+        }
+
+        ApplyInspectionStartFailure(
+            workspace,
+            string.IsNullOrWhiteSpace(response.Message) ? response.Data.Summary : response.Message,
+            selectedPoint.Name);
+    }
+
+    private async void StartGroupInspectionAsyncSafe()
+    {
+        if (SelectedGroup is null || !_workspaceByGroupId.TryGetValue(SelectedGroup.Id, out var workspace))
+        {
+            return;
+        }
+
+        var pendingSummary = "AI智能巡检中心已启动本组巡检。";
+        workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusRunning);
+        workspace.ExecutionState.CurrentPointName = "--";
+        workspace.ExecutionState.CurrentProgressText = $"0 / {Math.Max(0, workspace.Points.Count)}";
+        workspace.ExecutionState.CurrentProgressValue = 0;
+        workspace.ExecutionState.SimulationNote = pendingSummary;
+        if (ReferenceEquals(ExecutionState, workspace.ExecutionState))
+        {
+            ExecutionState = workspace.ExecutionState;
+        }
+
+        workspace.CurrentTask = CreatePendingTaskSummary(
+            workspace.Group.Name,
+            InspectionTaskTypeModel.ScopePlan,
+            "--",
+            pendingSummary);
+        if (SelectedGroup?.Id == workspace.Group.Id)
+        {
+            CurrentTask = workspace.CurrentTask;
+        }
+
+        ServiceResponse<InspectionTaskRecordModel> response;
+        try
+        {
+            response = await Task.Run(() => _inspectionTaskService.StartDefaultScopeInspection(workspace.Group.Id));
+        }
+        catch (Exception exception)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionTask",
+                $"group inspection start failed: groupId={workspace.Group.Id}, reason={exception.Message}");
+            ApplyInspectionStartFailure(workspace, "AI智能巡检中心启动本组巡检失败，请稍后重试。", "--");
+            return;
+        }
+
+        if (response.IsSuccess)
+        {
+            workspace.CurrentTask = CreateTaskSummaryState(response.Data);
+            if (SelectedGroup?.Id == workspace.Group.Id)
+            {
+                CurrentTask = workspace.CurrentTask;
+            }
+
+            UpdateTaskAbnormalFlowPresentation(response.Data);
+            workspace.ExecutionState.CurrentTaskStatus = ResolveTaskStatusText(response.Data.Status);
+            workspace.ExecutionState.CurrentPointName = response.Data.ResolveCurrentPointDisplayName();
+            workspace.ExecutionState.SimulationNote = response.Data.Summary;
+            return;
+        }
+
+        ApplyInspectionStartFailure(
+            workspace,
+            string.IsNullOrWhiteSpace(response.Message) ? response.Data.Summary : response.Message,
+            "--");
+    }
+
+    private InspectionTaskSummaryState CreatePendingTaskSummary(
+        string taskName,
+        InspectionTaskTypeModel taskType,
+        string currentPointName,
+        string summary)
+    {
+        return new InspectionTaskSummaryState
+        {
+            TaskId = string.Empty,
+            TaskName = taskName,
+            TaskTypeText = ResolveTaskTypeText(taskType),
+            TriggerText = ResolveTaskTriggerText(InspectionTaskTriggerModel.Manual),
+            StatusText = _textService.Resolve(TextTokens.InspectionTaskStatusRunning),
+            ScopePlanText = string.IsNullOrWhiteSpace(CurrentViewingScopePlanName) ? TaskEmptyText : CurrentViewingScopePlanName,
+            CurrentPointText = string.IsNullOrWhiteSpace(currentPointName) ? "--" : currentPointName,
+            TimeText = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            Summary = summary
+        };
+    }
+
+    private void ApplyInspectionStartFailure(
+        GroupWorkspaceState workspace,
+        string summary,
+        string currentPointName)
+    {
+        workspace.ExecutionState.CurrentTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusFailed);
+        workspace.ExecutionState.CurrentPointName = string.IsNullOrWhiteSpace(currentPointName) ? "--" : currentPointName;
+        workspace.ExecutionState.SimulationNote = summary;
+        if (ReferenceEquals(ExecutionState, workspace.ExecutionState))
+        {
+            ExecutionState = workspace.ExecutionState;
+        }
+
+        SinglePointInspectionTaskStatus = _textService.Resolve(TextTokens.InspectionTaskStatusFailed);
+        SinglePointInspectionResultSummary = summary;
     }
 
     private async void SaveCurrentScopePlan()
@@ -1250,6 +1663,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         return !IsFallbackScopePlanId(selectedPlanId);
     }
 
+    private static bool HasPendingScopePlanSelection(GroupWorkspaceState workspace)
+    {
+        var selectedPlanId = string.IsNullOrWhiteSpace(workspace.SelectedScopePlanId)
+            ? workspace.ExecutionScopePlanId
+            : workspace.SelectedScopePlanId;
+        return !string.Equals(selectedPlanId, workspace.ExecutionScopePlanId, StringComparison.Ordinal);
+    }
+
     private static bool IsFallbackScopePlanId(string? scopePlanId)
         => string.IsNullOrWhiteSpace(scopePlanId)
             || string.Equals(scopePlanId, "__default_scope__", StringComparison.Ordinal);
@@ -1283,6 +1704,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     {
         try
         {
+            if (snapshot.Groups.Count == 0)
+            {
+                MapPointSourceDiagnostics.Write(
+                    "InspectionTask",
+                    $"inspection workspace apply skipped: groupId={preferredGroupId ?? "none"}, reason=empty_snapshot");
+                return false;
+            }
+
             var updatedWorkspaces = CreateWorkspaces(snapshot);
             var updatedGroups = updatedWorkspaces.Values
                 .Select(workspace => workspace.Group)
@@ -1399,12 +1828,13 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var workspace = GetCurrentWorkspace();
         var task = ResolveTaskRecord(workspace, point.Id);
         var execution = ResolvePointExecution(workspace, point.Id);
-        var playbackStatus = ResolveDetailPlaybackStatus(point, execution);
-        var faultType = ResolveDetailFaultType(point, summary, execution);
-        var faultDescription = AppendAiSummary(ResolveDetailSummary(point, summary, execution), execution);
-        var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, point);
-        var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescription(execution, point), execution);
-        var previewHostUri = ResolvePreviewHostUri(execution);
+        var previewSession = ResolvePreviewSession(point.Id, execution);
+        var playbackStatus = ResolveDetailPlaybackStatus(point, execution, previewSession);
+        var faultType = ResolveDetailFaultType(point, summary, execution, previewSession);
+        var faultDescription = AppendAiSummary(ResolveDetailSummary(point, summary, execution, previewSession), execution);
+        var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, previewSession, point);
+        var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescription(execution, previewSession, point), execution);
+        var previewHostUri = ResolvePreviewHostUri(execution, previewSession);
         var pointId = execution?.PointId ?? point.Id;
 
         return new InspectionPointDetailState(
@@ -1433,14 +1863,22 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 : execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
         {
             PreviewHostUri = previewHostUri,
-            PreviewHostKind = execution?.PreviewHostKind ?? string.Empty,
+            PreviewHostKind = !string.IsNullOrWhiteSpace(execution?.PreviewHostKind)
+                ? execution.PreviewHostKind
+                : previewSession?.PreviewHostKind ?? string.Empty,
             PreviewBusinessTitle = previewBusinessTitle,
             PreviewBusinessDescription = previewBusinessDescription,
-            OnlineCheckResult = execution?.OnlineCheckResult ?? string.Empty,
-            StreamUrlAcquireResult = execution?.StreamUrlAcquireResult ?? string.Empty,
-            FinalPlaybackResult = execution?.FinalPlaybackResult ?? string.Empty,
-            PlaybackAttemptCount = execution?.PlaybackAttemptCount ?? 0,
-            ProtocolFallbackUsed = execution?.ProtocolFallbackUsed ?? false,
+            OnlineCheckResult = !string.IsNullOrWhiteSpace(execution?.OnlineCheckResult)
+                ? execution.OnlineCheckResult
+                : previewSession?.OnlineCheckResult ?? string.Empty,
+            StreamUrlAcquireResult = !string.IsNullOrWhiteSpace(execution?.StreamUrlAcquireResult)
+                ? execution.StreamUrlAcquireResult
+                : previewSession?.StreamUrlAcquireResult ?? string.Empty,
+            FinalPlaybackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+                ? execution.FinalPlaybackResult
+                : previewSession?.FinalPlaybackResult ?? string.Empty,
+            PlaybackAttemptCount = execution?.PlaybackAttemptCount ?? previewSession?.PlaybackAttemptCount ?? 0,
+            ProtocolFallbackUsed = execution?.ProtocolFallbackUsed ?? previewSession?.ProtocolFallbackUsed ?? false,
             ScreenshotPlannedCount = execution?.ScreenshotPlannedCount ?? 0,
             ScreenshotIntervalSeconds = execution?.ScreenshotIntervalSeconds ?? 0,
             ScreenshotSuccessCount = execution?.ScreenshotSuccessCount ?? 0,
@@ -1683,33 +2121,94 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             : "派单池候选：当前任务暂无可承接的派单池候选点位。";
     }
 
-    private static Uri? ResolvePreviewHostUri(InspectionTaskPointExecutionModel? execution)
+#if false
+    private InspectionPointPreviewSessionModel? ResolvePreviewSession(
+        string pointId,
+        InspectionTaskPointExecutionModel? execution)
     {
-        if (execution is null || string.IsNullOrWhiteSpace(execution.PreviewUrl))
+        if (!string.IsNullOrWhiteSpace(execution?.PreviewUrl))
+        {
+            var session = new InspectionPointPreviewSessionModel(
+                SelectedGroup?.Id ?? string.Empty,
+                execution.PointId,
+                execution.DeviceCode,
+                execution.PreviewUrl,
+                execution.PreviewHostKind ?? string.Empty,
+                execution.ExecutionSummary)
+            {
+                OnlineCheckResult = execution.OnlineCheckResult ?? string.Empty,
+                StreamUrlAcquireResult = execution.StreamUrlAcquireResult ?? string.Empty,
+                PlaybackAttemptCount = execution.PlaybackAttemptCount,
+                ProtocolFallbackUsed = execution.ProtocolFallbackUsed,
+                FinalPlaybackResult = execution.FinalPlaybackResult ?? string.Empty
+            };
+            _previewSessionByPointId[pointId] = session;
+            return session;
+        }
+
+        return _previewSessionByPointId.GetValueOrDefault(pointId);
+    }
+
+    private static Uri? ResolvePreviewHostUri(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        var previewUrl = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
+            ? execution.PreviewUrl
+            : previewSession?.PreviewUrl;
+        if (string.IsNullOrWhiteSpace(previewUrl))
         {
             return null;
         }
 
-        return Uri.TryCreate(execution.PreviewUrl, UriKind.Absolute, out var previewUri)
+        return Uri.TryCreate(previewUrl, UriKind.Absolute, out var previewUri)
             ? previewUri
             : null;
     }
 
     private string ResolveDetailPlaybackStatus(
         InspectionPointState point,
-        InspectionTaskPointExecutionModel? execution)
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
     {
-        return string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        if (!string.IsNullOrWhiteSpace(playbackResult)
+            && !string.Equals(playbackResult, "播放成功", StringComparison.Ordinal))
+        {
+            return playbackResult;
+        }
+
+        return summary.FaultType == "鏆傛棤" ? point.FaultType : summary.FaultType;
+/*
+        return string.IsNullOrWhiteSpace(playbackResult)
             ? point.PlaybackStatus
-            : execution.FinalPlaybackResult;
+            : playbackResult;
     }
 
     private static string ResolveDetailFaultType(
         InspectionPointState point,
         PointBusinessSummaryState summary,
-        InspectionTaskPointExecutionModel? execution)
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
     {
-        if (!string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        if (string.IsNullOrWhiteSpace(playbackResult))
+        {
+        return summary.FaultType == "鏆傛棤" ? point.FaultType : summary.FaultType;
+*/
+    }
+
+        if (!string.Equals(playbackResult, "播放成功", StringComparison.Ordinal))
+        {
+            return playbackResult;
+        }
+
+        return summary.FaultType == "鏆傛棤" ? point.FaultType : summary.FaultType;
+        if (!string.IsNullOrWhiteSpace(playbackResult)
             && !string.Equals(execution.FinalPlaybackResult, "播放成功", StringComparison.Ordinal))
         {
             return execution.FinalPlaybackResult;
@@ -1721,7 +2220,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
     private static string ResolveDetailSummary(
         InspectionPointState point,
         PointBusinessSummaryState summary,
-        InspectionTaskPointExecutionModel? execution)
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
     {
         if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
         {
@@ -1767,6 +2267,261 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             _ => point.IsPreviewAvailable
                 ? "当前点位已具备预览条件，可在右侧查看实时画面。"
                 : "当前点位尚未形成可用预览，本轮先展示业务状态说明。"
+        };
+
+        if (execution is null || string.IsNullOrWhiteSpace(execution.EvidenceSummary))
+        {
+            return playbackDescription;
+        }
+
+        return $"{playbackDescription} {execution.EvidenceSummary}";
+    }
+
+    private string ResolveDetailPlaybackStatus(
+        InspectionPointState point,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailPlaybackStatus(point, execution, null);
+    }
+
+    private static string ResolveDetailFaultType(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailFaultType(point, summary, execution, null);
+    }
+
+    private static string ResolveDetailSummary(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailSummary(point, summary, execution, null);
+    }
+
+    private static string ResolvePreviewBusinessTitle(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        return playbackResult switch
+        {
+            "播放成功" => "实时预览已接入",
+            "在线检查失败" => "设备未通过在线检查",
+            "无流地址" => "未获取到可用视频流",
+            "协议切换后仍失败" => "当前点位暂未建立预览",
+            _ => point.IsPreviewAvailable ? "实时预览已接入" : "预览待建立"
+        };
+    }
+
+    private static string ResolvePreviewBusinessDescription(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        var playbackDescription = playbackResult switch
+        {
+            "播放成功" => "已完成流地址获取并切换到当前点位的真实预览。",
+            "在线检查失败" => "当前点位未通过在线检查，本轮未继续建立右侧预览。",
+            "无流地址" => "当前点位暂未返回可直接预览的视频流。",
+            "协议切换后仍失败" => "已尝试协议切换，但当前点位仍未建立稳定预览。",
+            "画面异常" => "已接入当前点位预览，同时识别到画面异常，等待后续复核。",
+            _ => point.IsPreviewAvailable
+                ? "右侧预览区已优先承载当前选中点位。"
+                : "当前点位暂未建立真实预览，可先查看基础详情与最近结论。"
+        };
+
+        if (execution is null || string.IsNullOrWhiteSpace(execution.EvidenceSummary))
+        {
+            return playbackDescription;
+        }
+
+        return $"{playbackDescription} {execution.EvidenceSummary}";
+    }
+
+    #endif
+
+    private InspectionPointPreviewSessionModel? ResolvePreviewSession(
+        string pointId,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.PreviewUrl))
+        {
+            var session = new InspectionPointPreviewSessionModel(
+                SelectedGroup?.Id ?? string.Empty,
+                execution.PointId,
+                execution.DeviceCode,
+                execution.PreviewUrl,
+                execution.PreviewHostKind ?? string.Empty,
+                execution.ExecutionSummary)
+            {
+                OnlineCheckResult = execution.OnlineCheckResult ?? string.Empty,
+                StreamUrlAcquireResult = execution.StreamUrlAcquireResult ?? string.Empty,
+                PlaybackAttemptCount = execution.PlaybackAttemptCount,
+                ProtocolFallbackUsed = execution.ProtocolFallbackUsed,
+                FinalPlaybackResult = execution.FinalPlaybackResult ?? string.Empty
+            };
+            _previewSessionByPointId[pointId] = session;
+            return session;
+        }
+
+        return _previewSessionByPointId.GetValueOrDefault(pointId);
+    }
+
+    private static bool HasDisplayValue(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && !string.Equals(value, "--", StringComparison.Ordinal)
+            && !string.Equals(value, "暂无", StringComparison.Ordinal);
+    }
+
+    private static Uri? ResolvePreviewHostUri(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        var previewUrl = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
+            ? execution.PreviewUrl
+            : previewSession?.PreviewUrl;
+        if (string.IsNullOrWhiteSpace(previewUrl))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(previewUrl, UriKind.Absolute, out var previewUri)
+            ? previewUri
+            : null;
+    }
+
+    private string ResolveDetailPlaybackStatus(
+        InspectionPointState point,
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        if (string.IsNullOrWhiteSpace(playbackResult))
+        {
+            return point.PlaybackStatus;
+        }
+
+        return string.Equals(playbackResult, "播放成功", StringComparison.Ordinal)
+            ? _textService.Resolve(TextTokens.InspectionPlaybackPlayable)
+            : playbackResult;
+    }
+
+    private string ResolveDetailPlaybackStatus(
+        InspectionPointState point,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailPlaybackStatus(point, execution, null);
+    }
+
+    private static string ResolveDetailFaultType(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        if (!string.IsNullOrWhiteSpace(playbackResult)
+            && !string.Equals(playbackResult, "播放成功", StringComparison.Ordinal))
+        {
+            return playbackResult;
+        }
+
+        return HasDisplayValue(summary.FaultType)
+            ? summary.FaultType
+            : point.FaultType;
+    }
+
+    private static string ResolveDetailFaultType(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailFaultType(point, summary, execution, null);
+    }
+
+    private static string ResolveDetailSummary(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
+        {
+            return execution.RecoverySummary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
+        {
+            return execution.ExecutionSummary;
+        }
+
+        if (HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
+        }
+
+        return HasDisplayValue(summary.StatusSummary)
+            ? summary.StatusSummary
+            : point.FaultDescription;
+    }
+
+    private static string ResolveDetailSummary(
+        InspectionPointState point,
+        PointBusinessSummaryState summary,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        return ResolveDetailSummary(point, summary, execution, null);
+    }
+
+    private static string ResolvePreviewBusinessTitle(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        return playbackResult switch
+        {
+            "播放成功" => "实时预览已接入",
+            "在线检查失败" => "设备未通过在线检查",
+            "无流地址" => "未获取到可用视频流",
+            "协议切换后仍失败" => "当前点位暂未建立预览",
+            _ => point.IsPreviewAvailable ? "实时预览已接入" : "预览准备中"
+        };
+    }
+
+    private static string ResolvePreviewBusinessDescription(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            ? execution.FinalPlaybackResult
+            : previewSession?.FinalPlaybackResult;
+        var playbackDescription = playbackResult switch
+        {
+            "播放成功" => "已完成流地址获取，并切换到当前点位的真实预览。",
+            "在线检查失败" => "当前点位未通过在线检查，本轮不建立右侧真实预览。",
+            "无流地址" => "当前点位暂未返回可播放流地址，右侧保留业务化失败说明。",
+            "协议切换后仍失败" => "已经执行协议切换重试，但当前点位仍未建立稳定预览。",
+            "画面异常" => "当前点位已接入真实预览，同时识别到画面异常，等待后续复核。",
+            _ => point.IsPreviewAvailable
+                ? "右侧预览区已优先承载当前选中点位。"
+                : "当前点位暂未建立真实预览，可先查看基础详情与最近结论。"
         };
 
         if (execution is null || string.IsNullOrWhiteSpace(execution.EvidenceSummary))
@@ -2450,8 +3205,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             CurrentTask = currentTask;
             RecentTasks = recentTasks;
             Points = points;
+            PointsById = points.ToDictionary(point => point.Id, point => point, StringComparer.Ordinal);
             MapPoints = mapPoints;
             RecentFaults = recentFaults;
+            ScopeMatchedPoints = [];
+            ScopeUnmatchedPoints = [];
         }
 
         public InspectionGroupSummaryState Group { get; }
@@ -2466,12 +3224,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         public InspectionTaskExecutionState ExecutionState { get; }
         public InspectionRunSummaryState RunSummary { get; }
         public string TaskFinishedAt { get; }
-        public InspectionTaskBoardModel TaskBoard { get; }
-        public InspectionTaskSummaryState? CurrentTask { get; }
+        public InspectionTaskBoardModel TaskBoard { get; set; }
+        public InspectionTaskSummaryState? CurrentTask { get; set; }
         public ObservableCollection<InspectionTaskSummaryState> RecentTasks { get; }
         public ObservableCollection<InspectionPointState> Points { get; }
+        public IReadOnlyDictionary<string, InspectionPointState> PointsById { get; }
         public ObservableCollection<MapPointState> MapPoints { get; }
         public ObservableCollection<RecentFaultSummaryState> RecentFaults { get; }
+        public ObservableCollection<InspectionPointState> ScopeMatchedPoints { get; set; }
+        public ObservableCollection<InspectionPointState> ScopeUnmatchedPoints { get; set; }
         public InspectionReviewTaskSummaryState? ReviewSummary { get; set; }
         public ObservableCollection<InspectionReviewCardState>? ReviewCards { get; set; }
         public InspectionReviewFilterState? ReviewFilter { get; set; }

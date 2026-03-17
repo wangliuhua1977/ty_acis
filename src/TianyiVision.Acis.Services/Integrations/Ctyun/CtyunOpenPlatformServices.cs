@@ -524,6 +524,143 @@ public sealed class CtyunOpenPlatformClient
         }
     }
 
+    public ServiceResponse<CtyunPreviewStreamSetDto> GetH5PreviewStreamSet(string deviceCode)
+    {
+        var normalizedDeviceCode = deviceCode?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedDeviceCode))
+        {
+            return ServiceResponse<CtyunPreviewStreamSetDto>.Failure(
+                new CtyunPreviewStreamSetDto(null, null, []),
+                "设备编码为空，无法获取 H5 预览地址。");
+        }
+
+        var response = SendProtectedRequest(
+            "/open/token/vpaas/getH5StreamUrl",
+            [
+                new("accessToken", GetTokenOrThrow()),
+                new("enterpriseUser", _settings.OpenPlatform.EnterpriseUser),
+                new("deviceCode", normalizedDeviceCode),
+                new("mediaType", "0"),
+                new("mute", "0"),
+                new("playerType", "1"),
+                new("wasm", "1"),
+                new("allLiveUrl", "1"),
+                .. BuildParentUserParameter()
+            ]);
+        if (!response.IsSuccess)
+        {
+            return ServiceResponse<CtyunPreviewStreamSetDto>.Failure(
+                new CtyunPreviewStreamSetDto(null, null, []),
+                response.Message);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(response.Data);
+            if (!TryReadPayloadData(document.RootElement, out var data))
+            {
+                return ServiceResponse<CtyunPreviewStreamSetDto>.Failure(
+                    new CtyunPreviewStreamSetDto(null, null, []),
+                    "H5 预览接口未返回可解析的数据。");
+            }
+
+            var streamUrls = new List<CtyunPreviewStreamUrlDto>();
+            if (data.TryGetProperty("streamUrls", out var streamUrlsElement)
+                && streamUrlsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in streamUrlsElement.EnumerateArray())
+                {
+                    var streamUrl = ReadOptionalTextLocal(item, "streamUrl") ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(streamUrl))
+                    {
+                        continue;
+                    }
+
+                    streamUrls.Add(new CtyunPreviewStreamUrlDto(
+                        item.TryGetProperty("protocol", out var protocolElement) && protocolElement.ValueKind == JsonValueKind.Number
+                            ? protocolElement.GetInt32()
+                            : 0,
+                        streamUrl,
+                        ReadOptionalTextLocal(item, "ipv6StreamUrl"),
+                        item.TryGetProperty("level", out var levelElement) && levelElement.ValueKind == JsonValueKind.Number
+                            ? levelElement.GetInt32()
+                            : null));
+                }
+            }
+
+            return ServiceResponse<CtyunPreviewStreamSetDto>.Success(
+                new CtyunPreviewStreamSetDto(
+                    data.TryGetProperty("expireIn", out var expireInElement) && expireInElement.ValueKind == JsonValueKind.Number
+                        ? expireInElement.GetInt32()
+                        : null,
+                    data.TryGetProperty("videoEnc", out var videoEncElement) && videoEncElement.ValueKind == JsonValueKind.Number
+                        ? videoEncElement.GetInt32()
+                        : null,
+                    streamUrls));
+        }
+        catch (Exception ex)
+        {
+            return ServiceResponse<CtyunPreviewStreamSetDto>.Failure(
+                new CtyunPreviewStreamSetDto(null, null, []),
+                $"H5 预览地址解析失败：{ex.Message}");
+        }
+    }
+
+    public ServiceResponse<CtyunPreviewMediaUrlDto> GetPreviewMediaUrl(string deviceCode, string path)
+    {
+        var normalizedDeviceCode = deviceCode?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedDeviceCode))
+        {
+            return ServiceResponse<CtyunPreviewMediaUrlDto>.Failure(
+                new CtyunPreviewMediaUrlDto(string.Empty, null),
+                "设备编码为空，无法获取预览地址。");
+        }
+
+        var response = SendProtectedRequest(
+            path,
+            [
+                new("accessToken", GetTokenOrThrow()),
+                new("enterpriseUser", _settings.OpenPlatform.EnterpriseUser),
+                new("deviceCode", normalizedDeviceCode),
+                new("mediaType", "0"),
+                new("supportDomain", "1"),
+                new("mute", "0"),
+                new("netType", "0"),
+                new("expire", "300"),
+                .. BuildParentUserParameter()
+            ]);
+        if (!response.IsSuccess)
+        {
+            return ServiceResponse<CtyunPreviewMediaUrlDto>.Failure(
+                new CtyunPreviewMediaUrlDto(string.Empty, null),
+                response.Message);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(response.Data);
+            if (!TryReadPayloadData(document.RootElement, out var data))
+            {
+                return ServiceResponse<CtyunPreviewMediaUrlDto>.Failure(
+                    new CtyunPreviewMediaUrlDto(string.Empty, null),
+                    "预览地址接口未返回可解析的数据。");
+            }
+
+            return ServiceResponse<CtyunPreviewMediaUrlDto>.Success(
+                new CtyunPreviewMediaUrlDto(
+                    ReadOptionalTextLocal(data, "url") ?? string.Empty,
+                    data.TryGetProperty("expireTime", out var expireTimeElement) && expireTimeElement.ValueKind == JsonValueKind.Number
+                        ? expireTimeElement.GetInt32()
+                        : null));
+        }
+        catch (Exception ex)
+        {
+            return ServiceResponse<CtyunPreviewMediaUrlDto>.Failure(
+                new CtyunPreviewMediaUrlDto(string.Empty, null),
+                $"预览地址解析失败：{ex.Message}");
+        }
+    }
+
     private ServiceResponse<string> SendProtectedRequest(string path, IReadOnlyList<KeyValuePair<string, string>> businessParameters)
     {
         try
@@ -608,6 +745,62 @@ public sealed class CtyunOpenPlatformClient
         }
 
         return [new("parentUser", _settings.OpenPlatform.ParentUser)];
+    }
+
+    private static bool TryReadPayloadData(JsonElement root, out JsonElement data)
+    {
+        data = default;
+        if (!root.TryGetProperty("data", out var rawData)
+            || rawData.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return false;
+        }
+
+        if (rawData.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+        {
+            data = rawData;
+            return true;
+        }
+
+        if (rawData.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var text = rawData.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal)
+            && !trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        using var nested = JsonDocument.Parse(trimmed);
+        data = nested.RootElement.Clone();
+        return true;
+    }
+
+    private static string? ReadOptionalTextLocal(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.ToString(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            _ => value.ToString()
+        };
     }
 
     private static void AppendTimeRange(List<KeyValuePair<string, string>> parameters, DateTime? startTime, DateTime? endTime)

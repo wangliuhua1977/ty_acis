@@ -67,6 +67,21 @@ public sealed record CtyunDeviceAlertDto(
     int Status,
     int AlertSource);
 
+public sealed record CtyunPreviewStreamUrlDto(
+    int Protocol,
+    string StreamUrl,
+    string? Ipv6StreamUrl,
+    int? Level);
+
+public sealed record CtyunPreviewStreamSetDto(
+    int? ExpireIn,
+    int? VideoEnc,
+    IReadOnlyList<CtyunPreviewStreamUrlDto> StreamUrls);
+
+public sealed record CtyunPreviewMediaUrlDto(
+    string Url,
+    int? ExpireTime);
+
 public interface ICtyunDeviceListAdapter
 {
     DeviceListItemDto MapDevice(CtyunDeviceCatalogItemDto catalogItem, CtyunDeviceDetailDto? details, PointCoordinateModel coordinate);

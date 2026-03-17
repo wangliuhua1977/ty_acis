@@ -16,7 +16,9 @@ public partial class InspectionPageView : UserControl
 {
     private InspectionPageViewModel? _viewModel;
     private CancellationTokenSource? _evidenceCaptureCts;
+    private CancellationTokenSource? _previewNavigationCts;
     private string _activeEvidenceKey = string.Empty;
+    private string _activePreviewUri = string.Empty;
 
     public InspectionPageView()
     {
@@ -32,6 +34,7 @@ public partial class InspectionPageView : UserControl
         if (DataContext is InspectionPageViewModel viewModel)
         {
             AttachViewModel(viewModel);
+            _ = UpdatePreviewHostAsync(viewModel.SelectedPointDetail);
             ScheduleEvidenceCapture(viewModel.SelectedPointDetail);
         }
     }
@@ -40,6 +43,7 @@ public partial class InspectionPageView : UserControl
     {
         DetachViewModel();
         CancelEvidenceCapture();
+        CancelPreviewNavigation();
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -49,6 +53,7 @@ public partial class InspectionPageView : UserControl
         if (e.NewValue is InspectionPageViewModel viewModel)
         {
             AttachViewModel(viewModel);
+            _ = UpdatePreviewHostAsync(viewModel.SelectedPointDetail);
             ScheduleEvidenceCapture(viewModel.SelectedPointDetail);
         }
     }
@@ -82,7 +87,58 @@ public partial class InspectionPageView : UserControl
             return;
         }
 
+        _ = UpdatePreviewHostAsync(_viewModel?.SelectedPointDetail);
         ScheduleEvidenceCapture(_viewModel?.SelectedPointDetail);
+    }
+
+    private void CancelPreviewNavigation()
+    {
+        if (_previewNavigationCts is null)
+        {
+            return;
+        }
+
+        _previewNavigationCts.Cancel();
+        _previewNavigationCts.Dispose();
+        _previewNavigationCts = null;
+    }
+
+    private async Task UpdatePreviewHostAsync(InspectionPointDetailState? detail)
+    {
+        CancelPreviewNavigation();
+        _previewNavigationCts = new CancellationTokenSource();
+        var cancellationToken = _previewNavigationCts.Token;
+
+        try
+        {
+            var previewUri = detail?.IsPreviewAvailable == true ? detail.PreviewHostUri : null;
+            if (previewUri is null)
+            {
+                _activePreviewUri = string.Empty;
+                await Dispatcher.InvokeAsync(() => PreviewWebView.Source = new Uri("about:blank"));
+                return;
+            }
+
+            if (string.Equals(_activePreviewUri, previewUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            await PreviewWebView.EnsureCoreWebView2Async();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await Dispatcher.InvokeAsync(() => PreviewWebView.Source = previewUri);
+            _activePreviewUri = previewUri.AbsoluteUri;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreview",
+                $"preview host navigation failed: reason={ex.Message}");
+        }
     }
 
     private void ScheduleEvidenceCapture(InspectionPointDetailState? detail)

@@ -86,6 +86,22 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="PreviewWebViewVisibilityStyle" TargetType="wv2:WebView2">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SelectedPointDetail.IsPreviewAvailable}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="PreviewPlaceholderVisibilityStyle" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding SelectedPointDetail.IsPreviewAvailable}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -407,8 +423,8 @@
                                         <TextBlock Margin="0,8,0,14" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding PreviewDescription}" TextWrapping="Wrap" />
                                         <Border Height="220" Background="{DynamicResource Theme.PanelMutedBackgroundBrush}" BorderBrush="{DynamicResource Theme.PanelBorderBrush}" BorderThickness="1" CornerRadius="18">
                                             <Grid>
-                                                <wv2:WebView2 x:Name="PreviewWebView" Source="{Binding SelectedPointDetail.PreviewHostUri}" Visibility="{Binding SelectedPointDetail.IsPreviewAvailable, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                <wv2:WebView2 x:Name="PreviewWebView" Style="{StaticResource PreviewWebViewVisibilityStyle}" />
+                                                <StackPanel Style="{StaticResource PreviewPlaceholderVisibilityStyle}" VerticalAlignment="Center" HorizontalAlignment="Center">
                                                     <TextBlock HorizontalAlignment="Center" Style="{StaticResource AccentTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessTitle, TargetNullValue=--}" />
                                                     <TextBlock Margin="0,18,0,0" Width="240" TextAlignment="Center" TextWrapping="Wrap" FontSize="18" FontWeight="SemiBold" Text="{Binding SelectedPointDetail.PlaybackStatus, TargetNullValue=--}" />
                                                     <TextBlock Margin="0,18,0,0" Width="240" TextAlignment="Center" Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding SelectedPointDetail.PreviewBusinessDescription, TargetNullValue=--}" TextWrapping="Wrap" />

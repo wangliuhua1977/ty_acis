@@ -6,6 +6,16 @@ namespace TianyiVision.Acis.UI.States;
 public sealed class InspectionPointState : ViewModelBase
 {
     private InspectionPointStatus _status;
+    private string _statusText;
+    private string _onlineStatus;
+    private string _playbackStatus;
+    private string _imageStatus;
+    private string _faultType;
+    private string _faultDescription;
+    private string _lastFaultTime;
+    private string _dispatchPoolEntry;
+    private string _lastInspectionConclusion;
+    private bool _isPreviewAvailable;
     private bool _isSelected;
     private bool _isCurrent;
 
@@ -65,19 +75,19 @@ public sealed class InspectionPointState : ViewModelBase
         X = x;
         Y = y;
         _status = status;
-        StatusText = statusText;
+        _statusText = statusText;
         CompletionStatus = completionStatus;
-        OnlineStatus = onlineStatus;
-        PlaybackStatus = playbackStatus;
-        ImageStatus = imageStatus;
-        FaultType = faultType;
-        FaultDescription = faultDescription;
-        LastFaultTime = lastFaultTime;
-        DispatchPoolEntry = dispatchPoolEntry;
-        LastInspectionConclusion = lastInspectionConclusion;
+        _onlineStatus = onlineStatus;
+        _playbackStatus = playbackStatus;
+        _imageStatus = imageStatus;
+        _faultType = faultType;
+        _faultDescription = faultDescription;
+        _lastFaultTime = lastFaultTime;
+        _dispatchPoolEntry = dispatchPoolEntry;
+        _lastInspectionConclusion = lastInspectionConclusion;
         IsInDefaultScope = isInDefaultScope;
         ScopeDecisionSummary = scopeDecisionSummary;
-        IsPreviewAvailable = isPreviewAvailable;
+        _isPreviewAvailable = isPreviewAvailable;
         BusinessSummary = businessSummary;
     }
 
@@ -135,31 +145,71 @@ public sealed class InspectionPointState : ViewModelBase
         }
     }
 
-    public string StatusText { get; }
+    public string StatusText
+    {
+        get => _statusText;
+        set => SetProperty(ref _statusText, value);
+    }
 
     public InspectionPointStatus CompletionStatus { get; }
 
-    public string OnlineStatus { get; }
+    public string OnlineStatus
+    {
+        get => _onlineStatus;
+        set => SetProperty(ref _onlineStatus, value);
+    }
 
-    public string PlaybackStatus { get; }
+    public string PlaybackStatus
+    {
+        get => _playbackStatus;
+        set => SetProperty(ref _playbackStatus, value);
+    }
 
-    public string ImageStatus { get; }
+    public string ImageStatus
+    {
+        get => _imageStatus;
+        set => SetProperty(ref _imageStatus, value);
+    }
 
-    public string FaultType { get; }
+    public string FaultType
+    {
+        get => _faultType;
+        set => SetProperty(ref _faultType, value);
+    }
 
-    public string FaultDescription { get; }
+    public string FaultDescription
+    {
+        get => _faultDescription;
+        set => SetProperty(ref _faultDescription, value);
+    }
 
-    public string LastFaultTime { get; }
+    public string LastFaultTime
+    {
+        get => _lastFaultTime;
+        set => SetProperty(ref _lastFaultTime, value);
+    }
 
-    public string DispatchPoolEntry { get; }
+    public string DispatchPoolEntry
+    {
+        get => _dispatchPoolEntry;
+        set => SetProperty(ref _dispatchPoolEntry, value);
+    }
 
-    public string LastInspectionConclusion { get; }
+    public string LastInspectionConclusion
+    {
+        get => _lastInspectionConclusion;
+        set => SetProperty(ref _lastInspectionConclusion, value);
+    }
 
     public bool IsInDefaultScope { get; }
 
     public string ScopeDecisionSummary { get; }
 
-    public bool IsPreviewAvailable { get; }
+    public bool IsPreviewAvailable
+    {
+        get => _isPreviewAvailable;
+        set => SetProperty(ref _isPreviewAvailable, value);
+    }
 
     public PointBusinessSummaryState BusinessSummary { get; }
 

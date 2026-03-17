@@ -139,6 +139,74 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         return ServiceResponse<InspectionWorkspaceSnapshot>.Success(new InspectionWorkspaceSnapshot([group]), pointCollectionResponse.Message);
     }
 
+    public async Task<ServiceResponse<InspectionPointPreviewSessionModel>> PreparePointPreviewAsync(
+        string groupId,
+        string pointId,
+        CancellationToken cancellationToken = default)
+    {
+        var settings = _inspectionSettingsService.Load();
+        var pointResponse = _pointWorkspaceService.GetPoint(pointId);
+        if (!pointResponse.IsSuccess)
+        {
+            return ServiceResponse<InspectionPointPreviewSessionModel>.Failure(
+                new InspectionPointPreviewSessionModel(
+                    string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim(),
+                    pointId?.Trim() ?? string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    "未找到目标点位。"),
+                pointResponse.Message);
+        }
+
+        var taskName = BuildTaskName(
+            settings.TaskExecution.DefaultTaskNamePattern,
+            InspectionTaskTypeModel.SinglePoint,
+            string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim(),
+            pointResponse.Data.PointId,
+            pointResponse.Data.DeviceCode,
+            null);
+        var result = await _pointCheckExecutor.ExecuteAsync(
+                new InspectionPointCheckRequest(
+                    $"preview-{DateTime.Now:yyyyMMddHHmmssfff}",
+                    string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim(),
+                    taskName,
+                    InspectionTaskTypeModel.SinglePoint,
+                    InspectionTaskTriggerModel.Manual,
+                    null,
+                    DefaultScopePlanName,
+                    pointResponse.Data,
+                    ResolveEffectivePolicy(pointResponse.Data, settings, isFocusPoint: false, usesOverridePolicy: false, policySnapshotSummary: string.Empty).Policy,
+                    settings.VideoInspection,
+                    false,
+                    false,
+                    string.Empty)
+                {
+                    PreviewOnly = true
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var previewSession = new InspectionPointPreviewSessionModel(
+            string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim(),
+            pointResponse.Data.PointId,
+            pointResponse.Data.DeviceCode,
+            result.PreviewUrl ?? string.Empty,
+            result.PreviewHostKind ?? string.Empty,
+            string.IsNullOrWhiteSpace(result.ResultSummary) ? result.FinalPlaybackResult : result.ResultSummary)
+        {
+            OnlineCheckResult = result.OnlineCheckResult ?? string.Empty,
+            StreamUrlAcquireResult = result.StreamUrlAcquireResult ?? string.Empty,
+            PlaybackAttemptCount = result.PlaybackAttemptCount,
+            ProtocolFallbackUsed = result.ProtocolFallbackUsed,
+            FinalPlaybackResult = result.FinalPlaybackResult ?? string.Empty
+        };
+
+        return !string.IsNullOrWhiteSpace(previewSession.PreviewUrl)
+            ? ServiceResponse<InspectionPointPreviewSessionModel>.Success(previewSession)
+            : ServiceResponse<InspectionPointPreviewSessionModel>.Failure(previewSession, previewSession.ResultSummary);
+    }
+
     public ServiceResponse<InspectionScopePlanSaveResult> SaveDefaultScopePlan(string groupId, string scopePlanId)
     {
         var normalizedGroupId = string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim();
@@ -1087,7 +1155,14 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
 
     private void RaiseTaskBoardChanged(string groupId)
     {
-        TaskBoardChanged?.Invoke(this, new InspectionTaskBoardChangedEventArgs(groupId));
+        TaskBoardChanged?.Invoke(this, new InspectionTaskBoardChangedEventArgs(groupId, BuildTaskBoardSnapshot(groupId)));
+    }
+
+    private InspectionTaskBoardModel BuildTaskBoardSnapshot(string groupId)
+    {
+        return BuildTaskBoard(
+            string.IsNullOrWhiteSpace(groupId) ? DefaultGroupId : groupId.Trim(),
+            BuildGroupName());
     }
 
     private InspectionTaskRecordModel BridgeDispatchCandidates(
