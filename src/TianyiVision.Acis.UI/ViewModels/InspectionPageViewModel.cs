@@ -17,12 +17,16 @@ namespace TianyiVision.Acis.UI.ViewModels;
 
 public sealed partial class InspectionPageViewModel : PageViewModelBase
 {
+    private static readonly TimeSpan PreviewRetryCooldown = TimeSpan.FromSeconds(5);
+
     private readonly PointSelectionContext _pointSelectionContext;
     private readonly ITextService _textService;
     private readonly IInspectionTaskService _inspectionTaskService;
     private Dictionary<string, GroupWorkspaceState> _workspaceByGroupId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedScopePlanIdByGroupId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, InspectionPointPreviewSessionModel> _previewSessionByPointId = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTime> _previewPreparedAtByPointId = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _previewPreparePointsInFlight = new(StringComparer.Ordinal);
     private readonly RelayCommand _selectScopePlanCommand;
     private readonly RelayCommand _executeInspectionCommand;
     private readonly RelayCommand _saveCurrentScopePlanCommand;
@@ -990,9 +994,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
             if (SelectedPoint is not null && workspace.PointsById.TryGetValue(SelectedPoint.Id, out var selectedPoint))
             {
+                var existingDetail = SelectedPointDetail;
                 _selectedPoint = selectedPoint;
                 SelectedPoint = selectedPoint;
-                SelectedPointDetail = CreatePointDetail(selectedPoint, selectedPoint.BusinessSummary);
+                SelectedPointDetail = MergeSelectedPreviewDetail(
+                    existingDetail,
+                    CreatePointDetail(selectedPoint, selectedPoint.BusinessSummary));
             }
         }
     }
@@ -1013,12 +1020,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionTaskRecordModel? currentTask,
         InspectionTaskPointExecutionModel? execution)
     {
+        var previewSession = ResolvePreviewSession(point.Id, execution);
         point.Status = ResolvePointStatusFromExecution(point, execution);
-        point.StatusText = ResolvePointStatus(point.Status);
+        point.StatusText = ResolveBusinessStatusText(
+            point.Status,
+            point.CompletionStatus,
+            ResolveDetailSummary(point, point.BusinessSummary, execution, previewSession));
         point.IsCurrent = execution?.Status == InspectionPointExecutionStatusModel.Running;
-        point.PlaybackStatus = ResolveDetailPlaybackStatus(point, execution);
-        point.FaultType = ResolveDetailFaultType(point, point.BusinessSummary, execution);
-        point.FaultDescription = AppendAiSummary(ResolveDetailSummary(point, point.BusinessSummary, execution), execution);
+        point.PlaybackStatus = ResolveDetailPlaybackStatus(point, execution, previewSession);
+        point.FaultType = ResolveDetailFaultType(point, point.BusinessSummary, execution, previewSession);
+        point.FaultDescription = AppendAiSummary(ResolveDetailSummary(point, point.BusinessSummary, execution, previewSession), execution);
         point.DispatchPoolEntry = ResolveDispatchPoolEntryText(currentTask, point.Id);
         point.LastInspectionConclusion = !string.IsNullOrWhiteSpace(execution?.RecoverySummary)
             ? execution.RecoverySummary
@@ -1027,8 +1038,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 : string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
                     ? point.LastInspectionConclusion
                     : execution.FinalPlaybackResult;
-        point.IsPreviewAvailable = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
-            || _previewSessionByPointId.ContainsKey(point.Id);
+        point.IsPreviewAvailable = HasPreviewSource(execution, previewSession);
     }
 
     private static void MirrorPointVisualState(InspectionPointState target, InspectionPointState source)
@@ -1059,9 +1069,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             InspectionPointExecutionStatusModel.Running => InspectionPointStatus.Inspecting,
             InspectionPointExecutionStatusModel.Succeeded => InspectionPointStatus.Normal,
             InspectionPointExecutionStatusModel.Skipped => InspectionPointStatus.Silent,
-            InspectionPointExecutionStatusModel.Failed => execution.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline
-                ? InspectionPointStatus.PausedUntilRecovery
-                : InspectionPointStatus.Fault,
+            InspectionPointExecutionStatusModel.Failed => MapExecutionStatus(execution),
             _ => point.Status
         };
     }
@@ -1081,6 +1089,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
 
     private void SelectPoint(InspectionPointState point)
     {
+        var isRepeatedSelection = ReferenceEquals(_selectedPoint, point)
+            && string.Equals(SelectedPointDetail?.PointId, point.Id, StringComparison.Ordinal);
+        if (isRepeatedSelection)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreview",
+                $"repeat point selection skipped: pointId={point.Id}, deviceCode={point.DeviceCode}");
+            return;
+        }
+
         if (!ReferenceEquals(_selectedPoint, point))
         {
             if (_selectedPoint is not null)
@@ -1184,10 +1202,31 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
+        if (_previewPreparePointsInFlight.Contains(point.Id))
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreview",
+                $"preview prepare deduplicated: pointId={point.Id}, reason=inflight");
+            return;
+        }
+
+        var cachedSession = _previewSessionByPointId.GetValueOrDefault(point.Id);
+        if (cachedSession is not null
+            && !HasPreviewSource(null, cachedSession)
+            && _previewPreparedAtByPointId.TryGetValue(point.Id, out var preparedAt)
+            && DateTime.Now - preparedAt < PreviewRetryCooldown)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreview",
+                $"preview prepare throttled: pointId={point.Id}, cooldownMs={(int)PreviewRetryCooldown.TotalMilliseconds}, lastPreparedAt={preparedAt:yyyy-MM-dd HH:mm:ss.fff}");
+            return;
+        }
+
         _selectedPointPreviewCts?.Cancel();
         _selectedPointPreviewCts?.Dispose();
         _selectedPointPreviewCts = new CancellationTokenSource();
         var previewToken = Interlocked.Increment(ref _selectedPointPreviewToken);
+        _previewPreparePointsInFlight.Add(point.Id);
 
         SelectedPointDetail = currentDetail with
         {
@@ -1215,6 +1254,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 $"preview prepare failed: pointId={point.Id}, reason={exception.Message}");
             return;
         }
+        finally
+        {
+            _previewPreparePointsInFlight.Remove(point.Id);
+        }
 
         if (previewToken != _selectedPointPreviewToken
             || SelectedPoint?.Id != point.Id)
@@ -1222,13 +1265,77 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             return;
         }
 
-        if (response.IsSuccess)
+        _previewPreparedAtByPointId[point.Id] = DateTime.Now;
+
+        var existingSession = _previewSessionByPointId.GetValueOrDefault(point.Id);
+        if (ShouldCachePreviewSession(existingSession, response.Data))
         {
             _previewSessionByPointId[point.Id] = response.Data;
-            point.IsPreviewAvailable = true;
         }
 
-        SelectedPointDetail = CreatePointDetail(point, point.BusinessSummary);
+        point.IsPreviewAvailable = HasPreviewSource(null, _previewSessionByPointId.GetValueOrDefault(point.Id));
+        SelectedPointDetail = MergeSelectedPreviewDetail(
+            currentDetail,
+            CreatePointDetail(point, point.BusinessSummary));
+    }
+
+    public void ApplyPreviewHostFailure(
+        string pointId,
+        string previewHostKind,
+        string previewFailureClassification,
+        string finalPlaybackResult,
+        string resultSummary)
+    {
+        if (string.IsNullOrWhiteSpace(pointId)
+            || string.IsNullOrWhiteSpace(previewFailureClassification)
+            || string.Equals(previewFailureClassification, InspectionPreviewFailureClassifications.None, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var point = Points.FirstOrDefault(candidate => candidate.Id == pointId);
+        var existingSession = _previewSessionByPointId.GetValueOrDefault(pointId);
+        var updatedSession = (existingSession ?? new InspectionPointPreviewSessionModel(
+            SelectedGroup?.Id ?? string.Empty,
+            pointId,
+            point?.DeviceCode ?? SelectedPointDetail?.DeviceCode ?? string.Empty,
+            string.Empty,
+            string.IsNullOrWhiteSpace(previewHostKind) ? SelectedPointDetail?.PreviewHostKind ?? string.Empty : previewHostKind,
+            resultSummary))
+        with
+        {
+            PreviewUrl = string.Empty,
+            PreviewHostKind = string.IsNullOrWhiteSpace(previewHostKind)
+                ? existingSession?.PreviewHostKind ?? SelectedPointDetail?.PreviewHostKind ?? string.Empty
+                : previewHostKind,
+            ResultSummary = string.IsNullOrWhiteSpace(resultSummary)
+                ? existingSession?.ResultSummary ?? string.Empty
+                : resultSummary,
+            FinalPlaybackResult = string.IsNullOrWhiteSpace(finalPlaybackResult)
+                ? existingSession?.FinalPlaybackResult ?? string.Empty
+                : finalPlaybackResult,
+            PreviewFailureClassification = previewFailureClassification,
+            OnlineCheckResult = existingSession?.OnlineCheckResult ?? SelectedPointDetail?.OnlineCheckResult ?? string.Empty,
+            StreamUrlAcquireResult = existingSession?.StreamUrlAcquireResult ?? SelectedPointDetail?.StreamUrlAcquireResult ?? string.Empty,
+            PlaybackAttemptCount = existingSession?.PlaybackAttemptCount ?? SelectedPointDetail?.PlaybackAttemptCount ?? 0,
+            ProtocolFallbackUsed = existingSession?.ProtocolFallbackUsed ?? SelectedPointDetail?.ProtocolFallbackUsed ?? false
+        };
+
+        _previewPreparedAtByPointId[pointId] = DateTime.Now;
+        _previewSessionByPointId[pointId] = updatedSession;
+
+        if (point is not null)
+        {
+            point.IsPreviewAvailable = false;
+            point.PlaybackStatus = string.IsNullOrWhiteSpace(updatedSession.ResultSummary)
+                ? point.PlaybackStatus
+                : updatedSession.ResultSummary;
+        }
+
+        if (SelectedPoint?.Id == pointId && point is not null)
+        {
+            SelectedPointDetail = CreatePointDetail(point, point.BusinessSummary);
+        }
     }
 
     private async void StartSinglePointInspection()
@@ -1833,9 +1940,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var faultType = ResolveDetailFaultType(point, summary, execution, previewSession);
         var faultDescription = AppendAiSummary(ResolveDetailSummary(point, summary, execution, previewSession), execution);
         var previewBusinessTitle = ResolvePreviewBusinessTitle(execution, previewSession, point);
-        var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescription(execution, previewSession, point), execution);
+        var previewBusinessDescription = AppendAiSummary(ResolvePreviewBusinessDescriptionStrict(execution, previewSession, point), execution);
         var previewHostUri = ResolvePreviewHostUri(execution, previewSession);
         var pointId = execution?.PointId ?? point.Id;
+        var currentStatus = ResolveBusinessStatusText(point.Status, point.CompletionStatus, faultDescription);
 
         return new InspectionPointDetailState(
             ResolveExecutionTaskId(workspace, point.Id),
@@ -1844,7 +1952,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             summary.DeviceName,
             point.UnitName,
             point.CurrentHandlingUnit,
-            ResolvePointStatus(point.Status),
+            currentStatus,
             summary.CoordinateStatus,
             summary.LastSyncTime,
             summary.OnlineStatus,
@@ -1858,12 +1966,16 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             ResolveDispatchPoolEntryText(task, pointId),
             !string.IsNullOrWhiteSpace(execution?.RecoverySummary)
                 ? execution.RecoverySummary
+                : HasFinalPreviewFailure(previewSession) && !string.IsNullOrWhiteSpace(previewSession?.FinalPlaybackResult)
+                    ? previewSession.FinalPlaybackResult
                 : !string.IsNullOrWhiteSpace(execution?.AiAnalysisSummary)
-                ? execution.AiAnalysisSummary
-                : execution?.FinalPlaybackResult ?? point.LastInspectionConclusion)
+                    ? execution.AiAnalysisSummary
+                    : execution?.FinalPlaybackResult ?? previewSession?.FinalPlaybackResult ?? point.LastInspectionConclusion)
         {
             PreviewHostUri = previewHostUri,
-            PreviewHostKind = !string.IsNullOrWhiteSpace(execution?.PreviewHostKind)
+            PreviewHostKind = HasFinalPreviewFailure(previewSession) && !string.IsNullOrWhiteSpace(previewSession?.PreviewHostKind)
+                ? previewSession.PreviewHostKind
+                : !string.IsNullOrWhiteSpace(execution?.PreviewHostKind)
                 ? execution.PreviewHostKind
                 : previewSession?.PreviewHostKind ?? string.Empty,
             PreviewBusinessTitle = previewBusinessTitle,
@@ -1874,9 +1986,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             StreamUrlAcquireResult = !string.IsNullOrWhiteSpace(execution?.StreamUrlAcquireResult)
                 ? execution.StreamUrlAcquireResult
                 : previewSession?.StreamUrlAcquireResult ?? string.Empty,
-            FinalPlaybackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
+            FinalPlaybackResult = HasFinalPreviewFailure(previewSession) && !string.IsNullOrWhiteSpace(previewSession?.FinalPlaybackResult)
+                ? previewSession.FinalPlaybackResult
+                : !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
                 ? execution.FinalPlaybackResult
                 : previewSession?.FinalPlaybackResult ?? string.Empty,
+            PreviewFailureClassification = ResolvePreviewFailureClassification(execution, previewSession),
             PlaybackAttemptCount = execution?.PlaybackAttemptCount ?? previewSession?.PlaybackAttemptCount ?? 0,
             ProtocolFallbackUsed = execution?.ProtocolFallbackUsed ?? previewSession?.ProtocolFallbackUsed ?? false,
             ScreenshotPlannedCount = execution?.ScreenshotPlannedCount ?? 0,
@@ -2126,6 +2241,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         string pointId,
         InspectionTaskPointExecutionModel? execution)
     {
+        var cachedSession = _previewSessionByPointId.GetValueOrDefault(pointId);
+        if (ShouldPreferCachedPreviewSession(cachedSession, execution))
+        {
+            return cachedSession;
+        }
+
         if (!string.IsNullOrWhiteSpace(execution?.PreviewUrl))
         {
             var session = new InspectionPointPreviewSessionModel(
@@ -2142,8 +2263,14 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 ProtocolFallbackUsed = execution.ProtocolFallbackUsed,
                 FinalPlaybackResult = execution.FinalPlaybackResult ?? string.Empty
             };
-            _previewSessionByPointId[pointId] = session;
-            return session;
+            var existingSession = _previewSessionByPointId.GetValueOrDefault(pointId);
+            if (ShouldCachePreviewSession(existingSession, session))
+            {
+                _previewSessionByPointId[pointId] = session;
+                return session;
+            }
+
+            return existingSession;
         }
 
         return _previewSessionByPointId.GetValueOrDefault(pointId);
@@ -2153,6 +2280,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionTaskPointExecutionModel? execution,
         InspectionPointPreviewSessionModel? previewSession)
     {
+        if (HasFinalPreviewFailure(previewSession)
+            && string.IsNullOrWhiteSpace(previewSession?.PreviewUrl))
+        {
+            return null;
+        }
+
         var previewUrl = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
             ? execution.PreviewUrl
             : previewSession?.PreviewUrl;
@@ -2164,6 +2297,213 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         return Uri.TryCreate(previewUrl, UriKind.Absolute, out var previewUri)
             ? previewUri
             : null;
+    }
+
+    private static bool HasPreviewSource(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        if (HasFinalPreviewFailure(previewSession)
+            && string.IsNullOrWhiteSpace(previewSession?.PreviewUrl))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
+            || !string.IsNullOrWhiteSpace(previewSession?.PreviewUrl);
+    }
+
+    private static string ResolvePreviewSummary(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
+        {
+            return execution.RecoverySummary;
+        }
+
+        if (HasFinalPreviewFailure(previewSession) && HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
+        {
+            return execution.ExecutionSummary;
+        }
+
+        if (HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
+        }
+
+        return point.FaultDescription;
+    }
+
+    private static string? ResolveBusinessStateLabel(string? summary)
+    {
+        if (!HasDisplayValue(summary))
+        {
+            return null;
+        }
+
+        if (summary!.Contains("设备离线", StringComparison.Ordinal))
+        {
+            return "设备离线";
+        }
+
+        if (summary.Contains("在线但无流地址", StringComparison.Ordinal))
+        {
+            return "在线但无流地址";
+        }
+
+        if (summary.Contains("播放成功但截图/证据失败", StringComparison.Ordinal))
+        {
+            return "播放成功但截图/证据失败";
+        }
+
+        if (summary.Contains("已获取流地址但播放失败", StringComparison.Ordinal)
+            || summary.Contains("播放失败", StringComparison.Ordinal)
+            || summary.Contains("协议切换后仍失败", StringComparison.Ordinal))
+        {
+            return "已获取流地址但播放失败";
+        }
+
+        if (summary.Contains("AI未分析", StringComparison.Ordinal)
+            || summary.Contains("AI 未分析", StringComparison.Ordinal)
+            || summary.Contains("证据不足", StringComparison.Ordinal))
+        {
+            return "AI未分析/证据不足";
+        }
+
+        if (summary.Contains("画面异常", StringComparison.Ordinal)
+            || summary.Contains("真正巡检故障", StringComparison.Ordinal))
+        {
+            return "画面异常";
+        }
+
+        return null;
+    }
+
+    private static InspectionPointStatus MapExecutionStatus(InspectionTaskPointExecutionModel execution)
+    {
+        if (execution.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline)
+        {
+            return InspectionPointStatus.PausedUntilRecovery;
+        }
+
+        var businessLabel = ResolveBusinessStateLabel(execution.ExecutionSummary)
+            ?? execution.FailureCategory switch
+            {
+                InspectionPointFailureCategoryModel.NoStreamAddress => "在线但无流地址",
+                InspectionPointFailureCategoryModel.PlaybackCheckFailed => "播放失败",
+                InspectionPointFailureCategoryModel.PlaybackTimeout => "播放失败",
+                InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "播放失败",
+                InspectionPointFailureCategoryModel.OnlineStatusPending => "AI 未分析 / 证据不足",
+                InspectionPointFailureCategoryModel.ImageAbnormalDetected => "真正巡检故障",
+                _ => null
+            };
+
+        return businessLabel switch
+        {
+            "真正巡检故障" => InspectionPointStatus.Fault,
+            "在线但无流地址" => InspectionPointStatus.Silent,
+            "播放失败" => InspectionPointStatus.Silent,
+            "AI 未分析 / 证据不足" => InspectionPointStatus.Silent,
+            _ => execution.FailureCategory == InspectionPointFailureCategoryModel.ImageAbnormalDetected
+                ? InspectionPointStatus.Fault
+                : InspectionPointStatus.Fault
+        };
+    }
+
+    private static bool ShouldCachePreviewSession(
+        InspectionPointPreviewSessionModel? existingSession,
+        InspectionPointPreviewSessionModel? incomingSession)
+    {
+        if (incomingSession is null)
+        {
+            return false;
+        }
+
+        var incomingHasPreview = !string.IsNullOrWhiteSpace(incomingSession.PreviewUrl);
+        var existingHasPreview = !string.IsNullOrWhiteSpace(existingSession?.PreviewUrl);
+
+        if (incomingHasPreview)
+        {
+            return true;
+        }
+
+        return !existingHasPreview;
+    }
+
+    private static InspectionPointDetailState? MergeSelectedPreviewDetail(
+        InspectionPointDetailState? existingDetail,
+        InspectionPointDetailState? refreshedDetail)
+    {
+        if (existingDetail is null || refreshedDetail is null)
+        {
+            return refreshedDetail;
+        }
+
+        if (!string.Equals(
+                refreshedDetail.PreviewFailureClassification,
+                InspectionPreviewFailureClassifications.None,
+                StringComparison.Ordinal))
+        {
+            return refreshedDetail;
+        }
+
+        if (refreshedDetail.PreviewHostUri is not null
+            || existingDetail.PreviewHostUri is null)
+        {
+            return refreshedDetail;
+        }
+
+        return refreshedDetail with
+        {
+            IsPreviewAvailable = true,
+            PreviewHostUri = existingDetail.PreviewHostUri,
+            PreviewHostKind = string.IsNullOrWhiteSpace(refreshedDetail.PreviewHostKind)
+                ? existingDetail.PreviewHostKind
+                : refreshedDetail.PreviewHostKind,
+            PreviewBusinessTitle = string.IsNullOrWhiteSpace(refreshedDetail.PreviewBusinessTitle)
+                ? existingDetail.PreviewBusinessTitle
+                : refreshedDetail.PreviewBusinessTitle,
+            PreviewBusinessDescription = string.IsNullOrWhiteSpace(refreshedDetail.PreviewBusinessDescription)
+                ? existingDetail.PreviewBusinessDescription
+                : refreshedDetail.PreviewBusinessDescription,
+            OnlineCheckResult = string.IsNullOrWhiteSpace(refreshedDetail.OnlineCheckResult)
+                ? existingDetail.OnlineCheckResult
+                : refreshedDetail.OnlineCheckResult,
+            StreamUrlAcquireResult = string.IsNullOrWhiteSpace(refreshedDetail.StreamUrlAcquireResult)
+                ? existingDetail.StreamUrlAcquireResult
+                : refreshedDetail.StreamUrlAcquireResult,
+            FinalPlaybackResult = string.IsNullOrWhiteSpace(refreshedDetail.FinalPlaybackResult)
+                ? existingDetail.FinalPlaybackResult
+                : refreshedDetail.FinalPlaybackResult,
+            PlaybackAttemptCount = refreshedDetail.PlaybackAttemptCount == 0
+                ? existingDetail.PlaybackAttemptCount
+                : refreshedDetail.PlaybackAttemptCount,
+            ProtocolFallbackUsed = refreshedDetail.PlaybackAttemptCount == 0
+                ? existingDetail.ProtocolFallbackUsed
+                : refreshedDetail.ProtocolFallbackUsed
+        };
+    }
+
+    private string ResolveBusinessStatusText(
+        InspectionPointStatus status,
+        InspectionPointStatus completionStatus,
+        string? summary)
+    {
+        var businessLabel = ResolveBusinessStateLabel(summary);
+        if (!string.IsNullOrWhiteSpace(businessLabel))
+        {
+            return businessLabel;
+        }
+
+        var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;
+        return ResolvePointStatus(effectiveStatus);
     }
 
     private string ResolveDetailPlaybackStatus(
@@ -2352,6 +2692,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         string pointId,
         InspectionTaskPointExecutionModel? execution)
     {
+        var cachedSession = _previewSessionByPointId.GetValueOrDefault(pointId);
+        if (ShouldPreferCachedPreviewSession(cachedSession, execution))
+        {
+            return cachedSession;
+        }
+
         if (!string.IsNullOrWhiteSpace(execution?.PreviewUrl))
         {
             var session = new InspectionPointPreviewSessionModel(
@@ -2366,13 +2712,19 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 StreamUrlAcquireResult = execution.StreamUrlAcquireResult ?? string.Empty,
                 PlaybackAttemptCount = execution.PlaybackAttemptCount,
                 ProtocolFallbackUsed = execution.ProtocolFallbackUsed,
-                FinalPlaybackResult = execution.FinalPlaybackResult ?? string.Empty
+                FinalPlaybackResult = execution.FinalPlaybackResult ?? string.Empty,
+                PreviewFailureClassification = string.IsNullOrWhiteSpace(execution.PreviewFailureClassification)
+                    ? InspectionPreviewFailureClassifications.None
+                    : execution.PreviewFailureClassification
             };
-            _previewSessionByPointId[pointId] = session;
-            return session;
+            if (ShouldCachePreviewSession(cachedSession, session))
+            {
+                _previewSessionByPointId[pointId] = session;
+                return session;
+            }
         }
 
-        return _previewSessionByPointId.GetValueOrDefault(pointId);
+        return cachedSession;
     }
 
     private static bool HasDisplayValue(string? value)
@@ -2382,10 +2734,55 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             && !string.Equals(value, "暂无", StringComparison.Ordinal);
     }
 
+    private static bool HasFinalPreviewFailure(InspectionPointPreviewSessionModel? previewSession)
+    {
+        return previewSession is not null
+            && !string.IsNullOrWhiteSpace(previewSession.PreviewFailureClassification)
+            && !string.Equals(previewSession.PreviewFailureClassification, InspectionPreviewFailureClassifications.None, StringComparison.Ordinal);
+    }
+
+    private static bool ShouldPreferCachedPreviewSession(
+        InspectionPointPreviewSessionModel? cachedSession,
+        InspectionTaskPointExecutionModel? execution)
+    {
+        if (!HasFinalPreviewFailure(cachedSession))
+        {
+            return false;
+        }
+
+        return execution is null
+            || string.Equals(cachedSession!.PreviewHostKind, execution.PreviewHostKind, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolvePreviewFailureClassification(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        if (HasFinalPreviewFailure(previewSession))
+        {
+            return previewSession!.PreviewFailureClassification;
+        }
+
+        if (!string.IsNullOrWhiteSpace(execution?.PreviewFailureClassification))
+        {
+            return execution.PreviewFailureClassification;
+        }
+
+        return string.IsNullOrWhiteSpace(previewSession?.PreviewFailureClassification)
+            ? InspectionPreviewFailureClassifications.None
+            : previewSession.PreviewFailureClassification;
+    }
+
     private static Uri? ResolvePreviewHostUri(
         InspectionTaskPointExecutionModel? execution,
         InspectionPointPreviewSessionModel? previewSession)
     {
+        if (HasFinalPreviewFailure(previewSession)
+            && string.IsNullOrWhiteSpace(previewSession?.PreviewUrl))
+        {
+            return null;
+        }
+
         var previewUrl = !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
             ? execution.PreviewUrl
             : previewSession?.PreviewUrl;
@@ -2399,22 +2796,225 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             : null;
     }
 
+    private static bool HasPreviewSource(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession)
+    {
+        if (HasFinalPreviewFailure(previewSession)
+            && string.IsNullOrWhiteSpace(previewSession?.PreviewUrl))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(execution?.PreviewUrl)
+            || !string.IsNullOrWhiteSpace(previewSession?.PreviewUrl);
+    }
+
+    private static string ResolvePreviewSummary(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
+        {
+            return execution.RecoverySummary;
+        }
+
+        if (HasFinalPreviewFailure(previewSession) && HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
+        }
+
+        if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
+        {
+            return execution.ExecutionSummary;
+        }
+
+        if (HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
+        }
+
+        return point.FaultDescription;
+    }
+
+    private static string? ResolveBusinessStateLabel(string? summary)
+    {
+        if (!HasDisplayValue(summary))
+        {
+            return null;
+        }
+
+        if (summary!.Contains("在线但无流地址", StringComparison.Ordinal))
+        {
+            return "在线但无流地址";
+        }
+
+        if (summary.Contains("播放失败", StringComparison.Ordinal)
+            || summary.Contains("协议切换后仍失败", StringComparison.Ordinal))
+        {
+            return "播放失败";
+        }
+
+        if (summary.Contains("AI 未分析", StringComparison.Ordinal)
+            || summary.Contains("证据不足", StringComparison.Ordinal))
+        {
+            return "AI 未分析 / 证据不足";
+        }
+
+        if (summary.Contains("真正巡检故障", StringComparison.Ordinal)
+            || summary.Contains("画面异常", StringComparison.Ordinal))
+        {
+            return "真正巡检故障";
+        }
+
+        return null;
+    }
+
+    private static InspectionPointStatus MapExecutionStatus(InspectionTaskPointExecutionModel execution)
+    {
+        if (execution.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline)
+        {
+            return InspectionPointStatus.PausedUntilRecovery;
+        }
+
+        var businessLabel = ResolveBusinessStateLabel(execution.ExecutionSummary)
+            ?? execution.FailureCategory switch
+            {
+                InspectionPointFailureCategoryModel.NoStreamAddress => "在线但无流地址",
+                InspectionPointFailureCategoryModel.StreamUrlParseFailed => "已获取流地址但播放失败",
+                InspectionPointFailureCategoryModel.PlaybackCheckFailed => "已获取流地址但播放失败",
+                InspectionPointFailureCategoryModel.PlaybackTimeout => "已获取流地址但播放失败",
+                InspectionPointFailureCategoryModel.StreamUrlResolvedPlaybackFailed => "已获取流地址但播放失败",
+                InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "已获取流地址但播放失败",
+                InspectionPointFailureCategoryModel.EvidenceCaptureFailed => "播放成功但截图/证据失败",
+                InspectionPointFailureCategoryModel.OnlineStatusPending => "AI未分析/证据不足",
+                InspectionPointFailureCategoryModel.AiEvidenceInsufficient => "AI未分析/证据不足",
+                InspectionPointFailureCategoryModel.ImageAbnormalDetected => "画面异常",
+                _ => null
+            };
+
+        return businessLabel switch
+        {
+            "画面异常" => InspectionPointStatus.Fault,
+            "设备离线" => InspectionPointStatus.PausedUntilRecovery,
+            "在线但无流地址" => InspectionPointStatus.Silent,
+            "已获取流地址但播放失败" => InspectionPointStatus.Silent,
+            "播放成功但截图/证据失败" => InspectionPointStatus.Silent,
+            "AI未分析/证据不足" => InspectionPointStatus.Silent,
+            _ => InspectionPointStatus.Fault
+        };
+    }
+
+    private static bool ShouldCachePreviewSession(
+        InspectionPointPreviewSessionModel? existingSession,
+        InspectionPointPreviewSessionModel? incomingSession)
+    {
+        if (incomingSession is null)
+        {
+            return false;
+        }
+
+        var incomingHasPreview = !string.IsNullOrWhiteSpace(incomingSession.PreviewUrl);
+        var existingHasPreview = !string.IsNullOrWhiteSpace(existingSession?.PreviewUrl);
+
+        if (incomingHasPreview)
+        {
+            return true;
+        }
+
+        return !existingHasPreview;
+    }
+
+    private static InspectionPointDetailState? MergeSelectedPreviewDetail(
+        InspectionPointDetailState? existingDetail,
+        InspectionPointDetailState? refreshedDetail)
+    {
+        if (existingDetail is null || refreshedDetail is null)
+        {
+            return refreshedDetail;
+        }
+
+        if (refreshedDetail.PreviewHostUri is not null
+            || existingDetail.PreviewHostUri is null)
+        {
+            return refreshedDetail;
+        }
+
+        return refreshedDetail with
+        {
+            IsPreviewAvailable = true,
+            PreviewHostUri = existingDetail.PreviewHostUri,
+            PreviewHostKind = string.IsNullOrWhiteSpace(refreshedDetail.PreviewHostKind)
+                ? existingDetail.PreviewHostKind
+                : refreshedDetail.PreviewHostKind,
+            PreviewBusinessTitle = string.IsNullOrWhiteSpace(refreshedDetail.PreviewBusinessTitle)
+                ? existingDetail.PreviewBusinessTitle
+                : refreshedDetail.PreviewBusinessTitle,
+            PreviewBusinessDescription = string.IsNullOrWhiteSpace(refreshedDetail.PreviewBusinessDescription)
+                ? existingDetail.PreviewBusinessDescription
+                : refreshedDetail.PreviewBusinessDescription,
+            OnlineCheckResult = string.IsNullOrWhiteSpace(refreshedDetail.OnlineCheckResult)
+                ? existingDetail.OnlineCheckResult
+                : refreshedDetail.OnlineCheckResult,
+            StreamUrlAcquireResult = string.IsNullOrWhiteSpace(refreshedDetail.StreamUrlAcquireResult)
+                ? existingDetail.StreamUrlAcquireResult
+                : refreshedDetail.StreamUrlAcquireResult,
+            FinalPlaybackResult = string.IsNullOrWhiteSpace(refreshedDetail.FinalPlaybackResult)
+                ? existingDetail.FinalPlaybackResult
+                : refreshedDetail.FinalPlaybackResult,
+            PlaybackAttemptCount = refreshedDetail.PlaybackAttemptCount == 0
+                ? existingDetail.PlaybackAttemptCount
+                : refreshedDetail.PlaybackAttemptCount,
+            ProtocolFallbackUsed = refreshedDetail.PlaybackAttemptCount == 0
+                ? existingDetail.ProtocolFallbackUsed
+                : refreshedDetail.ProtocolFallbackUsed
+        };
+    }
+
+    private string ResolveBusinessStatusText(
+        InspectionPointStatus status,
+        InspectionPointStatus completionStatus,
+        string? summary)
+    {
+        var businessLabel = ResolveBusinessStateLabel(summary);
+        if (!string.IsNullOrWhiteSpace(businessLabel))
+        {
+            return businessLabel;
+        }
+
+        var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;
+        return ResolvePointStatus(effectiveStatus);
+    }
+
     private string ResolveDetailPlaybackStatus(
         InspectionPointState point,
         InspectionTaskPointExecutionModel? execution,
         InspectionPointPreviewSessionModel? previewSession)
     {
-        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
-            ? execution.FinalPlaybackResult
-            : previewSession?.FinalPlaybackResult;
-        if (string.IsNullOrWhiteSpace(playbackResult))
+        if (HasFinalPreviewFailure(previewSession))
         {
-            return point.PlaybackStatus;
+            return HasDisplayValue(previewSession?.ResultSummary)
+                ? previewSession!.ResultSummary
+                : point.PlaybackStatus;
         }
 
-        return string.Equals(playbackResult, "播放成功", StringComparison.Ordinal)
-            ? _textService.Resolve(TextTokens.InspectionPlaybackPlayable)
-            : playbackResult;
+        if (HasPreviewSource(execution, previewSession)
+            || string.Equals(execution?.FinalPlaybackResult, "播放成功", StringComparison.Ordinal)
+            || string.Equals(previewSession?.FinalPlaybackResult, "播放成功", StringComparison.Ordinal))
+        {
+            return _textService.Resolve(TextTokens.InspectionPlaybackPlayable);
+        }
+
+        var businessLabel = ResolveBusinessStateLabel(
+            ResolveDetailSummary(point, point.BusinessSummary, execution, previewSession));
+        return businessLabel switch
+        {
+            "在线但无流地址" => "在线但无流地址",
+            "已获取流地址但播放失败" => "已获取流地址但播放失败",
+            "播放成功但截图/证据失败" => _textService.Resolve(TextTokens.InspectionPlaybackPlayable),
+            _ => point.PlaybackStatus
+        };
     }
 
     private string ResolveDetailPlaybackStatus(
@@ -2430,13 +3030,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionTaskPointExecutionModel? execution,
         InspectionPointPreviewSessionModel? previewSession)
     {
-        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
-            ? execution.FinalPlaybackResult
-            : previewSession?.FinalPlaybackResult;
-        if (!string.IsNullOrWhiteSpace(playbackResult)
-            && !string.Equals(playbackResult, "播放成功", StringComparison.Ordinal))
+        var businessLabel = ResolveBusinessStateLabel(
+            ResolveDetailSummary(point, summary, execution, previewSession));
+        if (!string.IsNullOrWhiteSpace(businessLabel))
         {
-            return playbackResult;
+            return businessLabel;
         }
 
         return HasDisplayValue(summary.FaultType)
@@ -2461,6 +3059,11 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         if (!string.IsNullOrWhiteSpace(execution?.RecoverySummary))
         {
             return execution.RecoverySummary;
+        }
+
+        if (HasFinalPreviewFailure(previewSession) && HasDisplayValue(previewSession?.ResultSummary))
+        {
+            return previewSession!.ResultSummary;
         }
 
         if (!string.IsNullOrWhiteSpace(execution?.ExecutionSummary))
@@ -2491,16 +3094,21 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointPreviewSessionModel? previewSession,
         InspectionPointState point)
     {
-        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
-            ? execution.FinalPlaybackResult
-            : previewSession?.FinalPlaybackResult;
-        return playbackResult switch
+        if (HasPreviewSource(execution, previewSession))
         {
-            "播放成功" => "实时预览已接入",
-            "在线检查失败" => "设备未通过在线检查",
-            "无流地址" => "未获取到可用视频流",
-            "协议切换后仍失败" => "当前点位暂未建立预览",
-            _ => point.IsPreviewAvailable ? "实时预览已接入" : "预览准备中"
+            return "实时预览已接入";
+        }
+
+        return ResolveBusinessStateLabel(
+            ResolvePreviewSummary(execution, previewSession, point)) switch
+        {
+            "在线但无流地址" => "当前点位暂无流地址",
+            "已获取流地址但播放失败" => "当前点位播放失败",
+            "播放成功但截图/证据失败" => "当前点位证据获取失败",
+            "AI未分析/证据不足" => "AI 分析尚未形成结论",
+            "设备离线" => "当前点位设备离线",
+            "画面异常" => "当前点位画面异常",
+            _ => "预览准备中"
         };
     }
 
@@ -2509,16 +3117,54 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointPreviewSessionModel? previewSession,
         InspectionPointState point)
     {
-        var playbackResult = !string.IsNullOrWhiteSpace(execution?.FinalPlaybackResult)
-            ? execution.FinalPlaybackResult
-            : previewSession?.FinalPlaybackResult;
-        var playbackDescription = playbackResult switch
+        if (HasPreviewSource(execution, previewSession))
         {
-            "播放成功" => "已完成流地址获取，并切换到当前点位的真实预览。",
-            "在线检查失败" => "当前点位未通过在线检查，本轮不建立右侧真实预览。",
-            "无流地址" => "当前点位暂未返回可播放流地址，右侧保留业务化失败说明。",
-            "协议切换后仍失败" => "已经执行协议切换重试，但当前点位仍未建立稳定预览。",
-            "画面异常" => "当前点位已接入真实预览，同时识别到画面异常，等待后续复核。",
+            return ResolveBusinessStateLabel(ResolvePreviewSummary(execution, previewSession, point)) == "真正巡检故障"
+                ? "右侧预览区已优先承载当前选中点位，同时保留巡检故障结论。"
+                : "右侧预览区已优先承载当前选中点位的真实视频。";
+        }
+
+        var playbackDescription = ResolveBusinessStateLabel(
+            ResolvePreviewSummary(execution, previewSession, point)) switch
+        {
+            "在线但无流地址" => "当前点位在线，但平台暂未返回可播放流地址，右侧仅保留业务化说明。",
+            "播放失败" => "已执行协议切换重试，但当前点位仍未建立稳定预览。",
+            "AI 未分析 / 证据不足" => "当前点位尚未形成足够证据，AI 结论继续留在待分析状态。",
+            "真正巡检故障" => "当前点位已识别为真正巡检故障，待后续复核或处置。",
+            _ => point.IsPreviewAvailable
+                ? "右侧预览区已优先承载当前选中点位。"
+                : "当前点位暂未建立真实预览，可先查看基础详情与最近结论。"
+        };
+
+        if (execution is null || string.IsNullOrWhiteSpace(execution.EvidenceSummary))
+        {
+            return playbackDescription;
+        }
+
+        return $"{playbackDescription} {execution.EvidenceSummary}";
+    }
+
+    private static string ResolvePreviewBusinessDescriptionStrict(
+        InspectionTaskPointExecutionModel? execution,
+        InspectionPointPreviewSessionModel? previewSession,
+        InspectionPointState point)
+    {
+        if (HasPreviewSource(execution, previewSession))
+        {
+            return ResolveBusinessStateLabel(ResolvePreviewSummary(execution, previewSession, point)) == "画面异常"
+                ? "右侧预览区已优先承载当前选中点位，同时保留巡检故障结论。"
+                : "右侧预览区已优先承载当前选中点位的真实视频。";
+        }
+
+        var playbackDescription = ResolveBusinessStateLabel(
+            ResolvePreviewSummary(execution, previewSession, point)) switch
+        {
+            "在线但无流地址" => "当前点位在线，但平台暂未返回可播放流地址，右侧仅保留业务说明。",
+            "已获取流地址但播放失败" => "已执行协议切换重试，并拿到流地址，但当前点位仍未建立稳定预览。",
+            "播放成功但截图/证据失败" => "当前点位已获取并加载预览，但截图或证据写回失败。",
+            "AI未分析/证据不足" => "当前点位尚未形成足够证据，AI 结论继续留在待分析状态。",
+            "设备离线" => "当前点位设备离线，本轮未进入取流与预览准备。",
+            "画面异常" => "当前点位已识别为画面异常，待后续复核或处置。",
             _ => point.IsPreviewAvailable
                 ? "右侧预览区已优先承载当前选中点位。"
                 : "当前点位暂未建立真实预览，可先查看基础详情与最近结论。"
@@ -2861,7 +3507,8 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         bool isInDefaultScope,
         string scopeDecisionSummary)
     {
-        var faultType = ResolveFaultType(status, completionStatus, isOnline, isPlayable, isImageAbnormal);
+        var faultType = ResolveFaultType(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary);
+        var faultDescription = BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText);
         var pointSummary = businessSummary is not null
             ? PointBusinessSummaryState.FromModel(businessSummary)
             : PointBusinessSummaryState.CreateFallback(
@@ -2874,7 +3521,7 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
                 coordinateStatusText,
                 ResolveOnlineStatus(isOnline),
                 unitName,
-                BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText),
+                faultDescription,
                 faultType,
                 canRenderOnMap
                     ? "进入AI巡检 / 查看报表"
@@ -2883,12 +3530,18 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         var onlineStatus = businessSummary is not null
             ? pointSummary.OnlineStatus
             : ResolveOnlineStatus(isOnline);
-        var resolvedFaultType = businessSummary is not null
-            ? pointSummary.FaultType
-            : faultType;
-        var resolvedFaultDescription = businessSummary is not null
-            ? pointSummary.StatusSummary
-            : BuildFaultDescription(status, completionStatus, isOnline, isPlayable, isImageAbnormal, faultSummary, canRenderOnMap, coordinateStatusText);
+        var businessLabel = ResolveBusinessStateLabel(faultSummary);
+        var resolvedFaultType = !string.IsNullOrWhiteSpace(businessLabel)
+            ? businessLabel
+            : businessSummary is not null && HasDisplayValue(pointSummary.FaultType)
+                ? pointSummary.FaultType
+                : faultType;
+        var resolvedFaultDescription = !string.IsNullOrWhiteSpace(faultDescription)
+            ? faultDescription
+            : businessSummary is not null
+                ? pointSummary.StatusSummary
+                : string.Empty;
+        var resolvedStatusText = ResolveBusinessStatusText(status, completionStatus, faultSummary);
 
         return new InspectionPointState(
             id,
@@ -2911,10 +3564,10 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             x,
             y,
             status,
-            statusText,
+            resolvedStatusText,
             completionStatus,
             onlineStatus,
-            ResolvePlaybackStatus(isOnline, isPlayable),
+            ResolvePlaybackStatus(isOnline, isPlayable, faultSummary),
             ResolveImageStatus(isOnline, isImageAbnormal),
             resolvedFaultType,
             resolvedFaultDescription,
@@ -2949,8 +3602,15 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         InspectionPointStatus completionStatus,
         bool? isOnline,
         bool isPlayable,
-        bool isImageAbnormal)
+        bool isImageAbnormal,
+        string? faultSummary)
     {
+        var businessLabel = ResolveBusinessStateLabel(faultSummary);
+        if (!string.IsNullOrWhiteSpace(businessLabel))
+        {
+            return businessLabel;
+        }
+
         var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;
         if (effectiveStatus is InspectionPointStatus.Normal or InspectionPointStatus.Silent)
         {
@@ -3041,8 +3701,19 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
         };
     }
 
-    private string ResolvePlaybackStatus(bool? isOnline, bool isPlayable)
+    private string ResolvePlaybackStatus(bool? isOnline, bool isPlayable, string? faultSummary)
     {
+        var businessLabel = ResolveBusinessStateLabel(faultSummary);
+        if (businessLabel is "在线但无流地址" or "已获取流地址但播放失败")
+        {
+            return businessLabel;
+        }
+
+        if (businessLabel == "播放成功但截图/证据失败")
+        {
+            return _textService.Resolve(TextTokens.InspectionPlaybackPlayable);
+        }
+
         return isOnline switch
         {
             null => "待接入",
@@ -3091,6 +3762,12 @@ public sealed partial class InspectionPageViewModel : PageViewModelBase
             || (!string.IsNullOrWhiteSpace(businessSummary) && businessSummary.Contains("确认恢复", StringComparison.Ordinal)))
         {
             return "已恢复";
+        }
+
+        var businessLabel = ResolveBusinessStateLabel(faultSummary) ?? ResolveBusinessStateLabel(businessSummary);
+        if (!string.IsNullOrWhiteSpace(businessLabel))
+        {
+            return businessLabel;
         }
 
         var effectiveStatus = status == InspectionPointStatus.Pending ? completionStatus : status;

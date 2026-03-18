@@ -7,11 +7,29 @@ internal static class CtyunSecurity
 {
     public static string BuildSignature(IReadOnlyList<KeyValuePair<string, string>> requestData, string appSecret)
     {
+        return BuildSignature(
+            GetRequiredValue(requestData, "appId"),
+            GetRequiredValue(requestData, "clientType"),
+            GetRequiredValue(requestData, "params"),
+            GetRequiredValue(requestData, "timestamp"),
+            GetRequiredValue(requestData, "version"),
+            appSecret);
+    }
+
+    public static string BuildSignature(
+        string appId,
+        string clientType,
+        string encryptedParams,
+        string timestamp,
+        string version,
+        string appSecret)
+    {
         var signatureSource = string.Concat(
-            requestData
-                .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
-                .Where(item => !string.IsNullOrWhiteSpace(item.Value))
-                .Select(item => item.Value));
+            appId?.Trim() ?? string.Empty,
+            clientType?.Trim() ?? string.Empty,
+            encryptedParams?.Trim() ?? string.Empty,
+            timestamp?.Trim() ?? string.Empty,
+            version?.Trim() ?? string.Empty);
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(appSecret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(signatureSource));
@@ -20,9 +38,24 @@ internal static class CtyunSecurity
 
     public static string EncryptParams(IReadOnlyList<KeyValuePair<string, string>> parameters, string appSecret)
     {
-        var plain = string.Join("&", parameters.Select(item => $"{item.Key}={item.Value}"));
+        var plain = BuildPrivateParameterString(parameters);
         var keyBytes = Encoding.UTF8.GetBytes(appSecret);
         return XXTea.EncryptToHex(Encoding.UTF8.GetBytes(plain), keyBytes);
+    }
+
+    public static string BuildPrivateParameterString(IReadOnlyList<KeyValuePair<string, string>> parameters)
+    {
+        return string.Join(
+            "&",
+            parameters
+                .Where(item => !string.IsNullOrWhiteSpace(item.Key))
+                .Select(item => $"{item.Key}={item.Value}"));
+    }
+
+    private static string GetRequiredValue(IReadOnlyList<KeyValuePair<string, string>> requestData, string key)
+    {
+        return requestData.FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase)).Value
+               ?? string.Empty;
     }
 
     private static class XXTea

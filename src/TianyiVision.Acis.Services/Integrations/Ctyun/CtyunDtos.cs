@@ -71,16 +71,89 @@ public sealed record CtyunPreviewStreamUrlDto(
     int Protocol,
     string StreamUrl,
     string? Ipv6StreamUrl,
-    int? Level);
+    int? Level)
+{
+    public string RawStreamUrl { get; init; } = string.Empty;
+
+    public string ParsedProtocolType { get; init; } = string.Empty;
+
+    public string MatchedFieldPath { get; init; } = string.Empty;
+
+    public string DecryptMode { get; init; } = string.Empty;
+}
 
 public sealed record CtyunPreviewStreamSetDto(
     int? ExpireIn,
     int? VideoEnc,
-    IReadOnlyList<CtyunPreviewStreamUrlDto> StreamUrls);
+    IReadOnlyList<CtyunPreviewStreamUrlDto> StreamUrls)
+{
+    public string MediaApiPath { get; init; } = string.Empty;
+
+    public string RequestPayloadSummary { get; init; } = string.Empty;
+
+    public int ResponseCode { get; init; }
+
+    public string ResponseMessage { get; init; } = string.Empty;
+
+    public string ResponseUrlFieldRaw { get; init; } = string.Empty;
+
+    public string ResponseContentType { get; init; } = string.Empty;
+
+    public string ResponseBodyPreviewFirst300 { get; init; } = string.Empty;
+
+    public string ResponseEnvelopeShape { get; init; } = string.Empty;
+
+    public string ResponseJsonTopLevelKeys { get; init; } = string.Empty;
+
+    public string ResponseCandidateUrlKeys { get; init; } = string.Empty;
+
+    public string ResponseNestedPathTried { get; init; } = string.Empty;
+
+    public string OriginalDataRaw { get; init; } = string.Empty;
+
+    public string MatchedFieldPath { get; init; } = string.Empty;
+
+    public string DecryptMode { get; init; } = string.Empty;
+
+    public string ParsedProtocolType { get; init; } = string.Empty;
+}
 
 public sealed record CtyunPreviewMediaUrlDto(
     string Url,
-    int? ExpireTime);
+    int? ExpireTime)
+{
+    public string MediaApiPath { get; init; } = string.Empty;
+
+    public string RequestPayloadSummary { get; init; } = string.Empty;
+
+    public int ResponseCode { get; init; }
+
+    public string ResponseMessage { get; init; } = string.Empty;
+
+    public string ResponseUrlFieldRaw { get; init; } = string.Empty;
+
+    public string ParsedPreviewUrl { get; init; } = string.Empty;
+
+    public string ResponseContentType { get; init; } = string.Empty;
+
+    public string ResponseBodyPreviewFirst300 { get; init; } = string.Empty;
+
+    public string ResponseEnvelopeShape { get; init; } = string.Empty;
+
+    public string ResponseJsonTopLevelKeys { get; init; } = string.Empty;
+
+    public string ResponseCandidateUrlKeys { get; init; } = string.Empty;
+
+    public string ResponseNestedPathTried { get; init; } = string.Empty;
+
+    public string OriginalDataRaw { get; init; } = string.Empty;
+
+    public string MatchedFieldPath { get; init; } = string.Empty;
+
+    public string DecryptMode { get; init; } = string.Empty;
+
+    public string ParsedProtocolType { get; init; } = string.Empty;
+}
 
 public interface ICtyunDeviceListAdapter
 {

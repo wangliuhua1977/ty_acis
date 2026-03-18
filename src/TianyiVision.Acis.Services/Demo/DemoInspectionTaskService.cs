@@ -8,7 +8,9 @@ public sealed class DemoInspectionTaskService : IInspectionTaskService
     private const string DemoGroupId = "demo-inspection-group";
     private const string DemoGroupName = "演示巡检组";
 
+#pragma warning disable CS0067
     public event EventHandler<InspectionTaskBoardChangedEventArgs>? TaskBoardChanged;
+#pragma warning restore CS0067
 
     public ServiceResponse<InspectionWorkspaceSnapshot> GetWorkspace()
     {

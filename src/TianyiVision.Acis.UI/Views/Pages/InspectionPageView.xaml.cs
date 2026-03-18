@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
@@ -19,6 +20,7 @@ public partial class InspectionPageView : UserControl
     private CancellationTokenSource? _previewNavigationCts;
     private string _activeEvidenceKey = string.Empty;
     private string _activePreviewUri = string.Empty;
+    private string _activePreviewProbeFingerprint = string.Empty;
 
     public InspectionPageView()
     {
@@ -115,20 +117,43 @@ public partial class InspectionPageView : UserControl
             if (previewUri is null)
             {
                 _activePreviewUri = string.Empty;
+                _activePreviewProbeFingerprint = string.Empty;
                 await Dispatcher.InvokeAsync(() => PreviewWebView.Source = new Uri("about:blank"));
                 return;
             }
 
             if (string.Equals(_activePreviewUri, previewUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
             {
+                WritePreviewHostLog(
+                    detail!,
+                    detail!.PreviewHostKind,
+                    detail.StreamUrlAcquireResult,
+                    "navigation_skipped_same_url",
+                    "reuse_existing_host",
+                    "none",
+                    "none",
+                    previewUri.AbsoluteUri,
+                    previewUri.AbsoluteUri);
                 return;
             }
 
             await PreviewWebView.EnsureCoreWebView2Async();
+            AttachPreviewProbeHandlers();
             cancellationToken.ThrowIfCancellationRequested();
 
+            WritePreviewHostLog(
+                detail!,
+                detail!.PreviewHostKind,
+                detail.StreamUrlAcquireResult,
+                "navigation_requested",
+                "probe_pending",
+                "none",
+                "none",
+                previewUri.AbsoluteUri,
+                previewUri.AbsoluteUri);
             await Dispatcher.InvokeAsync(() => PreviewWebView.Source = previewUri);
             _activePreviewUri = previewUri.AbsoluteUri;
+            _activePreviewProbeFingerprint = string.Empty;
         }
         catch (OperationCanceledException)
         {
@@ -136,9 +161,248 @@ public partial class InspectionPageView : UserControl
         catch (Exception ex)
         {
             MapPointSourceDiagnostics.Write(
-                "InspectionPreview",
-                $"preview host navigation failed: reason={ex.Message}");
+                "InspectionPreviewHost",
+                $"navigationResult = navigation_failed, failureCategory = navigation_failed, previewFailureClassification = {InspectionPreviewFailureClassifications.NavigationFailed}, failureReason = {NormalizeLogValue(ex.Message)}, actualLoadUrl = {NormalizeLogValue(detail?.PreviewHostUri?.AbsoluteUri)}");
         }
+    }
+
+    private void AttachPreviewProbeHandlers()
+    {
+        if (PreviewWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        PreviewWebView.CoreWebView2.WebMessageReceived -= OnPreviewWebMessageReceived;
+        PreviewWebView.CoreWebView2.WebMessageReceived += OnPreviewWebMessageReceived;
+        PreviewWebView.CoreWebView2.NavigationCompleted -= OnPreviewNavigationCompleted;
+        PreviewWebView.CoreWebView2.NavigationCompleted += OnPreviewNavigationCompleted;
+    }
+
+    private void OnPreviewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        var detail = _viewModel?.SelectedPointDetail;
+        if (detail is null)
+        {
+            return;
+        }
+
+        var failureReason = e.IsSuccess
+            ? "none"
+            : $"navigation_error:{e.WebErrorStatus}";
+        var previewFailureClassification = e.IsSuccess
+            ? InspectionPreviewFailureClassifications.None
+            : InspectionPreviewFailureClassifications.NavigationFailed;
+        WritePreviewHostLog(
+            detail,
+            detail.PreviewHostKind,
+            detail.StreamUrlAcquireResult,
+            e.IsSuccess ? "navigation_completed" : "navigation_failed",
+            e.IsSuccess ? "probe_pending" : "probe_not_started",
+            e.IsSuccess ? "none" : "navigation_failed",
+            failureReason,
+            detail.PreviewHostUri?.AbsoluteUri ?? string.Empty,
+            detail.PreviewHostUri?.AbsoluteUri ?? string.Empty,
+            previewFailureClassification);
+
+        if (!e.IsSuccess)
+        {
+            WritePreviewProjectionLog(
+                detail,
+                detail.PreviewHostKind,
+                "probe_not_started",
+                previewFailureClassification,
+                failureReason,
+                detail.PreviewHostUri?.AbsoluteUri ?? string.Empty,
+                detail.PreviewHostUri?.AbsoluteUri ?? string.Empty);
+            _viewModel?.ApplyPreviewHostFailure(
+                detail.PointId,
+                detail.PreviewHostKind,
+                previewFailureClassification,
+                "播放失败",
+                "已获取流地址但播放失败");
+        }
+    }
+
+    private void OnPreviewWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        var detail = _viewModel?.SelectedPointDetail;
+        if (detail is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var document = ParsePreviewProbeMessage(e.WebMessageAsJson);
+            if (document is null)
+            {
+                return;
+            }
+
+            var root = document.RootElement;
+            if (!root.TryGetProperty("kind", out var kindElement)
+                || !string.Equals(kindElement.GetString(), "previewProbe", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var state = root.TryGetProperty("state", out var stateElement)
+                ? stateElement.GetString() ?? string.Empty
+                : string.Empty;
+            var probeDetail = root.TryGetProperty("detail", out var detailElement)
+                ? detailElement.GetString() ?? string.Empty
+                : string.Empty;
+            var protocol = root.TryGetProperty("protocol", out var protocolElement)
+                ? protocolElement.GetString() ?? string.Empty
+                : detail.PreviewHostKind;
+            var sourceUrl = root.TryGetProperty("sourceUrl", out var sourceUrlElement)
+                ? sourceUrlElement.GetString() ?? string.Empty
+                : string.Empty;
+            var fingerprint = $"{detail.PointId}|{state}|{probeDetail}|{protocol}|{sourceUrl}";
+            if (string.Equals(_activePreviewProbeFingerprint, fingerprint, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _activePreviewProbeFingerprint = fingerprint;
+            var failureCategory = state switch
+            {
+                "playback_failed" => "player_load_failed",
+                "playback_warning" => "player_warning",
+                "playback_stalled" => "playback_stalled",
+                _ => "none"
+            };
+            var previewFailureClassification = ResolvePreviewFailureClassification(state, probeDetail);
+            WritePreviewHostLog(
+                detail,
+                string.IsNullOrWhiteSpace(protocol) ? detail.PreviewHostKind : protocol,
+                detail.StreamUrlAcquireResult,
+                "navigation_completed",
+                state,
+                failureCategory,
+                string.IsNullOrWhiteSpace(probeDetail) ? "none" : probeDetail,
+                sourceUrl,
+                detail.PreviewHostUri?.AbsoluteUri ?? sourceUrl,
+                previewFailureClassification);
+
+            if (IsFinalPreviewFailureClassification(previewFailureClassification))
+            {
+                WritePreviewProjectionLog(
+                    detail,
+                    string.IsNullOrWhiteSpace(protocol) ? detail.PreviewHostKind : protocol,
+                    state,
+                    previewFailureClassification,
+                    string.IsNullOrWhiteSpace(probeDetail) ? "none" : probeDetail,
+                    sourceUrl,
+                    detail.PreviewHostUri?.AbsoluteUri ?? sourceUrl);
+                _viewModel?.ApplyPreviewHostFailure(
+                    detail.PointId,
+                    string.IsNullOrWhiteSpace(protocol) ? detail.PreviewHostKind : protocol,
+                    previewFailureClassification,
+                    "播放失败",
+                    "已获取流地址但播放失败");
+            }
+        }
+        catch (Exception ex)
+        {
+            MapPointSourceDiagnostics.Write(
+                "InspectionPreviewHost",
+                $"navigationResult = navigation_completed, playbackProbeResult = probe_message_parse_failed, failureCategory = player_load_failed, previewFailureClassification = {InspectionPreviewFailureClassifications.PlayerLoadFailed}, failureReason = {NormalizeLogValue(ex.Message)}, actualLoadUrl = {NormalizeLogValue(detail?.PreviewHostUri?.AbsoluteUri)}");
+        }
+    }
+
+    private static JsonDocument? ParsePreviewProbeMessage(string messageJson)
+    {
+        if (string.IsNullOrWhiteSpace(messageJson))
+        {
+            return null;
+        }
+
+        var document = JsonDocument.Parse(messageJson);
+        if (document.RootElement.ValueKind != JsonValueKind.String)
+        {
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                ? document
+                : DisposeAndReturnNull(document);
+        }
+
+        var nestedJson = document.RootElement.GetString();
+        document.Dispose();
+        if (string.IsNullOrWhiteSpace(nestedJson))
+        {
+            return null;
+        }
+
+        var nestedDocument = JsonDocument.Parse(nestedJson);
+        return nestedDocument.RootElement.ValueKind == JsonValueKind.Object
+            ? nestedDocument
+            : DisposeAndReturnNull(nestedDocument);
+    }
+
+    private static JsonDocument? DisposeAndReturnNull(JsonDocument document)
+    {
+        document.Dispose();
+        return null;
+    }
+
+    private static void WritePreviewHostLog(
+        InspectionPointDetailState detail,
+        string selectedProtocol,
+        string streamAcquireResult,
+        string navigationResult,
+        string playbackProbeResult,
+        string failureCategory,
+        string failureReason,
+        string parsedPreviewUrl,
+        string actualLoadUrl,
+        string previewFailureClassification = InspectionPreviewFailureClassifications.None)
+    {
+        var attemptedProtocols = detail.ProtocolFallbackUsed
+            ? $"fallback>{NormalizeLogValue(selectedProtocol)}"
+            : NormalizeLogValue(selectedProtocol);
+        var payload = $"pointId = {NormalizeLogValue(detail.PointId)}, deviceCode = {NormalizeLogValue(detail.DeviceCode)}, selectedProtocol = {NormalizeLogValue(selectedProtocol)}, attemptedProtocols = {attemptedProtocols}, streamAcquireResult = {NormalizeLogValue(streamAcquireResult)}, navigationResult = {NormalizeLogValue(navigationResult)}, playbackProbeResult = {NormalizeLogValue(playbackProbeResult)}, failureCategory = {NormalizeLogValue(failureCategory)}, previewFailureClassification = {NormalizeLogValue(previewFailureClassification)}, failureReason = {NormalizeLogValue(failureReason)}, parsedPreviewUrl = {NormalizeLogValue(parsedPreviewUrl)}, actualLoadUrl = {NormalizeLogValue(actualLoadUrl)}";
+        MapPointSourceDiagnostics.Write("InspectionPreviewHost", payload);
+        MapPointSourceDiagnostics.Write("InspectionPreviewProbe", payload);
+    }
+
+    private static void WritePreviewProjectionLog(
+        InspectionPointDetailState detail,
+        string selectedProtocol,
+        string playbackProbeResult,
+        string previewFailureClassification,
+        string failureReason,
+        string parsedPreviewUrl,
+        string actualLoadUrl)
+    {
+        var attemptedProtocols = detail.ProtocolFallbackUsed
+            ? $"fallback>{NormalizeLogValue(selectedProtocol)}"
+            : NormalizeLogValue(selectedProtocol);
+        var payload = $"pointId = {NormalizeLogValue(detail.PointId)}, deviceCode = {NormalizeLogValue(detail.DeviceCode)}, selectedProtocol = {NormalizeLogValue(selectedProtocol)}, attemptedProtocols = {attemptedProtocols}, streamAcquireResult = {NormalizeLogValue(detail.StreamUrlAcquireResult)}, playbackProbeResult = {NormalizeLogValue(playbackProbeResult)}, previewFailureClassification = {NormalizeLogValue(previewFailureClassification)}, finalPlaybackResult = 播放失败, resultSummary = 已获取流地址但播放失败, failureReason = {NormalizeLogValue(failureReason)}, parsedPreviewUrl = {NormalizeLogValue(parsedPreviewUrl)}, actualLoadUrl = {NormalizeLogValue(actualLoadUrl)}";
+        MapPointSourceDiagnostics.Write("InspectionPreviewStream", payload);
+    }
+
+    private static bool IsFinalPreviewFailureClassification(string previewFailureClassification)
+    {
+        return !string.IsNullOrWhiteSpace(previewFailureClassification)
+            && !string.Equals(previewFailureClassification, InspectionPreviewFailureClassifications.None, StringComparison.Ordinal);
+    }
+
+    private static string ResolvePreviewFailureClassification(string playbackProbeResult, string failureReason)
+    {
+        return playbackProbeResult switch
+        {
+            "playback_stalled" => InspectionPreviewFailureClassifications.PlaybackStalled,
+            "playback_failed" when failureReason.Contains("not_supported", StringComparison.OrdinalIgnoreCase)
+                => InspectionPreviewFailureClassifications.PlayerProtocolNotSupported,
+            "playback_failed" => InspectionPreviewFailureClassifications.PlayerLoadFailed,
+            _ => InspectionPreviewFailureClassifications.None
+        };
+    }
+
+    private static string NormalizeLogValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "null" : value.Trim();
     }
 
     private void ScheduleEvidenceCapture(InspectionPointDetailState? detail)

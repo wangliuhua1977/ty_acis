@@ -117,16 +117,37 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
 
     public ServiceResponse<PointWorkspaceItemModel> GetPoint(string pointId)
     {
-        var collectionResponse = GetPointCollection();
-        if (!collectionResponse.IsSuccess)
+        var normalizedPointId = pointId?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedPointId))
         {
-            return ServiceResponse<PointWorkspaceItemModel>.Failure(Empty(pointId), collectionResponse.Message);
+            return ServiceResponse<PointWorkspaceItemModel>.Failure(Empty(normalizedPointId), "点位标识为空。");
         }
 
-        var point = collectionResponse.Data.FirstOrDefault(item => item.PointId == pointId);
-        return point is null
-            ? ServiceResponse<PointWorkspaceItemModel>.Failure(Empty(pointId), $"未找到点位 {pointId}。")
-            : ServiceResponse<PointWorkspaceItemModel>.Success(point, collectionResponse.Message);
+        var devicePoolResponse = _deviceWorkspaceService.GetDevicePool();
+        if (!devicePoolResponse.IsSuccess || devicePoolResponse.Data.Count == 0)
+        {
+            return ServiceResponse<PointWorkspaceItemModel>.Failure(Empty(normalizedPointId), devicePoolResponse.Message);
+        }
+
+        var device = devicePoolResponse.Data.FirstOrDefault(item =>
+            string.Equals(item.PointId, normalizedPointId, StringComparison.Ordinal)
+            || string.Equals(item.DeviceCode, normalizedPointId, StringComparison.Ordinal));
+        if (device is null)
+        {
+            return ServiceResponse<PointWorkspaceItemModel>.Failure(Empty(normalizedPointId), $"未找到点位 {normalizedPointId}。");
+        }
+
+        var detailResponse = _deviceWorkspaceService.GetPointDetail(device.PointId);
+        var detail = detailResponse.IsSuccess ? detailResponse.Data : CreateFallbackDetail(device);
+        var point = BuildSinglePointSnapshot(device, detail);
+
+        MapPointSourceDiagnostics.Write(
+            "PointWorkspace",
+            $"single point lookup resolved without fault-pool refresh: pointId = {point.PointId}, deviceCode = {point.DeviceCode}, online = {(point.IsOnline.HasValue ? point.IsOnline.Value.ToString() : "null")}, detailSource = {MapPointSourceDiagnostics.ClassifySourceTag(detail.SourceTag)}");
+
+        return ServiceResponse<PointWorkspaceItemModel>.Success(
+            point,
+            CombineMessages(devicePoolResponse.Message, detailResponse.IsSuccess ? detailResponse.Message : string.Empty));
     }
 
     private PointWorkspaceItemModel BuildPoint(
@@ -225,6 +246,54 @@ public sealed class ConfigDrivenPointWorkspaceService : IPointWorkspaceService
             false,
             string.Empty,
             string.Empty);
+    }
+
+    private static PointWorkspaceItemModel BuildSinglePointSnapshot(
+        DevicePoolItemModel device,
+        DevicePointDetailModel detail)
+    {
+        var faultStatus = detail.IsOnline switch
+        {
+            false => PointFaultObservationStatus.HasFault,
+            true => PointFaultObservationStatus.NoFault,
+            _ => PointFaultObservationStatus.Pending
+        };
+        var currentFaultType = faultStatus switch
+        {
+            PointFaultObservationStatus.HasFault => "设备离线",
+            PointFaultObservationStatus.NoFault => "无故障",
+            _ => "待接入"
+        };
+        var currentFaultSummary = faultStatus switch
+        {
+            PointFaultObservationStatus.HasFault => "设备当前离线",
+            PointFaultObservationStatus.NoFault => "无故障",
+            _ => "待接入"
+        };
+
+        return new PointWorkspaceItemModel(
+            detail.PointId,
+            detail.DeviceCode,
+            detail.PointName,
+            detail.DeviceType,
+            detail.UnitName,
+            detail.AreaName,
+            detail.UnitName,
+            detail.Coordinate,
+            detail.IsOnline,
+            detail.OnlineStatusText,
+            detail.PlaybackStatusText,
+            detail.ImageStatusText,
+            detail.LastSyncTime,
+            detail.LastSyncSource,
+            null,
+            currentFaultType,
+            currentFaultSummary,
+            faultStatus,
+            faultStatus == PointFaultObservationStatus.HasFault,
+            false,
+            detail.DetailSummary,
+            detail.SourceTag);
     }
 
     private static string CombineMessages(string? primary, string? secondary)

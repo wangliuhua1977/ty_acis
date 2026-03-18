@@ -1,6 +1,7 @@
 using TianyiVision.Acis.Services.Alerts;
 using TianyiVision.Acis.Services.Contracts;
 using TianyiVision.Acis.Services.Devices;
+using TianyiVision.Acis.Services.Diagnostics;
 
 namespace TianyiVision.Acis.Services.Dispatch;
 
@@ -11,30 +12,48 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
     private readonly IDispatchResponsibilityService _responsibilityService;
     private readonly TimeSpan _lookbackWindow;
     private readonly TimeSpan _aiFaultIdleWindow;
+    private readonly TimeSpan _snapshotCacheLifetime;
+    private readonly TimeSpan _minimumRefreshInterval;
+    private readonly object _snapshotCacheSyncRoot = new();
+    private CachedFaultPoolResponse? _snapshotCache;
 
     public ConfigDrivenFaultPoolService(
         IDeviceWorkspaceService deviceWorkspaceService,
         IAlertQueryService alertQueryService,
         IDispatchResponsibilityService responsibilityService,
         TimeSpan? lookbackWindow = null,
-        TimeSpan? aiFaultIdleWindow = null)
+        TimeSpan? aiFaultIdleWindow = null,
+        TimeSpan? snapshotCacheLifetime = null,
+        TimeSpan? minimumRefreshInterval = null)
     {
         _deviceWorkspaceService = deviceWorkspaceService;
         _alertQueryService = alertQueryService;
         _responsibilityService = responsibilityService;
         _lookbackWindow = lookbackWindow ?? TimeSpan.FromHours(72);
         _aiFaultIdleWindow = aiFaultIdleWindow ?? TimeSpan.FromHours(2);
+        _snapshotCacheLifetime = snapshotCacheLifetime ?? TimeSpan.FromSeconds(30);
+        _minimumRefreshInterval = minimumRefreshInterval ?? TimeSpan.FromSeconds(15);
     }
 
     public ServiceResponse<IReadOnlyList<FaultPoolItemModel>> GetFaultPool()
     {
+        if (TryGetCachedFaultPool(out var cachedResponse))
+        {
+            return cachedResponse;
+        }
+
         var devicePoolResponse = _deviceWorkspaceService.GetDevicePool();
         if (!devicePoolResponse.IsSuccess || devicePoolResponse.Data.Count == 0)
         {
-            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], devicePoolResponse.Message);
+            var failedResponse = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], devicePoolResponse.Message);
+            CacheFaultPool(failedResponse, TimeSpan.FromSeconds(10));
+            return failedResponse;
         }
 
-        var devices = devicePoolResponse.Data;
+        var devices = devicePoolResponse.Data
+            .GroupBy(device => device.DeviceCode, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
         var endTime = DateTime.Now;
         var startTime = endTime.Subtract(_lookbackWindow);
 
@@ -77,7 +96,9 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
                 failureMessages.Insert(0, aiAlertsResponse.Message);
             }
 
-            return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], string.Join(" ", failureMessages).Trim());
+            var failedResponse = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], string.Join(" ", failureMessages).Trim());
+            CacheFaultPool(failedResponse, TimeSpan.FromSeconds(10));
+            return failedResponse;
         }
 
         var activeAlerts = ResolveActiveAlerts(allAlerts, endTime);
@@ -101,7 +122,43 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             messages.Add("No active CTYun faults matched the current reconciliation rules.");
         }
 
-        return ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Success(faultPool, string.Join(" ", messages).Trim());
+        var response = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Success(faultPool, string.Join(" ", messages).Trim());
+        CacheFaultPool(response, _snapshotCacheLifetime);
+        MapPointSourceDiagnostics.Write(
+            "FaultPool",
+            $"fault pool refreshed: rawDeviceCount = {devicePoolResponse.Data.Count}, uniqueDeviceCount = {devices.Count}, deviceAlarmQueries = {devices.Count}, aiAlertQuerySuccess = {aiAlertsResponse.IsSuccess}, deviceAlertQuerySuccessCount = {deviceAlertResponses.Count(result => result.IsSuccess)}, faultPoolCount = {faultPool.Count}");
+        return response;
+    }
+
+    private bool TryGetCachedFaultPool(out ServiceResponse<IReadOnlyList<FaultPoolItemModel>> response)
+    {
+        lock (_snapshotCacheSyncRoot)
+        {
+            if (_snapshotCache is not null && _snapshotCache.IsReusable(DateTime.Now, _minimumRefreshInterval))
+            {
+                response = _snapshotCache.Response;
+                MapPointSourceDiagnostics.Write(
+                    "FaultPool",
+                    $"fault pool cache hit: cachedAt = {_snapshotCache.CachedAt:yyyy-MM-dd HH:mm:ss}, expiresAt = {_snapshotCache.ExpiresAt:yyyy-MM-dd HH:mm:ss}, itemCount = {response.Data.Count}, isSuccess = {response.IsSuccess}");
+                return true;
+            }
+
+            _snapshotCache = null;
+        }
+
+        response = ServiceResponse<IReadOnlyList<FaultPoolItemModel>>.Failure([], string.Empty);
+        return false;
+    }
+
+    private void CacheFaultPool(ServiceResponse<IReadOnlyList<FaultPoolItemModel>> response, TimeSpan cacheLifetime)
+    {
+        lock (_snapshotCacheSyncRoot)
+        {
+            _snapshotCache = new CachedFaultPoolResponse(
+                response,
+                DateTime.Now,
+                DateTime.Now.Add(cacheLifetime));
+        }
     }
 
     private IReadOnlyList<FaultAlertDto> ResolveActiveAlerts(
@@ -220,6 +277,17 @@ public sealed class ConfigDrivenFaultPoolService : IFaultPoolService
             "--",
             "default",
             "FaultPool.Placeholder");
+    }
+
+    private sealed record CachedFaultPoolResponse(
+        ServiceResponse<IReadOnlyList<FaultPoolItemModel>> Response,
+        DateTime CachedAt,
+        DateTime ExpiresAt)
+    {
+        public bool IsReusable(DateTime now, TimeSpan minimumRefreshInterval)
+        {
+            return ExpiresAt > now || CachedAt.Add(minimumRefreshInterval) > now;
+        }
     }
 }
 

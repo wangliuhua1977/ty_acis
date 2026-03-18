@@ -57,9 +57,13 @@ public enum InspectionPointFailureCategoryModel
     DeviceOffline,
     OnlineCheckFailed,
     NoStreamAddress,
+    StreamUrlParseFailed,
     PlaybackCheckFailed,
     PlaybackTimeout,
+    StreamUrlResolvedPlaybackFailed,
     ProtocolFallbackStillFailed,
+    EvidenceCaptureFailed,
+    AiEvidenceInsufficient,
     PlaybackSucceeded,
     ImageAbnormalDetected,
     ReservedForNextRound,
@@ -107,6 +111,25 @@ public static class InspectionRecoveryValueKeys
     public const string None = "none";
     public const string Unrecovered = "unrecovered";
     public const string Recovered = "recovered";
+}
+
+public static class InspectionPreviewProtocols
+{
+    public const string Flv = "flv";
+    public const string Hls = "hls";
+    public const string WebRtc = "webrtc";
+    public const string H5 = "h5";
+    public const string Direct = "direct";
+}
+
+public static class InspectionPreviewFailureClassifications
+{
+    public const string None = "none";
+    public const string PlayerLoadFailed = "preview_host_player_load_failed";
+    public const string PlayerProtocolNotSupported = "preview_host_player_protocol_not_supported";
+    public const string PlaybackStalled = "preview_host_playback_stalled";
+    public const string UrlUnloadable = "preview_url_unloadable";
+    public const string NavigationFailed = "preview_host_navigation_failed";
 }
 
 public sealed record InspectionGroupModel(
@@ -352,6 +375,8 @@ public sealed record InspectionTaskPointExecutionModel(
     public string PreviewUrl { get; init; } = string.Empty;
 
     public string PreviewHostKind { get; init; } = string.Empty;
+
+    public string PreviewFailureClassification { get; init; } = InspectionPreviewFailureClassifications.None;
 
     public int ScreenshotPlannedCount { get; init; }
 
@@ -652,9 +677,13 @@ public static class InspectionTaskModelExtensions
         {
             InspectionPointFailureCategoryModel.DeviceOffline => "offline",
             InspectionPointFailureCategoryModel.NoStreamAddress => "no_stream_address",
+            InspectionPointFailureCategoryModel.StreamUrlParseFailed => "stream_url_parse_failed",
             InspectionPointFailureCategoryModel.PlaybackCheckFailed => "playback_check_failed",
             InspectionPointFailureCategoryModel.PlaybackTimeout => "playback_timeout",
+            InspectionPointFailureCategoryModel.StreamUrlResolvedPlaybackFailed => "stream_url_resolved_playback_failed",
             InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "protocol_fallback_still_failed",
+            InspectionPointFailureCategoryModel.EvidenceCaptureFailed => "evidence_capture_failed",
+            InspectionPointFailureCategoryModel.AiEvidenceInsufficient => "ai_evidence_insufficient",
             InspectionPointFailureCategoryModel.ImageAbnormalDetected => "image_abnormal_detected",
             _ => string.Empty
         };
@@ -737,6 +766,8 @@ public sealed record InspectionPointCheckResult(
 
     public string PreviewHostKind { get; init; } = string.Empty;
 
+    public string PreviewFailureClassification { get; init; } = InspectionPreviewFailureClassifications.None;
+
     public int ScreenshotPlannedCount { get; init; }
 
     public int ScreenshotIntervalSeconds { get; init; }
@@ -795,6 +826,8 @@ public sealed record InspectionPointPreviewSessionModel(
     public string OnlineCheckResult { get; init; } = string.Empty;
 
     public string StreamUrlAcquireResult { get; init; } = string.Empty;
+
+    public string PreviewFailureClassification { get; init; } = InspectionPreviewFailureClassifications.None;
 
     public int PlaybackAttemptCount { get; init; }
 

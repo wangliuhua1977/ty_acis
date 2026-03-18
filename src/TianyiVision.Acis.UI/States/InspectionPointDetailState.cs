@@ -38,6 +38,8 @@ public sealed record InspectionPointDetailState(
 
     public string FinalPlaybackResult { get; init; } = string.Empty;
 
+    public string PreviewFailureClassification { get; init; } = InspectionPreviewFailureClassifications.None;
+
     public int PlaybackAttemptCount { get; init; }
 
     public bool ProtocolFallbackUsed { get; init; }

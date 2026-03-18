@@ -197,6 +197,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         {
             OnlineCheckResult = result.OnlineCheckResult ?? string.Empty,
             StreamUrlAcquireResult = result.StreamUrlAcquireResult ?? string.Empty,
+            PreviewFailureClassification = result.PreviewFailureClassification ?? InspectionPreviewFailureClassifications.None,
             PlaybackAttemptCount = result.PlaybackAttemptCount,
             ProtocolFallbackUsed = result.ProtocolFallbackUsed,
             FinalPlaybackResult = result.FinalPlaybackResult ?? string.Empty
@@ -573,6 +574,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                     {
                         ScreenshotPlannedCount = Math.Max(1, request.ScreenshotPlannedCount),
                         ScreenshotSuccessCount = Math.Max(0, request.ScreenshotSuccessCount),
+                        FailureCategory = ResolvePostEvidenceFailureCategory(point, evidenceCaptureState),
                         EvidenceCaptureState = evidenceCaptureState,
                         EvidenceSummary = evidenceSummary,
                         EvidenceRetentionMode = NormalizeEvidenceRetentionMode(request.EvidenceRetentionMode),
@@ -1108,6 +1110,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         string taskId,
         Func<InspectionTaskRecordModel, InspectionTaskRecordModel> update)
     {
+        InspectionTaskRecordModel originalTask;
         InspectionTaskRecordModel updatedTask;
         lock (_syncRoot)
         {
@@ -1117,16 +1120,33 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                 throw new InvalidOperationException($"Inspection task not found: {taskId}");
             }
 
-            updatedTask = update(_taskHistory[index]);
+            originalTask = _taskHistory[index];
+            updatedTask = update(originalTask);
             _taskHistory[index] = updatedTask;
             _latestTaskByGroupId[updatedTask.GroupId] = updatedTask;
             PersistTaskHistory();
         }
 
+        if (updatedTask == originalTask)
+        {
+            return updatedTask;
+        }
+
         RaiseTaskBoardChanged(updatedTask.GroupId);
+
+        var progressChanged =
+            updatedTask.Status != originalTask.Status
+            || updatedTask.SuccessCount != originalTask.SuccessCount
+            || updatedTask.FailureCount != originalTask.FailureCount
+            || updatedTask.SkippedCount != originalTask.SkippedCount
+            || !string.Equals(updatedTask.CurrentPointId, originalTask.CurrentPointId, StringComparison.Ordinal)
+            || !string.Equals(updatedTask.CurrentPointName, originalTask.CurrentPointName, StringComparison.Ordinal);
+
         MapPointSourceDiagnostics.Write(
             "InspectionTask",
-            $"task updated: taskId={updatedTask.TaskId}, status={updatedTask.Status}, success={updatedTask.SuccessCount}, failed={updatedTask.FailureCount}, skipped={updatedTask.SkippedCount}, currentPoint={updatedTask.CurrentPointName}");
+            progressChanged
+                ? $"task updated: taskId={updatedTask.TaskId}, status={updatedTask.Status}, success={updatedTask.SuccessCount}, failed={updatedTask.FailureCount}, skipped={updatedTask.SkippedCount}, currentPoint={updatedTask.CurrentPointName}"
+                : $"task detail updated: taskId={updatedTask.TaskId}, abnormalFlowChanged={updatedTask.AbnormalFlow != originalTask.AbnormalFlow}, evidenceChanged={HasEvidenceChanged(originalTask, updatedTask)}, dispatchChanged={HasDispatchChanged(originalTask, updatedTask)}");
         return updatedTask;
     }
 
@@ -1265,7 +1285,11 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                     Status = result.Status,
                     SkipReason = result.Status == InspectionPointExecutionStatusModel.Skipped ? result.ResultSummary : string.Empty,
                     FailureCategory = result.FailureCategory,
-                    FailureReason = result.Status == InspectionPointExecutionStatusModel.Failed ? result.ResultSummary : string.Empty,
+                    FailureReason = result.Status == InspectionPointExecutionStatusModel.Failed
+                        ? string.IsNullOrWhiteSpace(result.FailureReason)
+                            ? result.ResultSummary
+                            : result.FailureReason
+                        : string.Empty,
                     ExecutionSummary = result.ResultSummary,
                     OnlineCheckResult = result.OnlineCheckResult,
                     StreamUrlAcquireResult = result.StreamUrlAcquireResult,
@@ -1274,6 +1298,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                     FinalPlaybackResult = string.IsNullOrWhiteSpace(result.FinalPlaybackResult)
                         ? result.ResultSummary
                         : result.FinalPlaybackResult,
+                    PreviewFailureClassification = string.IsNullOrWhiteSpace(result.PreviewFailureClassification)
+                        ? InspectionPreviewFailureClassifications.None
+                        : result.PreviewFailureClassification,
                      PreviewUrl = result.PreviewUrl ?? string.Empty,
                      PreviewHostKind = result.PreviewHostKind ?? string.Empty,
                      EvidenceCaptureState = ResolvePendingEvidenceCaptureState(point, result),
@@ -1409,12 +1436,24 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
 
     private static string BuildTaskSummaryWithAi(string baseSummary, InspectionTaskPointExecutionModel pointExecution)
     {
-        if (string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary))
+        var latestPointState = ResolvePointExecutionBusinessSummary(pointExecution);
+        if (string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary) && string.IsNullOrWhiteSpace(latestPointState))
         {
             return baseSummary;
         }
 
-        return $"{baseSummary} 最新AI结论：{pointExecution.PointName} - {pointExecution.AiAnalysisSummary}";
+        var segments = new List<string> { baseSummary };
+        if (!string.IsNullOrWhiteSpace(latestPointState))
+        {
+            segments.Add($"最新点位状态：{pointExecution.PointName} - {latestPointState}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(pointExecution.AiAnalysisSummary))
+        {
+            segments.Add($"最新AI结论：{pointExecution.PointName} - {pointExecution.AiAnalysisSummary}");
+        }
+
+        return string.Join(" ", segments.Where(item => !string.IsNullOrWhiteSpace(item)));
     }
 
     private static string BuildTaskSummaryWithAi(
@@ -1609,9 +1648,13 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         {
             InspectionPointFailureCategoryModel.DeviceOffline => "offline",
             InspectionPointFailureCategoryModel.NoStreamAddress => "no_stream_address",
+            InspectionPointFailureCategoryModel.StreamUrlParseFailed => "stream_url_parse_failed",
             InspectionPointFailureCategoryModel.PlaybackCheckFailed => "playback_check_failed",
             InspectionPointFailureCategoryModel.PlaybackTimeout => "playback_timeout",
+            InspectionPointFailureCategoryModel.StreamUrlResolvedPlaybackFailed => "stream_url_resolved_playback_failed",
             InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "protocol_fallback_still_failed",
+            InspectionPointFailureCategoryModel.EvidenceCaptureFailed => "evidence_capture_failed",
+            InspectionPointFailureCategoryModel.AiEvidenceInsufficient => "ai_evidence_insufficient",
             InspectionPointFailureCategoryModel.ImageAbnormalDetected => "image_abnormal_detected",
             _ => string.IsNullOrWhiteSpace(fallbackSummary) ? string.Empty : fallbackSummary.Trim()
         };
@@ -2038,6 +2081,20 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         };
     }
 
+    private static InspectionPointFailureCategoryModel ResolvePostEvidenceFailureCategory(
+        InspectionTaskPointExecutionModel point,
+        string evidenceCaptureState)
+    {
+        if (string.Equals(evidenceCaptureState, InspectionEvidenceValueKeys.CaptureStateFailed, StringComparison.Ordinal)
+            && (!string.IsNullOrWhiteSpace(point.PreviewUrl)
+                || string.Equals(point.FinalPlaybackResult, "播放成功", StringComparison.Ordinal)))
+        {
+            return InspectionPointFailureCategoryModel.EvidenceCaptureFailed;
+        }
+
+        return point.FailureCategory;
+    }
+
     private static string NormalizeEvidenceRetentionMode(string retentionMode)
     {
         return retentionMode?.Trim() switch
@@ -2347,12 +2404,11 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
                     : InspectionPointStatusModel.Normal;
         var status = ResolveRuntimeStatus(taskPoint, baseStatus);
         var completionStatus = ResolveCompletionStatus(taskPoint, baseStatus);
-        var faultSummary = !string.IsNullOrWhiteSpace(taskPoint?.RecoverySummary)
-            ? taskPoint.RecoverySummary
-            : string.IsNullOrWhiteSpace(point.CurrentFaultSummary)
-                ? taskPoint?.FailureReason ?? string.Empty
-                : point.CurrentFaultSummary;
+        var faultSummary = ResolvePointFaultSummary(point, taskPoint);
         var entersDispatchPool = taskPoint?.RouteToDispatchPoolReserved ?? point.EntersDispatchPool;
+        var isPlayable = !string.IsNullOrWhiteSpace(taskPoint?.PreviewUrl)
+            || (taskPoint is null && ContainsPlayableFlag(point.PlaybackStatusText));
+        var isPreviewAvailable = !string.IsNullOrWhiteSpace(taskPoint?.PreviewUrl);
 
         return new InspectionPointModel(
             point.PointId,
@@ -2373,9 +2429,9 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
             status,
             completionStatus,
             point.IsOnline,
-            ContainsPlayableFlag(point.PlaybackStatusText) || point.IsOnline == true,
+            isPlayable,
             LooksLikeImageAbnormal(point),
-            point.IsOnline == true,
+            isPreviewAvailable,
             faultSummary,
             point.LatestFaultTime?.ToString("yyyy-MM-dd HH:mm") ?? "--",
             entersDispatchPool,
@@ -2471,6 +2527,151 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
             : description.Trim();
     }
 
+    private static string ResolvePointFaultSummary(
+        PointWorkspaceItemModel point,
+        InspectionTaskPointExecutionModel? taskPoint)
+    {
+        if (!string.IsNullOrWhiteSpace(taskPoint?.RecoverySummary))
+        {
+            return taskPoint.RecoverySummary;
+        }
+
+        var executionSummary = ResolvePointExecutionBusinessSummary(taskPoint);
+        if (!string.IsNullOrWhiteSpace(executionSummary))
+        {
+            return executionSummary;
+        }
+
+        return string.IsNullOrWhiteSpace(point.CurrentFaultSummary)
+            ? string.Empty
+            : point.CurrentFaultSummary;
+    }
+
+    private static string ResolvePointExecutionBusinessSummary(InspectionTaskPointExecutionModel? taskPoint)
+    {
+        if (taskPoint is null)
+        {
+            return string.Empty;
+        }
+
+        if (taskPoint.Status is InspectionPointExecutionStatusModel.Pending or InspectionPointExecutionStatusModel.Running)
+        {
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(taskPoint.RecoverySummary))
+        {
+            return taskPoint.RecoverySummary;
+        }
+
+        if (taskPoint.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline)
+        {
+            return "设备离线";
+        }
+
+        if (HasPlaybackSucceededButEvidenceFailed(taskPoint))
+        {
+            return "播放成功但截图/证据失败";
+        }
+
+        if (IsExecutionTrueInspectionFault(taskPoint))
+        {
+            var faultDetail = !string.IsNullOrWhiteSpace(taskPoint.AiAnalysisSummary)
+                ? taskPoint.AiAnalysisSummary
+                : !string.IsNullOrWhiteSpace(taskPoint.ExecutionSummary)
+                    ? taskPoint.ExecutionSummary
+                    : taskPoint.FailureReason;
+
+            return string.IsNullOrWhiteSpace(faultDetail)
+                ? "画面异常"
+                : $"画面异常：{faultDetail}";
+        }
+
+        if (taskPoint.Status == InspectionPointExecutionStatusModel.Succeeded
+            && !IsAiAnalysisPending(taskPoint))
+        {
+            return string.Empty;
+        }
+
+        return taskPoint.FailureCategory switch
+        {
+            InspectionPointFailureCategoryModel.NoStreamAddress => "在线但无流地址",
+            InspectionPointFailureCategoryModel.StreamUrlParseFailed => "已获取流地址但播放失败",
+            InspectionPointFailureCategoryModel.PlaybackCheckFailed => "已获取流地址但播放失败",
+            InspectionPointFailureCategoryModel.PlaybackTimeout => "已获取流地址但播放失败",
+            InspectionPointFailureCategoryModel.StreamUrlResolvedPlaybackFailed => "已获取流地址但播放失败",
+            InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => "已获取流地址但播放失败",
+            InspectionPointFailureCategoryModel.OnlineStatusPending => "AI未分析/证据不足",
+            InspectionPointFailureCategoryModel.AiEvidenceInsufficient => "AI未分析/证据不足",
+            _ when IsAiAnalysisPending(taskPoint) => "AI未分析/证据不足",
+            _ when !string.IsNullOrWhiteSpace(taskPoint.ExecutionSummary) => taskPoint.ExecutionSummary,
+            _ => taskPoint.FailureReason ?? string.Empty
+        };
+    }
+
+    private static bool IsExecutionTrueInspectionFault(InspectionTaskPointExecutionModel taskPoint)
+    {
+        return taskPoint.FailureCategory == InspectionPointFailureCategoryModel.ImageAbnormalDetected
+            || taskPoint.IsAiAbnormalDetected
+            || (!string.IsNullOrWhiteSpace(taskPoint.PrimaryFaultType)
+                && !string.Equals(taskPoint.PrimaryFaultType, "无", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "offline", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "no_stream_address", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "stream_url_parse_failed", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "playback_check_failed", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "playback_timeout", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "stream_url_resolved_playback_failed", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "protocol_fallback_still_failed", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "evidence_capture_failed", StringComparison.Ordinal)
+                && !string.Equals(taskPoint.PrimaryFaultType, "ai_evidence_insufficient", StringComparison.Ordinal));
+    }
+
+    private static bool IsAiAnalysisPending(InspectionTaskPointExecutionModel taskPoint)
+    {
+        return string.Equals(taskPoint.AiAnalysisStatus, InspectionEvidenceValueKeys.AiAnalysisReserved, StringComparison.Ordinal)
+            || string.Equals(taskPoint.AiAnalysisStatus, InspectionEvidenceValueKeys.AiAnalysisPending, StringComparison.Ordinal)
+            || string.Equals(taskPoint.AiAnalysisStatus, InspectionEvidenceValueKeys.AiAnalysisFailed, StringComparison.Ordinal)
+            || (!string.Equals(taskPoint.EvidenceCaptureState, InspectionEvidenceValueKeys.CaptureStateNone, StringComparison.Ordinal)
+                && string.IsNullOrWhiteSpace(taskPoint.AiAnalysisSummary)
+                && !taskPoint.IsAiAbnormalDetected);
+    }
+
+    private static bool HasPlaybackSucceededButEvidenceFailed(InspectionTaskPointExecutionModel taskPoint)
+    {
+        var playbackSucceeded = !string.IsNullOrWhiteSpace(taskPoint.PreviewUrl)
+            || string.Equals(taskPoint.FinalPlaybackResult, "播放成功", StringComparison.Ordinal);
+        return playbackSucceeded
+            && string.Equals(taskPoint.EvidenceCaptureState, InspectionEvidenceValueKeys.CaptureStateFailed, StringComparison.Ordinal);
+    }
+
+    private static InspectionPointStatusModel ResolveExecutionPointStatus(InspectionTaskPointExecutionModel taskPoint)
+    {
+        if (taskPoint.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline)
+        {
+            return InspectionPointStatusModel.PausedUntilRecovery;
+        }
+
+        if (IsExecutionTrueInspectionFault(taskPoint))
+        {
+            return InspectionPointStatusModel.Fault;
+        }
+
+        return taskPoint.FailureCategory switch
+        {
+            InspectionPointFailureCategoryModel.NoStreamAddress => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.StreamUrlParseFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.PlaybackCheckFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.PlaybackTimeout => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.StreamUrlResolvedPlaybackFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.ProtocolFallbackStillFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.EvidenceCaptureFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.AiEvidenceInsufficient => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.OnlineCheckFailed => InspectionPointStatusModel.Silent,
+            InspectionPointFailureCategoryModel.OnlineStatusPending => InspectionPointStatusModel.Silent,
+            _ => InspectionPointStatusModel.Fault
+        };
+    }
+
     private static InspectionPointStatusModel ResolveRuntimeStatus(
         InspectionTaskPointExecutionModel? taskPoint,
         InspectionPointStatusModel baseStatus)
@@ -2485,9 +2686,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
             InspectionPointExecutionStatusModel.Pending => InspectionPointStatusModel.Pending,
             InspectionPointExecutionStatusModel.Running => InspectionPointStatusModel.Inspecting,
             InspectionPointExecutionStatusModel.Succeeded => InspectionPointStatusModel.Normal,
-            InspectionPointExecutionStatusModel.Failed => taskPoint.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline
-                ? InspectionPointStatusModel.PausedUntilRecovery
-                : InspectionPointStatusModel.Fault,
+            InspectionPointExecutionStatusModel.Failed => ResolveExecutionPointStatus(taskPoint),
             InspectionPointExecutionStatusModel.Skipped => InspectionPointStatusModel.Silent,
             _ => baseStatus
         };
@@ -2505,9 +2704,7 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         return taskPoint.Status switch
         {
             InspectionPointExecutionStatusModel.Succeeded => InspectionPointStatusModel.Normal,
-            InspectionPointExecutionStatusModel.Failed => taskPoint.FailureCategory == InspectionPointFailureCategoryModel.DeviceOffline
-                ? InspectionPointStatusModel.PausedUntilRecovery
-                : InspectionPointStatusModel.Fault,
+            InspectionPointExecutionStatusModel.Failed => ResolveExecutionPointStatus(taskPoint),
             InspectionPointExecutionStatusModel.Skipped => InspectionPointStatusModel.Silent,
             _ => baseStatus
         };
@@ -2584,6 +2781,29 @@ public sealed class ConfigDrivenInspectionTaskService : IInspectionTaskService, 
         return board.CurrentTask is null
             ? "none"
             : $"{board.CurrentTask.TaskName} / {board.CurrentTask.Status} / recent={board.RecentTasks.Count}";
+    }
+
+    private static bool HasEvidenceChanged(InspectionTaskRecordModel before, InspectionTaskRecordModel after)
+    {
+        return before.PointExecutions.Zip(after.PointExecutions, (previous, current) =>
+                previous.EvidenceCaptureState != current.EvidenceCaptureState
+                || previous.ScreenshotSuccessCount != current.ScreenshotSuccessCount
+                || previous.EvidenceItems.Count != current.EvidenceItems.Count
+                || !string.Equals(previous.AiAnalysisStatus, current.AiAnalysisStatus, StringComparison.Ordinal)
+                || !string.Equals(previous.AiAnalysisSummary, current.AiAnalysisSummary, StringComparison.Ordinal))
+            .Any(changed => changed);
+    }
+
+    private static bool HasDispatchChanged(InspectionTaskRecordModel before, InspectionTaskRecordModel after)
+    {
+        return before.PointExecutions.Zip(after.PointExecutions, (previous, current) =>
+                previous.DispatchCandidateAccepted != current.DispatchCandidateAccepted
+                || previous.DispatchUpserted != current.DispatchUpserted
+                || previous.DispatchDeduplicated != current.DispatchDeduplicated
+                || previous.ReopenTriggered != current.ReopenTriggered
+                || !string.Equals(previous.DispatchStatus, current.DispatchStatus, StringComparison.Ordinal)
+                || !string.Equals(previous.RecoveryStatus, current.RecoveryStatus, StringComparison.Ordinal))
+            .Any(changed => changed);
     }
 
     private sealed record ScopePointSelectionDecision(
